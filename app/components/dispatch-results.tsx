@@ -20,8 +20,8 @@ export function DispatchResults({ results, onDismiss }: DispatchResultsProps) {
   if (results.length === 0) return null;
 
   const launched = results.filter((r) => r.success).length;
-  const skipped = results.filter((r) => !r.ready).length;
-  const failed = results.filter((r) => r.ready && !r.success).length;
+  const skipped = results.filter((r) => r.ready === false).length;
+  const failed = results.filter((r) => r.ready !== false && !r.success).length;
 
   return (
     <div className="mb-6 border border-space-600 bg-space-800">
@@ -79,14 +79,17 @@ export function DispatchResults({ results, onDismiss }: DispatchResultsProps) {
                   {r.prompt}
                 </p>
               )}
-              {!r.ready && (
+              {!r.ready && r.readyIssues && (
                 <div className="text-amber">
                   {r.readyIssues.map((issue, j) => (
                     <p key={j}>- {issue}</p>
                   ))}
                 </div>
               )}
-              {r.ready && !r.success && (
+              {!r.ready && !r.readyIssues && r.error && (
+                <p className="text-amber">{r.error}</p>
+              )}
+              {r.ready !== false && !r.success && (
                 <p className="text-danger">{r.error}</p>
               )}
             </div>
