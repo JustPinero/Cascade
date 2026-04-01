@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { HealthIndicator } from "./health-indicator";
+import { AdvisoryBadge } from "./advisory-badge";
 
 export interface ProjectTileData {
   slug: string;
@@ -11,6 +12,8 @@ export interface ProjectTileData {
   status: string;
   githubRepo: string | null;
   unreadAuditCount?: number;
+  hasAdvisory?: boolean;
+  advisoryRead?: boolean;
 }
 
 interface ProjectTileProps {
@@ -63,6 +66,10 @@ export function ProjectTile({ project }: ProjectTileProps) {
               {project.unreadAuditCount}
             </span>
           ) : null}
+          <AdvisoryBadge
+            hasAdvisory={project.hasAdvisory || false}
+            isRead={project.advisoryRead || false}
+          />
           <HealthIndicator health={project.health} size="md" />
         </div>
       </div>

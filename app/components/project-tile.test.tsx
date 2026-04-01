@@ -135,4 +135,28 @@ describe("ProjectTile", () => {
     );
     expect(pulses).toHaveLength(0);
   });
+
+  it("renders advisory badge when hasAdvisory is true", async () => {
+    let container: HTMLElement;
+    await act(async () => {
+      const result = render(
+        <ProjectTile
+          project={{ ...baseProject, hasAdvisory: true, advisoryRead: false }}
+        />
+      );
+      container = result.container;
+    });
+    expect(container!.textContent).toContain("ADV!");
+  });
+
+  it("hides advisory badge when hasAdvisory is false", async () => {
+    let container: HTMLElement;
+    await act(async () => {
+      const result = render(
+        <ProjectTile project={{ ...baseProject, hasAdvisory: false }} />
+      );
+      container = result.container;
+    });
+    expect(container!.textContent).not.toContain("ADV");
+  });
 });
