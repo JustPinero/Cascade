@@ -56,7 +56,7 @@ export function ProjectTile({ project }: ProjectTileProps) {
     <Link
       href={`/projects/${project.slug}`}
       className={`
-        group block p-4 border bg-space-800
+        group block p-4 border bg-space-800 tile-3d
         transition-all duration-200 hover:glow-border
         hover:border-cyan/40 hover:bg-space-700/50
         ${tileClass}
