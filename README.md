@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Cascade
 
-## Getting Started
+A nerve center for orchestrating multi-project Claude Code workflows. Monitor project health, harvest knowledge across builds, and spin up new projects with AI-powered kickoff prompts.
 
-First, run the development server:
+## Stack
+
+- **Frontend:** Next.js 14+ (App Router) with TypeScript strict
+- **Styling:** Tailwind CSS (cyberpunk/DBZ aesthetic)
+- **Database:** SQLite via Prisma 7
+- **Testing:** Vitest (172 unit/integration) + Playwright (E2E)
+- **Integrations:** Anthropic API, GitHub CLI, 1Password CLI
+
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+# Install dependencies
+pnpm install
+
+# Set up environment
+cp .env.example .env.local
+# Edit .env.local with your ANTHROPIC_API_KEY
+
+# Initialize database
+pnpm exec prisma generate
+pnpm exec prisma db push
+pnpm db:seed
+
+# Start dev server
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) and click "Scan Projects" to import your workspace.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Commands
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command | Description |
+|---------|-------------|
+| `pnpm dev` | Start dev server (Turbopack) |
+| `pnpm build` | Production build |
+| `pnpm test` | Run Vitest (unit + integration) |
+| `pnpm test:e2e` | Run Playwright E2E tests |
+| `pnpm lint` | Run ESLint |
+| `pnpm validate` | Full validation (lint + typecheck + test + build) |
+| `pnpm db:push` | Sync Prisma schema to SQLite |
+| `pnpm db:seed` | Seed default kickoff template |
+| `pnpm db:studio` | Open Prisma Studio |
 
-## Learn More
+## Features
 
-To learn more about Next.js, take a look at the following resources:
+- **Dashboard** -- Cyberpunk tile grid with health indicators, activity feed, filtering/search
+- **Knowledge Base** -- Auto-harvests lessons from project audits, categorizes, searches
+- **Project Wizard** -- 7-step wizard with embedded Claude conversation for kickoff generation
+- **Reports** -- Per-project and cross-project reports (Markdown + PDF)
+- **Integrations** -- 1Password env management, GitHub repo creation, Vercel/Railway deploy monitoring
+- **Intervener** -- Auto-generates advisories when project issues match known lessons
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Architecture
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Local-first app. SQLite indexes the filesystem (source of truth). Server components read fs directly. Only writes `.claude/nerve-center-advisory.md` to other projects -- everything else is read-only.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See `references/architecture.md` for full stack decisions.

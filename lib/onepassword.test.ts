@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterAll } from "vitest";
 import { readExpectedVars } from "./onepassword";
 import fs from "fs/promises";
 import path from "path";
