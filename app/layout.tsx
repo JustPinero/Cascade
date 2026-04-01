@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import { Sidebar } from "./components/sidebar";
+import { ThemeProvider } from "./components/theme-provider";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -14,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Cascade — Nerve Center",
+  title: "Cascade — Delamain",
   description:
     "A nerve center for orchestrating multi-project Claude Code workflows.",
 };
@@ -28,12 +29,15 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${spaceGrotesk.variable} ${jetbrainsMono.variable} h-full`}
+      data-theme="dark"
     >
       <body className="h-full flex scanlines">
-        <Sidebar />
-        <main className="flex-1 min-h-full overflow-auto lg:ml-0 p-6 pt-14 lg:pt-6">
-          {children}
-        </main>
+        <ThemeProvider>
+          <Sidebar />
+          <main className="flex-1 min-h-full overflow-auto lg:ml-0 p-6 pt-14 lg:pt-6">
+            {children}
+          </main>
+        </ThemeProvider>
       </body>
     </html>
   );
