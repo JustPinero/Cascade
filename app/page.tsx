@@ -10,6 +10,22 @@ import {
 } from "./components/dashboard-filters";
 import { ActivityFeed } from "./components/activity-feed";
 import type { ProjectTileData } from "./components/project-tile";
+import { z } from "zod/v4";
+
+const projectSchema = z.object({
+  slug: z.string(),
+  name: z.string(),
+  currentPhase: z.string(),
+  health: z.string(),
+  lastActivityAt: z.string(),
+  status: z.string(),
+  githubRepo: z.string().nullable().optional(),
+  unreadAuditCount: z.number().optional(),
+  hasAdvisory: z.boolean().optional(),
+  advisoryRead: z.boolean().optional(),
+});
+
+const projectsArraySchema = z.array(projectSchema);
 
 export default function DashboardPage() {
   return (
@@ -42,20 +58,21 @@ function DashboardContent() {
     try {
       const res = await fetch("/api/projects");
       const data = await res.json();
-      if (Array.isArray(data)) {
+      const parsed = projectsArraySchema.safeParse(data);
+      if (parsed.success) {
         setProjects(
-          data.map((p: Record<string, unknown>) => ({
-            slug: p.slug as string,
-            name: p.name as string,
-            currentPhase: p.currentPhase as string,
-            health: p.health as string,
+          parsed.data.map((p): ProjectTileData => ({
+            slug: p.slug,
+            name: p.name,
+            currentPhase: p.currentPhase,
+            health: p.health,
             openDebtCount: 0,
-            lastActivityAt: p.lastActivityAt as string,
-            status: p.status as string,
-            githubRepo: (p.githubRepo as string) || null,
-            unreadAuditCount: (p.unreadAuditCount as number) || 0,
-            hasAdvisory: (p.hasAdvisory as boolean) || false,
-            advisoryRead: (p.advisoryRead as boolean) || false,
+            lastActivityAt: p.lastActivityAt,
+            status: p.status,
+            githubRepo: p.githubRepo || null,
+            unreadAuditCount: p.unreadAuditCount || 0,
+            hasAdvisory: p.hasAdvisory || false,
+            advisoryRead: p.advisoryRead || false,
           }))
         );
       }

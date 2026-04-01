@@ -1,11 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { importProjects } from "@/lib/project-import";
 import { harvestKnowledge } from "@/lib/knowledge-harvester";
 import { generateAdvisories } from "@/lib/advisory-engine";
 import { resolveProjectsDir } from "@/lib/validators";
+import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limiter";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const limited = checkRateLimit(getRateLimitKey(request, "scan"), 5, 60_000);
+  if (limited) return limited;
+
   try {
     const projectsDir = resolveProjectsDir();
 
