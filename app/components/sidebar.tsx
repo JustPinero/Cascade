@@ -59,8 +59,17 @@ function CloseIcon() {
   );
 }
 
+function RoadmapIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+      <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
 const navItems = [
   { href: "/", label: "Dashboard", icon: <DashboardIcon /> },
+  { href: "/roadmap", label: "Roadmap", icon: <RoadmapIcon /> },
   { href: "/knowledge", label: "Knowledge Base", icon: <KnowledgeIcon /> },
   { href: "/create", label: "Create Project", icon: <CreateIcon /> },
   { href: "/reports", label: "Reports", icon: <ReportsIcon /> },

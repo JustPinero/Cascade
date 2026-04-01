@@ -21,6 +21,9 @@ const eventTypeColors: Record<string, string> = {
   "blocker-detected": "text-danger",
   "debt-resolved": "text-success",
   "scan-complete": "text-cyan",
+  "session-launched": "text-cyan",
+  "session-completed": "text-success",
+  "deploy-complete": "text-amber",
 };
 
 const eventTypeLabels: Record<string, string> = {
@@ -33,6 +36,9 @@ const eventTypeLabels: Record<string, string> = {
   "blocker-detected": "BLOCKED",
   "debt-resolved": "RESOLVED",
   "scan-complete": "SCAN",
+  "session-launched": "LAUNCH",
+  "session-completed": "DONE",
+  "deploy-complete": "DEPLOY",
 };
 
 function formatTimestamp(dateStr: string): string {

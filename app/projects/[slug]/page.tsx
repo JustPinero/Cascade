@@ -26,6 +26,102 @@ interface EnvStatus {
   vars: { name: string; expected: boolean; inVault: boolean }[];
 }
 
+function DispatchPanel({
+  slug,
+  health,
+  onAction,
+}: {
+  slug: string;
+  health: string;
+  onAction: () => void;
+}) {
+  const [dispatching, setDispatching] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+  const [customPrompt, setCustomPrompt] = useState("");
+
+  async function dispatch(mode: string, prompt?: string) {
+    setDispatching(mode);
+    setResult(null);
+    try {
+      const res = await fetch(`/api/projects/${slug}/dispatch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode, prompt }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setResult(`Launched: ${mode} mode`);
+        onAction();
+      } else {
+        setResult(`Failed: ${data.error}`);
+      }
+    } catch {
+      setResult("Failed to dispatch");
+    } finally {
+      setDispatching(null);
+    }
+  }
+
+  return (
+    <div className="mb-6 p-4 border border-space-600 bg-space-800">
+      <h2 className="text-sm font-mono font-bold text-cyan uppercase tracking-wider mb-3">
+        Dispatch Claude
+      </h2>
+      <div className="flex flex-wrap gap-2 mb-3">
+        <button
+          onClick={() => dispatch("continue")}
+          disabled={dispatching !== null}
+          className="px-3 py-1.5 text-xs font-mono border border-cyan text-cyan hover:bg-cyan/10 disabled:opacity-50 transition-colors"
+        >
+          {dispatching === "continue" ? "Launching..." : "Continue Build"}
+        </button>
+        <button
+          onClick={() => dispatch("audit")}
+          disabled={dispatching !== null}
+          className="px-3 py-1.5 text-xs font-mono border border-accent text-accent hover:bg-accent/10 disabled:opacity-50 transition-colors"
+        >
+          {dispatching === "audit" ? "Launching..." : "Run Audits"}
+        </button>
+        {health === "blocked" && (
+          <button
+            onClick={() => dispatch("investigate")}
+            disabled={dispatching !== null}
+            className="px-3 py-1.5 text-xs font-mono border border-amber text-amber hover:bg-amber/10 disabled:opacity-50 transition-colors"
+          >
+            {dispatching === "investigate"
+              ? "Launching..."
+              : "Investigate Blocker"}
+          </button>
+        )}
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={customPrompt}
+          onChange={(e) => setCustomPrompt(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && customPrompt.trim()) {
+              dispatch("custom", customPrompt);
+            }
+          }}
+          placeholder="Custom command..."
+          className="flex-1 px-3 py-1.5 text-xs font-mono bg-space-900 border border-space-600 text-text-bright placeholder:text-space-500 focus:border-info focus:outline-none"
+        />
+        <button
+          onClick={() => dispatch("custom", customPrompt)}
+          disabled={dispatching !== null || !customPrompt.trim()}
+          className="px-3 py-1.5 text-xs font-mono border border-info text-info hover:bg-info/10 disabled:opacity-50 transition-colors"
+        >
+          Send
+        </button>
+      </div>
+      {result && (
+        <p className="text-xs font-mono text-text mt-2">{result}</p>
+      )}
+    </div>
+  );
+}
+
 function DeployStatusPanel({ project }: { project: Project }) {
   const [deployStatus, setDeployStatus] = useState<{
     platform: string;
@@ -148,6 +244,9 @@ export default function ProjectDetailPage() {
           <p className="text-xs font-mono text-space-500">{project.path}</p>
         </div>
       </div>
+
+      {/* Dispatch Actions */}
+      <DispatchPanel slug={slug} health={project.health} onAction={fetchProject} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Info Panel */}
