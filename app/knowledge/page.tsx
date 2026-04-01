@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CategoryOverview } from "../components/category-overview";
+import { GapSuggestions } from "../components/gap-suggestions";
 import { LessonCard } from "../components/lesson-card";
 
 interface Lesson {
@@ -20,14 +21,20 @@ export default function KnowledgePage() {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [searchResults, setSearchResults] = useState<Lesson[] | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [gaps, setGaps] = useState<{ category: string; count: number; suggestion: string; priority: "high" | "medium" | "low" }[]>([]);
   const [loading, setLoading] = useState(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const fetchLessons = useCallback(async () => {
     try {
-      const res = await fetch("/api/knowledge");
-      const data = await res.json();
-      if (Array.isArray(data)) setLessons(data);
+      const [lessonsRes, gapsRes] = await Promise.all([
+        fetch("/api/knowledge"),
+        fetch("/api/knowledge/gaps"),
+      ]);
+      const lessonsData = await lessonsRes.json();
+      const gapsData = await gapsRes.json();
+      if (Array.isArray(lessonsData)) setLessons(lessonsData);
+      if (Array.isArray(gapsData)) setGaps(gapsData);
     } finally {
       setLoading(false);
     }
@@ -108,6 +115,13 @@ export default function KnowledgePage() {
           className="w-full max-w-md px-3 py-2 text-sm font-mono bg-space-800 border border-space-600 text-text-bright placeholder:text-space-500 focus:border-cyan focus:outline-none transition-colors"
         />
       </div>
+
+      {/* Knowledge gaps */}
+      {!searchResults && !loading && gaps.length > 0 && (
+        <div className="mb-6">
+          <GapSuggestions suggestions={gaps} />
+        </div>
+      )}
 
       {/* Category overview */}
       {!searchResults && !loading && (

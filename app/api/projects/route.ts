@@ -1,22 +1,33 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAllUnreadCounts } from "@/lib/unread";
+import { getAdvisoryStatuses } from "@/lib/advisory-tracker";
 
 export async function GET() {
   try {
-    const [projects, unreadCounts] = await Promise.all([
+    const [projects, unreadCounts, advisoryStatuses] = await Promise.all([
       prisma.project.findMany({
         orderBy: { lastActivityAt: "desc" },
       }),
       getAllUnreadCounts(prisma),
+      getAdvisoryStatuses(prisma),
     ]);
 
-    const projectsWithUnread = projects.map((p) => ({
-      ...p,
-      unreadAuditCount: unreadCounts.get(p.id) || 0,
-    }));
+    const advisoryMap = new Map(
+      advisoryStatuses.map((s) => [s.projectSlug, s])
+    );
 
-    return NextResponse.json(projectsWithUnread);
+    const projectsWithExtras = projects.map((p) => {
+      const advisory = advisoryMap.get(p.slug);
+      return {
+        ...p,
+        unreadAuditCount: unreadCounts.get(p.id) || 0,
+        hasAdvisory: advisory?.hasAdvisory || false,
+        advisoryRead: advisory?.isRead || false,
+      };
+    });
+
+    return NextResponse.json(projectsWithExtras);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown error";

@@ -54,6 +54,8 @@ function DashboardContent() {
             status: p.status as string,
             githubRepo: (p.githubRepo as string) || null,
             unreadAuditCount: (p.unreadAuditCount as number) || 0,
+            hasAdvisory: (p.hasAdvisory as boolean) || false,
+            advisoryRead: (p.advisoryRead as boolean) || false,
           }))
         );
       }
