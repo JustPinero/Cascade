@@ -1,0 +1,1 @@
+Run the bughunt skill. Systematically search for bugs across the codebase. Check TypeScript errors, ESLint issues, Next.js pitfalls, Prisma patterns, and error handling.

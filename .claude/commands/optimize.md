@@ -1,0 +1,1 @@
+Run the optimize skill. Analyze performance: bundle size, component types, query efficiency, caching, memory usage. Report recommendations with effort/impact ratings.

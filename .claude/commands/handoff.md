@@ -1,0 +1,1 @@
+Run the session-handoff skill. Generate a handoff document summarizing this session's work, decisions, and open items. Write to .claude/handoff.md for the next session to pick up.

@@ -1,0 +1,92 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Project {
+  id                 Int               @id @default(autoincrement())
+  name               String
+  slug               String            @unique
+  path               String
+  status             String            @default("building") // building | deployed | paused | archived
+  stack              String            @default("{}") // JSON string
+  currentPhase       String            @default("phase-1-foundation")
+  currentRequest     String?
+  health             String            @default("idle") // healthy | warning | blocked | idle
+  healthDetails      String            @default("{}") // JSON string
+  githubRepo         String?
+  autonomyMode       String            @default("semi") // full | semi | manual
+  agentTeamsEnabled  Boolean           @default(false)
+  prWorkflowEnabled  Boolean           @default(false)
+  kickoffTemplateId  Int?
+  lastActivityAt     DateTime          @default(now())
+  lastScannedAt      DateTime          @default(now())
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  lessons          KnowledgeLesson[]
+  auditSnapshots   AuditSnapshot[]
+  activityEvents   ActivityEvent[]
+  kickoffTemplate  KickoffTemplate?  @relation(fields: [kickoffTemplateId], references: [id])
+}
+
+model KnowledgeLesson {
+  id              Int       @id @default(autoincrement())
+  title           String
+  content         String // markdown
+  category        String // deployment | auth | database | performance | testing | error-handling | integrations | anti-patterns | architecture | tooling
+  sourceProjectId Int?
+  sourceFile      String?
+  sourcePhase     String?
+  tags            String    @default("[]") // JSON array
+  severity        String    @default("nice-to-know") // critical | important | nice-to-know
+  discoveredAt    DateTime  @default(now())
+  verified        Boolean   @default(false)
+  timesReferenced Int       @default(0)
+
+  sourceProject Project? @relation(fields: [sourceProjectId], references: [id])
+}
+
+model KickoffTemplate {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String
+  content     String // markdown
+  projectType String   @default("web-app") // web-app | game | api | mobile | other
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projects Project[]
+}
+
+model AuditSnapshot {
+  id         Int      @id @default(autoincrement())
+  projectId  Int
+  phase      String
+  auditType  String // test-audit | bughunt | optimize | drift-audit
+  grade      String?
+  findings   String   @default("{}") // JSON
+  isRead     Boolean  @default(false)
+  capturedAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+}
+
+model ActivityEvent {
+  id        Int      @id @default(autoincrement())
+  projectId Int?
+  eventType String // commit | phase-complete | audit-complete | lesson-harvested | advisory-sent | project-created | blocker-detected | debt-resolved
+  summary   String
+  details   String? // JSON
+  createdAt DateTime @default(now())
+
+  project Project? @relation(fields: [projectId], references: [id])
+}

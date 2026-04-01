@@ -1,0 +1,1 @@
+Run the drift-audit skill. Compare documentation in references/ against actual code. Check schema.md vs Prisma schema, api-contracts.md vs routes, architecture.md vs implementation. Report any drift.
