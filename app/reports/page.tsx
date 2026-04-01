@@ -53,7 +53,7 @@ export default function ReportsPage() {
     }
   }
 
-  function handleDownload() {
+  function handleDownloadMd() {
     if (!markdown) return;
     const blob = new Blob([markdown], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
@@ -63,6 +63,32 @@ export default function ReportsPage() {
       reportType === "single"
         ? `report-${selectedSlug}.md`
         : "cross-project-report.md";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleDownloadPdf() {
+    const body =
+      reportType === "single"
+        ? { type: "single", slug: selectedSlug, format: "pdf" }
+        : { type: "cross-project", format: "pdf" };
+
+    const res = await fetch("/api/reports/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) return;
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download =
+      reportType === "single"
+        ? `report-${selectedSlug}.pdf`
+        : "cross-project-report.pdf";
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -140,12 +166,20 @@ export default function ReportsPage() {
             <span className="text-xs font-mono text-space-500">
               Report generated
             </span>
-            <button
-              onClick={handleDownload}
-              className="text-xs font-mono text-cyan hover:text-text-bright transition-colors"
-            >
-              Download .md
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={handleDownloadMd}
+                className="text-xs font-mono text-cyan hover:text-text-bright transition-colors"
+              >
+                Download .md
+              </button>
+              <button
+                onClick={handleDownloadPdf}
+                className="text-xs font-mono text-accent hover:text-text-bright transition-colors"
+              >
+                Download .pdf
+              </button>
+            </div>
           </div>
           <pre className="p-4 border border-space-600 bg-space-900 text-xs font-mono text-text max-h-[600px] overflow-auto whitespace-pre-wrap">
             {markdown}
