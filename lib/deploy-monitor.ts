@@ -86,7 +86,8 @@ async function getRailwayStatus(
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        query: `query { project(id: "${projectId}") { deployments(first: 1) { edges { node { status } } } } }`,
+        query: `query ($id: String!) { project(id: $id) { deployments(first: 1) { edges { node { status } } } } }`,
+        variables: { id: projectId },
       }),
     });
 

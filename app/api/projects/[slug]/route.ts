@@ -48,9 +48,36 @@ export async function PATCH(
     const { slug } = await params;
     const body = await request.json();
 
+    // Allowlist updatable fields to prevent mass assignment
+    const ALLOWED_FIELDS = new Set([
+      "status",
+      "currentPhase",
+      "currentRequest",
+      "health",
+      "healthDetails",
+      "autonomyMode",
+      "agentTeamsEnabled",
+      "prWorkflowEnabled",
+      "stack",
+    ]);
+
+    const data: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(body)) {
+      if (ALLOWED_FIELDS.has(key)) {
+        data[key] = value;
+      }
+    }
+
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json(
+        { error: "No valid fields to update" },
+        { status: 400 }
+      );
+    }
+
     const project = await prisma.project.update({
       where: { slug },
-      data: body,
+      data,
     });
 
     return NextResponse.json(project);

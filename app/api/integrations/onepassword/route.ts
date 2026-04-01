@@ -6,6 +6,7 @@ import {
   createVaultItem,
   populateEnvLocal,
 } from "@/lib/onepassword";
+import { isInsideProjectsDir } from "@/lib/validators";
 
 const VAULT_NAME = "Cascade";
 
@@ -18,6 +19,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: "path and name params required" },
         { status: 400 }
+      );
+    }
+
+    if (!isInsideProjectsDir(projectPath)) {
+      return NextResponse.json(
+        { error: "Invalid project path" },
+        { status: 403 }
       );
     }
 

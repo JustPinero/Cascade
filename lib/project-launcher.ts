@@ -1,8 +1,9 @@
 import fs from "fs/promises";
 import path from "path";
-import { execSync } from "child_process";
+import { execFileSync, execSync } from "child_process";
 import { PrismaClient } from "@/app/generated/prisma/client";
 import { createGitHubRepo } from "./github";
+import { isValidGithubUrl } from "./validators";
 
 export interface LaunchConfig {
   name: string;
@@ -38,7 +39,15 @@ export async function launchProject(
     // 1. Create project directory
     await fs.mkdir(projectPath, { recursive: true });
 
-    // 2. Write kickoff prompt
+    // 2. Write kickoff prompt (size limit: 50KB)
+    if (config.kickoffContent.length > 50_000) {
+      return {
+        success: false,
+        projectPath,
+        githubUrl: null,
+        error: "Kickoff content exceeds 50KB limit",
+      };
+    }
     await fs.writeFile(
       path.join(projectPath, "KICKOFF.md"),
       config.kickoffContent,
@@ -62,16 +71,18 @@ export async function launchProject(
         description: `${config.name} — created by Cascade`,
       });
 
-      if (repoResult.success) {
+      if (repoResult.success && repoResult.url) {
         githubUrl = repoResult.url;
-        // Add remote and push
-        try {
-          execSync(`git remote add origin ${githubUrl}`, {
-            cwd: projectPath,
-            stdio: "pipe",
-          });
-        } catch {
-          // Remote may already exist
+        // Add remote (validate URL first)
+        if (isValidGithubUrl(githubUrl)) {
+          try {
+            execFileSync("git", ["remote", "add", "origin", githubUrl], {
+              cwd: projectPath,
+              stdio: "pipe",
+            });
+          } catch {
+            // Remote may already exist
+          }
         }
       }
     }

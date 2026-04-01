@@ -1,12 +1,12 @@
-import { execSync } from "child_process";
+import { execFileSync, execSync } from "child_process";
 import fs from "fs/promises";
 import path from "path";
+import { sanitizeForShell } from "./validators";
 
 export interface EnvVarStatus {
   name: string;
   expected: boolean;
   inVault: boolean;
-  value?: string;
 }
 
 /**
@@ -49,8 +49,9 @@ export function checkVaultItem(
   expectedVars: string[]
 ): EnvVarStatus[] {
   try {
-    const output = execSync(
-      `op item get "${itemName}" --vault "${vaultName}" --format json`,
+    const output = execFileSync(
+      "op",
+      ["item", "get", itemName, "--vault", vaultName, "--format", "json"],
       { stdio: "pipe", timeout: 10000 }
     ).toString();
 
@@ -64,7 +65,6 @@ export function checkVaultItem(
       inVault: fieldMap.has(name),
     }));
   } catch {
-    // Item doesn't exist or op error
     return expectedVars.map((name) => ({
       name,
       expected: true,
@@ -84,23 +84,29 @@ export function createVaultItem(
   try {
     // Check if item already exists
     try {
-      execSync(
-        `op item get "${itemName}" --vault "${vaultName}" --format json`,
+      execFileSync(
+        "op",
+        ["item", "get", itemName, "--vault", vaultName, "--format", "json"],
         { stdio: "pipe", timeout: 10000 }
       );
-      return { success: true, error: null }; // Already exists
+      return { success: true, error: null };
     } catch {
       // Doesn't exist, create it
     }
 
-    const assignments = Object.entries(vars)
-      .map(([key, val]) => `"${key}[text]=${val}"`)
-      .join(" ");
+    const args = [
+      "item",
+      "create",
+      "--category=login",
+      `--title=${sanitizeForShell(itemName)}`,
+      `--vault=${sanitizeForShell(vaultName)}`,
+    ];
 
-    execSync(
-      `op item create --category=login --title="${itemName}" --vault="${vaultName}" ${assignments}`,
-      { stdio: "pipe", timeout: 10000 }
-    );
+    for (const [key, val] of Object.entries(vars)) {
+      args.push(`${sanitizeForShell(key)}[text]=${sanitizeForShell(val)}`);
+    }
+
+    execFileSync("op", args, { stdio: "pipe", timeout: 10000 });
 
     return { success: true, error: null };
   } catch (err) {
@@ -122,8 +128,9 @@ export async function populateEnvLocal(
   const lines: string[] = [];
 
   try {
-    const output = execSync(
-      `op item get "${itemName}" --vault "${vaultName}" --format json`,
+    const output = execFileSync(
+      "op",
+      ["item", "get", itemName, "--vault", vaultName, "--format", "json"],
       { stdio: "pipe", timeout: 10000 }
     ).toString();
 

@@ -9,6 +9,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([]);
     }
 
+    if (q.length > 200) {
+      return NextResponse.json(
+        { error: "Search query too long (max 200 characters)" },
+        { status: 400 }
+      );
+    }
+
     const searchTerm = q.toLowerCase();
 
     // SQLite doesn't have full-text search built in with Prisma,
