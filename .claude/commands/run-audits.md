@@ -1,0 +1,1 @@
+Run the full audit suite using the audit-runner agent. Execute all four audits (test-audit, bughunt, optimize, drift-audit) and generate a combined report in audits/. Update project health based on findings.

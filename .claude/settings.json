@@ -1,0 +1,56 @@
+{
+    "permissions": {
+        "allow": [
+            "Read",
+            "Write",
+            "Edit",
+            "Glob",
+            "Grep",
+            "Bash(pnpm *)",
+            "Bash(npx *)",
+            "Bash(node *)",
+            "Bash(git *)",
+            "Bash(mkdir *)",
+            "Bash(cp *)",
+            "Bash(cat *)",
+            "Bash(ls *)",
+            "Bash(rm *)",
+            "Bash(chmod *)",
+            "Bash(scripts/validate.sh)",
+            "Bash(prettier *)",
+            "Bash(eslint *)",
+            "Bash(gh *)",
+            "Bash(op *)"
+        ]
+    },
+    "hooks": {
+        "PostCompaction": [
+            {
+                "type": "command",
+                "command": "cat CLAUDE.md .claude/handoff.md audits/debt.md 2>/dev/null || true",
+                "description": "Restore context after compaction"
+            }
+        ],
+        "PreCommit": [
+            {
+                "type": "command",
+                "command": "grep -rn 'sk-ant-\\|ANTHROPIC_API_KEY=sk\\|op://\\|BEGIN.*PRIVATE' --include='*.ts' --include='*.tsx' --include='*.js' --include='*.json' app/ lib/ 2>/dev/null && echo 'BLOCKED: Possible secret detected in staged files' && exit 1 || exit 0",
+                "description": "Check for hardcoded secrets"
+            }
+        ],
+        "PostToolUse": [
+            {
+                "type": "command",
+                "command": "if echo \"$CLAUDE_TOOL_USE_FILE\" | grep -qE '\\.(tsx?|jsx?)$'; then npx prettier --write \"$CLAUDE_TOOL_USE_FILE\" 2>/dev/null; fi",
+                "description": "Auto-format TypeScript/JavaScript files after edit",
+                "matcher": "Edit|Write"
+            },
+            {
+                "type": "command",
+                "command": "if echo \"$CLAUDE_TOOL_USE_FILE\" | grep -qE '\\.(tsx|jsx)$'; then npx eslint --fix \"$CLAUDE_TOOL_USE_FILE\" 2>/dev/null || true; fi",
+                "description": "Auto-lint JSX/TSX files after edit",
+                "matcher": "Edit|Write"
+            }
+        ]
+    }
+}
