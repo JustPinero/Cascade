@@ -1,8 +1,11 @@
 import { spawn, execSync } from "child_process";
 import fs from "fs/promises";
+import fsSync from "fs";
 import path from "path";
+import os from "os";
 import { PrismaClient } from "@/app/generated/prisma/client";
 import { isInsideProjectsDir } from "./validators";
+import { readIfExists } from "./file-utils";
 
 export type DispatchMode = "continue" | "audit" | "investigate" | "custom";
 
@@ -49,16 +52,7 @@ async function checkDispatchReadiness(
   return { ready: issues.length === 0, issues };
 }
 
-/**
- * Read a file if it exists, return empty string if not.
- */
-async function readIfExists(filePath: string): Promise<string> {
-  try {
-    return await fs.readFile(filePath, "utf-8");
-  } catch {
-    return "";
-  }
-}
+// readIfExists imported from file-utils.ts
 
 /**
  * Load the overseer playbook preferences.
@@ -204,11 +198,13 @@ export function dispatchClaude(
   }
 
   try {
-    const escapedPrompt = prompt.replace(/'/g, "'\\''");
-    const escapedPath = projectPath.replace(/'/g, "'\\''");
-    const cmd = `cd '${escapedPath}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude '${escapedPrompt}'`;
+    // Write prompt to temp file to avoid shell injection via osascript
+    const tmpFile = path.join(os.tmpdir(), `cascade-prompt-${Date.now()}.txt`);
+    fsSync.writeFileSync(tmpFile, prompt, "utf-8");
 
-    // For single dispatch, open in a new Terminal window
+    const escapedPath = projectPath.replace(/'/g, "'\\''");
+    const cmd = `cd '${escapedPath}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
+
     const script = `
       tell application "Terminal"
         do script "${cmd.replace(/"/g, '\\"')}"
@@ -280,8 +276,10 @@ export async function dispatchAll(
     }
 
     const prompt = await generatePrompt(project.path, mode);
-    const escapedPrompt = prompt.replace(/'/g, "'\\''");
-    const cmd = `cd '${project.path}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude '${escapedPrompt}'`;
+    // Write prompt to temp file to avoid shell injection
+    const tmpFile = path.join(os.tmpdir(), `cascade-prompt-${Date.now()}-${i}.txt`);
+    fsSync.writeFileSync(tmpFile, prompt, "utf-8");
+    const cmd = `cd '${project.path}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
 
     try {
       if (launchIndex === 0) {

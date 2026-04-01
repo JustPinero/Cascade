@@ -65,6 +65,22 @@ Focus on errors (not warnings). React hooks dependency issues are particularly b
 ### Logic Issues
 - [LOGIC-001] path/to/file:line — Description
 
+### Injection Risks
+- [INJ-001] path/to/file:line — Unvalidated input in shell command
+- Grep for: execSync, execFileSync, spawn — verify all interpolated values validated
+
+### JSON Safety
+- [JSON-001] path/to/file:line — JSON.parse without try-catch
+- Every JSON.parse on external/DB data must be in try-catch
+
+### Non-null Assertions
+- [NULL-001] path/to/file:line — Unsafe ! assertion
+- Grep for `!` post-fix — verify the value cannot be null
+
+### Timeout Audit
+- [TIMEOUT-001] path/to/file:line — External fetch without AbortController
+- Every fetch to external APIs must have a timeout
+
 ### Summary
 - Confirmed bugs: N
 - High-risk issues: N

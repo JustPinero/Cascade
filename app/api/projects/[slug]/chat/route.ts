@@ -16,7 +16,7 @@ export async function POST(
 
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey || apiKey === "your-api-key-here") {
+    if (!apiKey || !apiKey.startsWith("sk-")) {
       return NextResponse.json(
         { error: "ANTHROPIC_API_KEY not configured" },
         { status: 500 }
@@ -47,6 +47,9 @@ export async function POST(
       project.name
     );
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
+
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -61,7 +64,10 @@ export async function POST(
         messages,
         stream: true,
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
 
     if (!response.ok) {
       const err = await response.text();
