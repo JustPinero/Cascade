@@ -105,7 +105,7 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
     } catch {
       setMessages([
         ...newMessages,
-        { role: "assistant", content: "Failed to connect to overseer." },
+        { role: "assistant", content: "Failed to connect to Delamain." },
       ]);
     } finally {
       setStreaming(false);
@@ -175,7 +175,7 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-cyan pulse-healthy" />
           <span className="text-xs font-mono text-cyan uppercase tracking-wider font-bold">
-            Overseer — Sprint Planning
+            Delamain — Sprint Planning
           </span>
         </div>
         <p className="text-[10px] font-mono text-space-500 mt-0.5">
@@ -221,7 +221,7 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
             }`}
           >
             <span className="text-[10px] uppercase text-space-500 block mb-0.5">
-              {msg.role === "user" ? "you" : "overseer"}
+              {msg.role === "user" ? "you" : "delamain"}
             </span>
             <div className="whitespace-pre-wrap leading-relaxed">
               {msg.content}
@@ -230,7 +230,7 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
         ))}
         {streaming && (
           <div className="text-xs font-mono text-accent pulse-healthy">
-            Overseer is thinking...
+            Delamain is thinking...
           </div>
         )}
       </div>
