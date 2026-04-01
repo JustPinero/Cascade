@@ -10,6 +10,7 @@ export interface ProjectTileData {
   lastActivityAt: string;
   status: string;
   githubRepo: string | null;
+  unreadAuditCount?: number;
 }
 
 interface ProjectTileProps {
@@ -56,7 +57,14 @@ export function ProjectTile({ project }: ProjectTileProps) {
         <h3 className="text-sm font-bold font-mono text-text-bright truncate pr-2 group-hover:text-cyan transition-colors">
           {project.name}
         </h3>
-        <HealthIndicator health={project.health} size="md" />
+        <div className="flex items-center gap-2">
+          {project.unreadAuditCount && project.unreadAuditCount > 0 ? (
+            <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-mono font-bold bg-accent/20 text-accent border border-accent/40 rounded-full pulse-warning">
+              {project.unreadAuditCount}
+            </span>
+          ) : null}
+          <HealthIndicator health={project.health} size="md" />
+        </div>
       </div>
 
       {/* Phase */}
