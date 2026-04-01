@@ -1,4 +1,5 @@
-import { execSync } from "child_process";
+import { execFileSync, execSync } from "child_process";
+import { isValidSlug, sanitizeForShell } from "./validators";
 
 export interface CreateRepoOptions {
   name: string;
@@ -18,23 +19,35 @@ export interface CreateRepoResult {
 export function createGitHubRepo(
   options: CreateRepoOptions
 ): CreateRepoResult {
-  const visibility = options.isPrivate ? "--private" : "--public";
-  const desc = options.description
-    ? `--description "${options.description.replace(/"/g, '\\"')}"`
-    : "";
+  if (!isValidSlug(options.name)) {
+    return {
+      success: false,
+      url: null,
+      error: `Invalid repository name: "${options.name}". Only alphanumeric, dots, hyphens, and underscores allowed.`,
+    };
+  }
+
+  const args = [
+    "repo",
+    "create",
+    options.name,
+    options.isPrivate ? "--private" : "--public",
+    "--confirm",
+  ];
+
+  if (options.description) {
+    args.push("--description", sanitizeForShell(options.description));
+  }
 
   try {
-    const output = execSync(
-      `gh repo create ${options.name} ${visibility} ${desc} --confirm 2>&1`,
-      { stdio: "pipe", timeout: 30000 }
-    )
+    const output = execFileSync("gh", args, {
+      stdio: "pipe",
+      timeout: 30000,
+    })
       .toString()
       .trim();
 
-    // Extract URL from output
-    const urlMatch = output.match(
-      /https:\/\/github\.com\/[^\s]+/
-    );
+    const urlMatch = output.match(/https:\/\/github\.com\/[^\s]+/);
     const url = urlMatch ? urlMatch[0] : `https://github.com/${options.name}`;
 
     return { success: true, url, error: null };
