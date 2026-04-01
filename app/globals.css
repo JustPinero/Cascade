@@ -1,13 +1,15 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-space-900: #0a0e14;
+  --color-space-900: #080b11;
+  --color-space-850: #0c1018;
   --color-space-800: #111620;
   --color-space-700: #1a1e2e;
   --color-space-600: #242a3d;
   --color-space-500: #2e3550;
   --color-cyan: #41a6b5;
   --color-cyan-dim: #2d7a87;
+  --color-cyan-glow: #41a6b540;
   --color-amber: #e0af68;
   --color-danger: #f0535f;
   --color-info: #7887c7;
@@ -15,17 +17,30 @@
   --color-success: #64d476;
   --color-text: #c5ccd8;
   --color-text-bright: #e4e8ee;
+  --color-text-dim: #6b7394;
   --font-sans: var(--font-space-grotesk);
   --font-mono: var(--font-jetbrains-mono);
 }
 
+/* Base */
 body {
   background: var(--color-space-900);
   color: var(--color-text);
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
-/* Scan-line overlay for cyberpunk feel */
+/* Subtle noise texture over everything */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.015;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  z-index: 40;
+}
+
+/* Scan-line overlay — subtle CRT feel */
 .scanlines::after {
   content: "";
   position: fixed;
@@ -35,20 +50,76 @@ body {
     0deg,
     transparent,
     transparent 2px,
-    rgba(0, 0, 0, 0.03) 2px,
-    rgba(0, 0, 0, 0.03) 4px
+    rgba(0, 0, 0, 0.02) 2px,
+    rgba(0, 0, 0, 0.02) 4px
   );
   z-index: 50;
 }
 
-/* Glow effect for borders */
-.glow-border {
+/* ─── DEPTH & PANELS ─── */
+
+/* Raised panel — main content blocks */
+.panel {
+  background: linear-gradient(
+    180deg,
+    var(--color-space-800) 0%,
+    var(--color-space-850) 100%
+  );
+  border: 1px solid var(--color-space-600);
   box-shadow:
-    inset 0 0 12px rgba(65, 166, 181, 0.08),
-    0 0 8px rgba(65, 166, 181, 0.06);
+    0 1px 3px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
-/* Pulse animation for health indicators */
+/* Inset panel — inputs, code blocks, nested areas */
+.panel-inset {
+  background: var(--color-space-900);
+  border: 1px solid var(--color-space-700);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* ─── GLOW EFFECTS ─── */
+
+.glow-border {
+  box-shadow:
+    inset 0 0 20px rgba(65, 166, 181, 0.06),
+    0 0 12px rgba(65, 166, 181, 0.08),
+    0 0 4px rgba(65, 166, 181, 0.04);
+}
+
+.glow-border-accent {
+  box-shadow:
+    inset 0 0 16px rgba(187, 107, 217, 0.06),
+    0 0 8px rgba(187, 107, 217, 0.08);
+}
+
+/* ─── DIVIDERS ─── */
+
+.divider-h {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-space-500) 20%,
+    var(--color-space-500) 80%,
+    transparent
+  );
+}
+
+.divider-glow {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-cyan-glow) 30%,
+    var(--color-cyan) 50%,
+    var(--color-cyan-glow) 70%,
+    transparent
+  );
+}
+
+/* ─── HEALTH INDICATORS ─── */
+
 @keyframes pulse-slow {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
@@ -72,37 +143,90 @@ body {
 
 /* Session active — Claude is working */
 @keyframes pulse-session {
-  0%, 100% { box-shadow: 0 0 4px rgba(65, 166, 181, 0.3); }
-  50% { box-shadow: 0 0 16px rgba(65, 166, 181, 0.6); }
+  0%, 100% { box-shadow: 0 0 4px rgba(65, 166, 181, 0.2), inset 0 0 4px rgba(65, 166, 181, 0.05); }
+  50% { box-shadow: 0 0 20px rgba(65, 166, 181, 0.4), inset 0 0 8px rgba(65, 166, 181, 0.1); }
 }
 .pulse-session { animation: pulse-session 2s ease-in-out infinite; }
 
 /* Deployed — gold glow */
 .glow-deployed {
   border-color: #e0af68 !important;
-  box-shadow: 0 0 12px rgba(224, 175, 104, 0.2), inset 0 0 8px rgba(224, 175, 104, 0.05);
+  box-shadow:
+    0 0 16px rgba(224, 175, 104, 0.15),
+    0 0 4px rgba(224, 175, 104, 0.1),
+    inset 0 0 8px rgba(224, 175, 104, 0.03);
 }
 
 /* Done / phase complete — green glow */
 .glow-done {
   border-color: #64d476 !important;
-  box-shadow: 0 0 8px rgba(100, 212, 118, 0.15);
+  box-shadow:
+    0 0 12px rgba(100, 212, 118, 0.12),
+    inset 0 0 4px rgba(100, 212, 118, 0.03);
 }
 
-/* Custom scrollbar */
+/* ─── INTERACTIVE ELEMENTS ─── */
+
+/* Buttons get a subtle lift on hover */
+button:not(:disabled):hover {
+  transform: translateY(-0.5px);
+}
+
+button:not(:disabled):active {
+  transform: translateY(0.5px);
+}
+
+/* Input fields — inset look */
+input[type="text"],
+textarea,
+select {
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+input[type="text"]:focus,
+textarea:focus,
+select:focus {
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.2),
+    0 0 8px rgba(65, 166, 181, 0.15);
+}
+
+/* ─── SCROLLBAR ─── */
+
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-space-800);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-space-500);
+  background: var(--color-space-600);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-cyan-dim);
+}
+
+/* ─── TYPOGRAPHY REFINEMENTS ─── */
+
+/* Headings get a subtle text shadow for depth */
+h1, h2 {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Mono text gets slightly more letter spacing for readability */
+.font-mono {
+  letter-spacing: 0.01em;
+}
+
+/* ─── TRANSITIONS ─── */
+
+a, button, input, textarea, select {
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 0.15s;
+  transition-timing-function: ease-out;
 }
