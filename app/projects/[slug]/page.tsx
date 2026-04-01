@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { HealthIndicator } from "../../components/health-indicator";
+import { CommandPanel } from "../../components/command-panel";
 
 interface Project {
   id: number;
@@ -247,6 +248,11 @@ export default function ProjectDetailPage() {
 
       {/* Dispatch Actions */}
       <DispatchPanel slug={slug} health={project.health} onAction={fetchProject} />
+
+      {/* Command Panel */}
+      <div className="mb-6">
+        <CommandPanel projectSlug={slug} projectName={project.name} />
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Info Panel */}
