@@ -8,6 +8,7 @@ import {
   DashboardFilters,
   type FilterState,
 } from "./components/dashboard-filters";
+import { ActivityFeed } from "./components/activity-feed";
 import type { ProjectTileData } from "./components/project-tile";
 
 export default function DashboardPage() {
@@ -52,6 +53,7 @@ function DashboardContent() {
             lastActivityAt: p.lastActivityAt as string,
             status: p.status as string,
             githubRepo: (p.githubRepo as string) || null,
+            unreadAuditCount: (p.unreadAuditCount as number) || 0,
           }))
         );
       }
@@ -112,11 +114,14 @@ function DashboardContent() {
         onChange={handleFilterChange}
       />
 
-      <ProjectGrid
-        projects={filtered}
-        loading={loading}
-        groupBy={filters.groupBy}
-      />
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
+        <ProjectGrid
+          projects={filtered}
+          loading={loading}
+          groupBy={filters.groupBy}
+        />
+        <ActivityFeed />
+      </div>
     </div>
   );
 }
