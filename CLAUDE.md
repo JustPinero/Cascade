@@ -17,11 +17,12 @@ Next.js 14+ (App Router) | TypeScript strict | Tailwind CSS | Prisma + SQLite | 
 @import references/deployment-landmines.md
 
 ## Action Loop
-Every request follows: **Prime → Plan → Execute → Validate**
-1. **Prime**: Read the request file in requests/. Check .claude/handoff.md for context. Check knowledge/ for existing solutions from other projects.
-2. **Plan**: Identify files to create/modify. List tests to write. Confirm approach fits acceptance criteria.
-3. **Execute**: Write code. Write tests. Run tests frequently (`pnpm test`). Commit at logical checkpoints.
-4. **Validate**: Run `scripts/validate.sh` — this is the same script CI runs. Nothing should fail in CI that wasn't caught here. Verify every acceptance criterion. Update references/ if schema or API contracts changed.
+Every request follows: **Prime → Plan → Red → Green → Validate**
+1. **Prime**: Read the request file in requests/. Check .claude/handoff.md for context. Check knowledge/ for existing solutions.
+2. **Plan**: Identify files to create/modify. Map each acceptance criterion to a specific test. Confirm approach.
+3. **Red (write failing tests)**: Write tests for EVERY acceptance criterion BEFORE writing implementation code. Run `pnpm test` — they should FAIL. This is your contract for "done."
+4. **Green (implement until tests pass)**: Write code until all tests pass. Run tests frequently. Commit at logical checkpoints.
+5. **Validate**: Run `scripts/validate.sh` — this is the same script CI runs. Nothing should fail in CI that wasn't caught here. Verify every acceptance criterion has a passing test. Update references/ if schema or API contracts changed.
 If validate fails, fix before moving on. Never skip validation.
 When blocked, log to audits/debt.md and continue with what's unblocked.
 After completing a request, update .claude/handoff.md and state the next request number.
@@ -33,8 +34,11 @@ After completing a request, update .claude/handoff.md and state the next request
 4. Tailwind for all styling — no inline styles, no CSS modules
 5. All async operations properly awaited — no floating promises
 
-## Testing
-Write tests alongside code (TDD preferred for complex logic). Unit tests for services/utils. Integration tests for API routes. E2E with Playwright for critical flows. Target: every acceptance criterion has a corresponding test.
+## Testing Protocol (TDD — NOT OPTIONAL)
+**Tests first (strong default):** For business logic, API routes, services, utilities — write failing tests FIRST from the acceptance criteria, then implement until green. Tests define "done."
+**Tests after (escape hatch):** UI components and exploratory work only — implement first but tests MUST exist before the request is marked complete. State why you're using this escape.
+**Never optional:** No request is complete without tests. The Execute step is: (1) write failing tests from acceptance criteria, (2) implement until tests pass, (3) verify with validate.sh.
+**Test-driven requests:** Each request file lists "Tests to Write" — these are written FIRST as failing tests. Failing tests guide the implementation. When all tests pass, the request is done.
 
 ## Git Workflow
 Branch per phase: `phase-N-description`. Commit after each logical unit of work. Commit message format: `type(scope): description` (feat, fix, refactor, test, docs, chore). PR per request when prWorkflowEnabled.
