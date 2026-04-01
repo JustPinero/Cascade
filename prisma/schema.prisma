@@ -90,3 +90,15 @@ model ActivityEvent {
 
   project Project? @relation(fields: [projectId], references: [id])
 }
+
+model Reminder {
+  id             Int      @id @default(autoincrement())
+  message        String
+  conditionType  String // project-health, phase-complete, project-deployed, custom
+  conditionValue String // e.g., "ratracer:healthy" or "pointpartner:phase-3" or freeform
+  projectSlug    String? // optional — which project this relates to
+  status         String   @default("pending") // pending, triggered, dismissed
+  createdBy      String   @default("delamain") // delamain or user
+  createdAt      DateTime @default(now())
+  triggeredAt    DateTime?
+}

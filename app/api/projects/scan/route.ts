@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { importProjects } from "@/lib/project-import";
 import { harvestKnowledge } from "@/lib/knowledge-harvester";
 import { generateAdvisories } from "@/lib/advisory-engine";
+import { checkReminders } from "@/lib/reminders";
 import { resolveProjectsDir } from "@/lib/validators";
 import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limiter";
 
@@ -22,11 +23,14 @@ export async function POST(request: NextRequest) {
     // 3. Generate advisories for projects with matching issues
     const advisoryResult = await generateAdvisories(prisma);
 
-    // 4. Log scan-complete event
+    // 4. Check reminders against updated project states
+    const reminderResult = await checkReminders(prisma);
+
+    // 5. Log scan-complete event
     await prisma.activityEvent.create({
       data: {
         eventType: "scan-complete",
-        summary: `Scan complete: ${importResult.created} new, ${importResult.updated} updated, ${harvestResult.newLessons} lessons, ${advisoryResult.advisoriesWritten} advisories`,
+        summary: `Scan complete: ${importResult.created} new, ${importResult.updated} updated, ${harvestResult.newLessons} lessons, ${advisoryResult.advisoriesWritten} advisories, ${reminderResult.triggered} reminders triggered`,
       },
     });
 

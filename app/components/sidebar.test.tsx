@@ -69,6 +69,6 @@ describe("Sidebar", () => {
       const result = render(<Sidebar />);
       container = result.container;
     });
-    expect(container!.textContent).toContain("Nerve Center v1");
+    expect(container!.textContent).toContain("Delamain v1");
   });
 });

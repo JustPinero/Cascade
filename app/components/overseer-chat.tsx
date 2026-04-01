@@ -102,6 +102,24 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
       if (actions.length > 0) {
         setPendingActions(actions);
       }
+
+      // Save any reminders Delamain created
+      const reminderRegex =
+        /\[REMINDER\]\s*([\w-]+):([\w-:]+)\s*(?:—|-)\s*(.+)/gi;
+      let rMatch;
+      while ((rMatch = reminderRegex.exec(assistantContent)) !== null) {
+        fetch("/api/reminders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            conditionType: rMatch[1],
+            conditionValue: rMatch[2],
+            message: rMatch[3].trim(),
+            projectSlug: rMatch[2].split(":")[0] || null,
+            createdBy: "delamain",
+          }),
+        });
+      }
     } catch {
       setMessages([
         ...newMessages,
