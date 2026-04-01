@@ -1,14 +1,21 @@
 # Testing Lessons
 
 Category: testing
-Last harvested: —
+Source: deployment-playbook + project audits
 
-## Lessons
+## From Deployment Playbook
 
-_No lessons harvested yet. The knowledge harvester will populate this file automatically._
+### Deployment Verification
+- [LESSON] Smoke tests after deploy: hit health endpoint + key user flows
+- [LESSON] CI tests for deployment config: validate vercel.json, railway.toml in pipeline
+- [LESSON] E2E tests that block CI should use continue-on-error (prevent false deploy failures)
 
-<!-- Harvester instructions:
-- Look for [LESSON] tags in audits/ and .claude/handoff.md files
-- Look for testing-related findings in bughunt and optimize audits
-- Keywords: test, vitest, playwright, coverage, mock, fixture, assertion, e2e
--->
+### Version Compatibility
+- [LESSON] Vitest 4.x peer dep conflict with Vite 5 — use Vitest 2.x for Vite 5 projects
+- [LESSON] Vite config `test` property needs `/// <reference types="vitest" />` triple-slash
+- [LESSON] React 18 ref type incompatibility — use callback refs instead of createRef
+
+### Test Patterns
+- [LESSON] Fixture-based testing for external APIs (record responses, replay in tests)
+- [LESSON] E2E manifest: track which flows are "passing", "failing", "not-started"
+- [LESSON] pnpm test --run doesn't pass args correctly — use npx vitest run directly
