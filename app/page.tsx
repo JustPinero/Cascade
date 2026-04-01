@@ -9,6 +9,7 @@ import {
   type FilterState,
 } from "./components/dashboard-filters";
 import { ActivityFeed } from "./components/activity-feed";
+import { DispatchResults } from "./components/dispatch-results";
 import type { ProjectTileData } from "./components/project-tile";
 import { z } from "zod/v4";
 
@@ -28,13 +29,26 @@ const projectSchema = z.object({
 
 const projectsArraySchema = z.array(projectSchema);
 
-function ResumeAllButton() {
+interface DispatchResultData {
+  success: boolean;
+  projectName: string;
+  projectSlug: string;
+  mode: string;
+  prompt: string;
+  ready: boolean;
+  readyIssues: string[];
+  error: string | null;
+}
+
+function ResumeAllButton({
+  onResults,
+}: {
+  onResults: (results: DispatchResultData[]) => void;
+}) {
   const [launching, setLaunching] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
 
   async function handleResumeAll() {
     setLaunching(true);
-    setResult(null);
     try {
       const res = await fetch("/api/dispatch/all", {
         method: "POST",
@@ -42,35 +56,28 @@ function ResumeAllButton() {
         body: JSON.stringify({ mode: "continue" }),
       });
       const data = await res.json();
-      if (res.ok) {
-        setResult(`Launched ${data.launched} sessions`);
-      } else {
-        setResult(`Error: ${data.error}`);
+      if (res.ok && data.results) {
+        onResults(data.results);
       }
     } catch {
-      setResult("Failed to dispatch");
+      // handled
     } finally {
       setLaunching(false);
     }
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <button
-        onClick={handleResumeAll}
-        disabled={launching}
-        className={`px-4 py-2 text-sm font-mono uppercase tracking-wider border transition-all ${
-          launching
-            ? "border-space-500 text-space-500 cursor-wait"
-            : "border-success text-success hover:bg-success/10 hover:shadow-[0_0_12px_rgba(100,212,118,0.15)]"
-        }`}
-      >
-        {launching ? "Dispatching..." : "Resume All"}
-      </button>
-      {result && (
-        <span className="text-xs font-mono text-text">{result}</span>
-      )}
-    </div>
+    <button
+      onClick={handleResumeAll}
+      disabled={launching}
+      className={`px-4 py-2 text-sm font-mono uppercase tracking-wider border transition-all ${
+        launching
+          ? "border-space-500 text-space-500 cursor-wait"
+          : "border-success text-success hover:bg-success/10 hover:shadow-[0_0_12px_rgba(100,212,118,0.15)]"
+      }`}
+    >
+      {launching ? "Dispatching..." : "Resume All"}
+    </button>
   );
 }
 
@@ -92,6 +99,7 @@ function DashboardContent() {
   const [projects, setProjects] = useState<ProjectTileData[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [dispatchResults, setDispatchResults] = useState<DispatchResultData[]>([]);
 
   // Initialize filters from URL params
   const [filters, setFilters] = useState<FilterState>({
@@ -175,7 +183,7 @@ function DashboardContent() {
           <ScanButton
             onScanComplete={() => setRefreshKey((k) => k + 1)}
           />
-          <ResumeAllButton />
+          <ResumeAllButton onResults={setDispatchResults} />
         </div>
       </div>
 
@@ -183,6 +191,13 @@ function DashboardContent() {
         filters={filters}
         onChange={handleFilterChange}
       />
+
+      {dispatchResults.length > 0 && (
+        <DispatchResults
+          results={dispatchResults}
+          onDismiss={() => setDispatchResults([])}
+        />
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
         <ProjectGrid
