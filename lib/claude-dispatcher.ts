@@ -111,7 +111,8 @@ export async function generatePrompt(
 }
 
 /**
- * Launch Claude Code in a new Terminal window for a project.
+ * Launch Claude Code in a new Terminal tab for a project.
+ * Uses --dangerously-skip-permissions so Claude can work autonomously.
  * The session runs independently of Cascade.
  */
 export function dispatchClaude(
@@ -126,13 +127,24 @@ export function dispatchClaude(
     // Escape single quotes in the prompt for shell
     const escapedPrompt = prompt.replace(/'/g, "'\\''");
 
-    // Launch a new Terminal window with claude running in the project directory
+    // Launch in a new Terminal TAB (not window) with auto-accept permissions
+    // so Claude can work without blocking on permission prompts
+    const script = `
+      tell application "Terminal"
+        if (count of windows) > 0 then
+          tell front window
+            set newTab to do script "cd '${projectPath}' && claude --dangerously-skip-permissions '${escapedPrompt}'"
+          end tell
+        else
+          do script "cd '${projectPath}' && claude --dangerously-skip-permissions '${escapedPrompt}'"
+        end if
+        activate
+      end tell
+    `;
+
     const child = spawn(
       "osascript",
-      [
-        "-e",
-        `tell application "Terminal" to do script "cd '${projectPath}' && claude '${escapedPrompt}'"`,
-      ],
+      ["-e", script],
       {
         detached: true,
         stdio: "ignore",
