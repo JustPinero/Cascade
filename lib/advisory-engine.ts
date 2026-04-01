@@ -7,6 +7,7 @@ export interface AdvisoryResult {
   projectsScanned: number;
   advisoriesWritten: number;
   advisories: { project: string; lessonTitle: string; category: string }[];
+  failures: { project: string; error: string }[];
 }
 
 /**
@@ -70,6 +71,7 @@ export async function generateAdvisories(
     projectsScanned: projects.length,
     advisoriesWritten: 0,
     advisories: [],
+    failures: [],
   };
 
   for (const project of projects) {
@@ -129,8 +131,10 @@ export async function generateAdvisories(
           category: m.category,
         });
       }
-    } catch {
-      // Skip if can't write to project dir
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      console.error(`Advisory failed for ${project.name}: ${message}`);
+      result.failures.push({ project: project.name, error: message });
     }
   }
 

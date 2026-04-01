@@ -77,7 +77,7 @@ export function singleReportToPdf(report: SingleProjectReport): Buffer {
       headStyles: { fillColor: COLORS.cyan, textColor: [255, 255, 255] },
     });
 
-    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+    y = ((doc as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y) + 10;
   }
 
   // Open Debt

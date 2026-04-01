@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 interface ActivityEvent {
@@ -58,26 +58,36 @@ export function ActivityFeed({
   const [showAll, setShowAll] = useState(false);
   const [filterType, setFilterType] = useState<string | null>(null);
 
-  const fetchEvents = useCallback(async () => {
-    try {
-      const params = new URLSearchParams();
-      params.set("limit", "50");
-      if (filterType) params.set("type", filterType);
-      const res = await fetch(`/api/activity?${params}`);
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setEvents(data);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [filterType]);
-
   useEffect(() => {
+    const controller = new AbortController();
+
+    async function fetchEvents() {
+      try {
+        const params = new URLSearchParams();
+        params.set("limit", "50");
+        if (filterType) params.set("type", filterType);
+        const res = await fetch(`/api/activity?${params}`, {
+          signal: controller.signal,
+        });
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setEvents(data);
+        }
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+      } finally {
+        setLoading(false);
+      }
+    }
+
     fetchEvents();
     const interval = setInterval(fetchEvents, pollInterval);
-    return () => clearInterval(interval);
-  }, [fetchEvents, pollInterval]);
+
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
+  }, [filterType, pollInterval]);
 
   const displayedEvents = showAll ? events : events.slice(0, maxItems);
   const hasMore = events.length > maxItems && !showAll;
