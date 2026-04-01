@@ -111,17 +111,21 @@ export function Sidebar() {
       {/* Sidebar */}
       <aside
         className={`
-          fixed top-0 left-0 z-50 h-full w-56 bg-space-800 border-r border-space-600
-          flex flex-col transition-transform duration-200
+          fixed top-0 left-0 z-50 h-full w-56 flex flex-col transition-transform duration-200
           lg:translate-x-0 lg:static lg:z-auto
           ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
         `}
+        style={{
+          background: "linear-gradient(180deg, #111620 0%, #0c1018 50%, #080b11 100%)",
+          borderRight: "1px solid #242a3d",
+          boxShadow: "2px 0 12px rgba(0, 0, 0, 0.4)",
+        }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-4 border-b border-space-600">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-cyan pulse-healthy" />
-            <h1 className="text-lg font-bold font-mono tracking-wider text-text-bright uppercase">
+        <div className="flex items-center justify-between px-4 py-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-cyan pulse-healthy" style={{ boxShadow: "0 0 8px rgba(65, 166, 181, 0.4)" }} />
+            <h1 className="text-lg font-bold font-mono tracking-[0.2em] text-text-bright uppercase">
               Cascade
             </h1>
           </div>
@@ -134,15 +138,17 @@ export function Sidebar() {
           </button>
         </div>
 
+        <div className="divider-glow" />
+
         {/* Navigation */}
-        <nav className="flex-1 py-4 space-y-0.5" aria-label="Main navigation">
+        <nav className="flex-1 py-3 space-y-0.5" aria-label="Main navigation">
           {navItems.map((item) => (
             <NavLink key={item.href} {...item} />
           ))}
         </nav>
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t border-space-600">
+        <div className="px-4 py-3" style={{ borderTop: "1px solid #1a1e2e" }}>
           <p className="text-xs font-mono text-space-500 uppercase tracking-widest">
             Nerve Center v1
           </p>
