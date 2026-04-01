@@ -1,5 +1,7 @@
 import { PrismaClient } from "../app/generated/prisma/client.js";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import fs from "fs";
+import path from "path";
 
 const adapter = new PrismaBetterSqlite3({
   url: process.env.DATABASE_URL || "file:./prisma/dev.db",
@@ -8,15 +10,20 @@ const adapter = new PrismaBetterSqlite3({
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
+  const templatePath = path.resolve(__dirname, "../templates/web-app-v3.3.md");
+  const content = fs.readFileSync(templatePath, "utf-8");
+
   const defaultTemplate = await prisma.kickoffTemplate.upsert({
     where: { id: 1 },
-    update: {},
+    update: {
+      content,
+    },
     create: {
       name: "Web App v3.3",
       projectType: "web-app",
       isDefault: true,
       description: "Standard web application kickoff template",
-      content: "See templates/web-app-v3.3.md for full content",
+      content,
     },
   });
 
