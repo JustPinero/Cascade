@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { markAuditsRead } from "@/lib/unread";
+import { isValidSlug } from "@/lib/validators";
 
 export async function GET(
   _request: NextRequest,
@@ -8,6 +9,9 @@ export async function GET(
 ) {
   try {
     const { slug } = await params;
+    if (!isValidSlug(slug)) {
+      return NextResponse.json({ error: "Invalid slug" }, { status: 400 });
+    }
     const project = await prisma.project.findUnique({
       where: { slug },
       include: {
@@ -61,11 +65,22 @@ export async function PATCH(
       "stack",
     ]);
 
+    // Enum validation for constrained fields
+    const VALID_STATUS = new Set(["building", "deployed", "paused", "archived"]);
+    const VALID_HEALTH = new Set(["healthy", "warning", "blocked", "idle"]);
+    const VALID_AUTONOMY = new Set(["full", "semi", "manual"]);
+
     const data: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
-      if (ALLOWED_FIELDS.has(key)) {
-        data[key] = value;
-      }
+      if (!ALLOWED_FIELDS.has(key)) continue;
+
+      // Validate enum fields
+      if (key === "status" && !VALID_STATUS.has(value as string)) continue;
+      if (key === "health" && !VALID_HEALTH.has(value as string)) continue;
+      if (key === "autonomyMode" && !VALID_AUTONOMY.has(value as string)) continue;
+      if ((key === "agentTeamsEnabled" || key === "prWorkflowEnabled") && typeof value !== "boolean") continue;
+
+      data[key] = value;
     }
 
     if (Object.keys(data).length === 0) {

@@ -118,6 +118,8 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
             projectSlug: rMatch[2].split(":")[0] || null,
             createdBy: "delamain",
           }),
+        }).catch(() => {
+          // Reminder save failed silently — non-critical
         });
       }
     } catch {

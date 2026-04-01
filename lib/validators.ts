@@ -1,3 +1,4 @@
+import fs from "fs";
 import path from "path";
 import os from "os";
 
@@ -36,7 +37,13 @@ export function isInsideProjectsDir(
   baseDir?: string
 ): boolean {
   const base = baseDir || resolveProjectsDir();
-  const resolved = path.resolve(targetPath);
+  // Resolve symlinks to prevent traversal via symlink
+  let resolved: string;
+  try {
+    resolved = fs.realpathSync(targetPath);
+  } catch {
+    resolved = path.resolve(targetPath);
+  }
   return resolved.startsWith(base + path.sep) || resolved === base;
 }
 

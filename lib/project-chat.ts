@@ -1,17 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { PrismaClient } from "@/app/generated/prisma/client";
-
-/**
- * Read a file if it exists, return empty string if not.
- */
-async function readIfExists(filePath: string): Promise<string> {
-  try {
-    return await fs.readFile(filePath, "utf-8");
-  } catch {
-    return "";
-  }
-}
+import { readIfExists } from "./file-utils";
 
 /**
  * Build a system prompt for chatting about a specific project.
