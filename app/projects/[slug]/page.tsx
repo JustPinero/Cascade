@@ -16,6 +16,7 @@ interface Project {
   githubRepo: string | null;
   autonomyMode: string;
   healthDetails: string;
+  stack: string;
   auditSnapshots: { id: number; auditType: string; grade: string | null; capturedAt: string }[];
   activityEvents: { id: number; eventType: string; summary: string; createdAt: string }[];
 }
@@ -23,6 +24,68 @@ interface Project {
 interface EnvStatus {
   authenticated: boolean;
   vars: { name: string; expected: boolean; inVault: boolean }[];
+}
+
+function DeployStatusPanel({ project }: { project: Project }) {
+  const [deployStatus, setDeployStatus] = useState<{
+    platform: string;
+    state: string;
+    url: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    let stack: { deployPlatform?: string; deployProjectId?: string } = {};
+    try {
+      stack = JSON.parse(project.stack);
+    } catch {
+      return;
+    }
+    if (!stack.deployPlatform || !stack.deployProjectId) return;
+
+    fetch(
+      `/api/integrations/deploy-status?platform=${stack.deployPlatform}&projectId=${stack.deployProjectId}`
+    )
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.platform) setDeployStatus(data);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!deployStatus) return null;
+
+  const stateColors: Record<string, string> = {
+    deployed: "text-success",
+    building: "text-amber",
+    failed: "text-danger",
+    unknown: "text-space-500",
+  };
+
+  return (
+    <div className="p-4 border border-space-600 bg-space-800 space-y-3">
+      <h2 className="text-sm font-mono font-bold text-cyan uppercase tracking-wider">
+        Deployment
+      </h2>
+      <div className="space-y-2 text-xs font-mono">
+        <div className="flex justify-between">
+          <span className="text-space-500">Platform</span>
+          <span className="text-text">{deployStatus.platform}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-space-500">Status</span>
+          <span className={stateColors[deployStatus.state] || "text-text"}>
+            {deployStatus.state}
+          </span>
+        </div>
+        {deployStatus.url && (
+          <div className="flex justify-between">
+            <span className="text-space-500">URL</span>
+            <span className="text-info truncate ml-2">{deployStatus.url}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function ProjectDetailPage() {
@@ -146,6 +209,25 @@ export default function ProjectDetailPage() {
                   </span>
                 </div>
               ))}
+              {envStatus.vars.some((v) => !v.inVault) && (
+                <button
+                  onClick={async () => {
+                    await fetch("/api/integrations/onepassword", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        action: "populate",
+                        projectPath: project.path,
+                        projectName: project.name,
+                      }),
+                    });
+                    fetchProject();
+                  }}
+                  className="mt-2 px-3 py-1.5 text-xs font-mono border border-cyan text-cyan hover:bg-cyan/10 transition-colors"
+                >
+                  Populate .env.local
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -176,6 +258,9 @@ export default function ProjectDetailPage() {
             </div>
           )}
         </div>
+
+        {/* Deploy Status */}
+        <DeployStatusPanel project={project} />
 
         {/* Activity */}
         <div className="p-4 border border-space-600 bg-space-800 space-y-3">

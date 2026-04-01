@@ -23,6 +23,8 @@ export default function KnowledgePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [gaps, setGaps] = useState<{ category: string; count: number; suggestion: string; priority: "high" | "medium" | "low" }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [harvesting, setHarvesting] = useState(false);
+  const [harvestResult, setHarvestResult] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const fetchLessons = useCallback(async () => {
@@ -102,6 +104,37 @@ export default function KnowledgePage() {
             {lessons.length} lesson{lessons.length !== 1 ? "s" : ""} across{" "}
             {categoryMap.size} categories
           </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={async () => {
+              setHarvesting(true);
+              setHarvestResult(null);
+              try {
+                const res = await fetch("/api/knowledge/harvest", { method: "POST" });
+                const data = await res.json();
+                if (res.ok) {
+                  setHarvestResult(`${data.newLessons} new, ${data.duplicatesSkipped} skipped`);
+                  fetchLessons();
+                } else {
+                  setHarvestResult(`Error: ${data.error}`);
+                }
+              } finally {
+                setHarvesting(false);
+              }
+            }}
+            disabled={harvesting}
+            className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider border transition-colors ${
+              harvesting
+                ? "border-space-500 text-space-500 cursor-wait"
+                : "border-accent text-accent hover:bg-accent/10"
+            }`}
+          >
+            {harvesting ? "Harvesting..." : "Harvest"}
+          </button>
+          {harvestResult && (
+            <span className="text-xs font-mono text-text">{harvestResult}</span>
+          )}
         </div>
       </div>
 

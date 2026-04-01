@@ -106,9 +106,11 @@ function DashboardContent() {
             monitored
           </p>
         </div>
-        <ScanButton
-          onScanComplete={() => setRefreshKey((k) => k + 1)}
-        />
+        <div className="flex items-center gap-3">
+          <ScanButton
+            onScanComplete={() => setRefreshKey((k) => k + 1)}
+          />
+        </div>
       </div>
 
       <DashboardFilters
