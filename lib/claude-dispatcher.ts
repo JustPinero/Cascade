@@ -110,10 +110,18 @@ export async function generatePrompt(
   }
 }
 
+// 3x2 grid layout: 3 columns, 2 rows per screen
+const GRID_COLS = 3;
+const GRID_ROWS = 2;
+const TILES_PER_SCREEN = GRID_COLS * GRID_ROWS;
+
+// Track how many windows we've opened for grid positioning
+let windowIndex = 0;
+
 /**
- * Launch Claude Code in a new Terminal tab for a project.
+ * Launch Claude Code in a tiled Terminal window for a project.
+ * Windows are arranged in a 3x2 grid. After 6, a new set overlaps.
  * Uses --dangerously-skip-permissions so Claude can work autonomously.
- * The session runs independently of Cascade.
  */
 export function dispatchClaude(
   projectPath: string,
@@ -124,34 +132,41 @@ export function dispatchClaude(
   }
 
   try {
-    // Escape single quotes in the prompt for shell
     const escapedPrompt = prompt.replace(/'/g, "'\\''");
+    const escapedPath = projectPath.replace(/'/g, "'\\''");
 
-    // Launch in a new Terminal TAB (not window) with auto-accept permissions
-    // so Claude can work without blocking on permission prompts
+    // Calculate grid position for this window
+    const posInGrid = windowIndex % TILES_PER_SCREEN;
+    const col = posInGrid % GRID_COLS;
+    const row = Math.floor(posInGrid / GRID_COLS);
+
+    // Get screen dimensions and calculate tile size
+    // Standard MacBook: ~1440x900, with menu bar ~875 usable
+    const screenW = 1440;
+    const screenH = 875;
+    const menuBarH = 25;
+    const tileW = Math.floor(screenW / GRID_COLS);
+    const tileH = Math.floor(screenH / GRID_ROWS);
+
+    const x = col * tileW;
+    const y = menuBarH + row * tileH;
+
     const script = `
       tell application "Terminal"
-        if (count of windows) > 0 then
-          tell front window
-            set newTab to do script "cd '${projectPath}' && claude --dangerously-skip-permissions '${escapedPrompt}'"
-          end tell
-        else
-          do script "cd '${projectPath}' && claude --dangerously-skip-permissions '${escapedPrompt}'"
-        end if
+        do script "cd '${escapedPath}' && claude --dangerously-skip-permissions '${escapedPrompt}'"
+        set targetWindow to front window
+        set bounds of targetWindow to {${x}, ${y}, ${x + tileW}, ${y + tileH}}
         activate
       end tell
     `;
 
-    const child = spawn(
-      "osascript",
-      ["-e", script],
-      {
-        detached: true,
-        stdio: "ignore",
-      }
-    );
+    const child = spawn("osascript", ["-e", script], {
+      detached: true,
+      stdio: "ignore",
+    });
 
     child.unref();
+    windowIndex++;
     return { success: true, error: null };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -160,7 +175,15 @@ export function dispatchClaude(
 }
 
 /**
+ * Reset the window grid counter (call before a batch dispatch).
+ */
+export function resetWindowGrid(): void {
+  windowIndex = 0;
+}
+
+/**
  * Dispatch Claude to all projects with "building" status.
+ * Arranges Terminal windows in a 3x2 tiled grid.
  */
 export async function dispatchAll(
   prisma: PrismaClient,
@@ -169,6 +192,9 @@ export async function dispatchAll(
   const projects = await prisma.project.findMany({
     where: { status: "building" },
   });
+
+  // Reset grid so windows tile from top-left
+  resetWindowGrid();
 
   const results: DispatchResult[] = [];
 
