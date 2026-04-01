@@ -9,9 +9,44 @@ export type DispatchMode = "continue" | "audit" | "investigate" | "custom";
 export interface DispatchResult {
   success: boolean;
   projectName: string;
+  projectSlug: string;
   mode: DispatchMode;
   prompt: string;
+  ready: boolean;
+  readyIssues: string[];
   error: string | null;
+}
+
+/**
+ * Check if a project is ready for autonomous dispatch.
+ */
+async function checkDispatchReadiness(
+  projectPath: string
+): Promise<{ ready: boolean; issues: string[] }> {
+  const issues: string[] = [];
+
+  const hasClaude = await readIfExists(path.join(projectPath, "CLAUDE.md"));
+  if (!hasClaude) issues.push("No CLAUDE.md — Claude won't know project standards");
+
+  const hasGit = await readIfExists(path.join(projectPath, ".git", "HEAD"));
+  if (!hasGit) issues.push("No git repo initialized");
+
+  try {
+    await fs.access(path.join(projectPath, "package.json"));
+  } catch {
+    // Check for other project markers
+    try {
+      await fs.access(path.join(projectPath, "Cargo.toml"));
+    } catch {
+      try {
+        await fs.access(path.join(projectPath, "pyproject.toml"));
+      } catch {
+        issues.push("No package.json/Cargo.toml/pyproject.toml found");
+      }
+    }
+  }
+
+  return { ready: issues.length === 0, issues };
 }
 
 /**
@@ -26,15 +61,39 @@ async function readIfExists(filePath: string): Promise<string> {
 }
 
 /**
+ * Load the overseer playbook preferences.
+ */
+async function loadPlaybook(): Promise<string> {
+  const playbookPath = path.resolve(
+    process.cwd(),
+    "knowledge",
+    "overseer-playbook.md"
+  );
+  const content = await readIfExists(playbookPath);
+  if (!content) return "";
+  // Extract just the rules, skip the title
+  return content
+    .split("\n")
+    .filter((l) => l.startsWith("- "))
+    .join("\n");
+}
+
+/**
  * Generate the right prompt for Claude based on the project's current state.
+ * Includes overseer playbook preferences in every prompt.
  */
 export async function generatePrompt(
   projectPath: string,
   mode: DispatchMode,
   customPrompt?: string
 ): Promise<string> {
+  const playbook = await loadPlaybook();
+  const playbookBlock = playbook
+    ? `\n\nOVERSEER RULES (follow these always):\n${playbook}`
+    : "";
+
   if (mode === "custom" && customPrompt) {
-    return customPrompt;
+    return customPrompt + playbookBlock;
   }
 
   const handoff = await readIfExists(
@@ -65,9 +124,11 @@ export async function generatePrompt(
     // No requests directory
   }
 
+  let prompt: string;
+
   switch (mode) {
     case "continue":
-      return [
+      prompt = [
         "Read CLAUDE.md and .claude/handoff.md to restore context.",
         "Continue with the next request in the requests/ directory.",
         "Follow the action loop: Prime → Plan → Execute → Validate.",
@@ -80,17 +141,19 @@ export async function generatePrompt(
       ]
         .filter(Boolean)
         .join("\n");
+      break;
 
     case "audit":
-      return [
+      prompt = [
         "Read CLAUDE.md to restore context.",
         "Run the full audit suite: test-audit, bughunt, optimize, drift-audit.",
         "Write results to audits/ directory.",
         "Update .claude/handoff.md with findings.",
       ].join("\n");
+      break;
 
     case "investigate":
-      return [
+      prompt = [
         "Read CLAUDE.md and .claude/handoff.md to restore context.",
         "This project has blockers. Investigate what's wrong:",
         "1. Check audits/debt.md for open items",
@@ -103,10 +166,13 @@ export async function generatePrompt(
       ]
         .filter(Boolean)
         .join("\n");
+      break;
 
     default:
-      return "Read CLAUDE.md and continue where you left off.";
+      prompt = "Read CLAUDE.md and continue where you left off.";
   }
+
+  return prompt + playbookBlock;
 }
 
 const TMUX_SESSION = "cascade";
@@ -191,14 +257,34 @@ export async function dispatchAll(
   let paneCount = 0;
   let windowCount = 0;
 
+  // Filter to only dispatch-ready projects, track skipped ones
+  let launchIndex = 0;
+
   for (let i = 0; i < projects.length; i++) {
     const project = projects[i];
+
+    // Check readiness
+    const readiness = await checkDispatchReadiness(project.path);
+    if (!readiness.ready) {
+      results.push({
+        success: false,
+        projectName: project.name,
+        projectSlug: project.slug,
+        mode,
+        prompt: "",
+        ready: false,
+        readyIssues: readiness.issues,
+        error: `Not dispatch-ready: ${readiness.issues.join(", ")}`,
+      });
+      continue;
+    }
+
     const prompt = await generatePrompt(project.path, mode);
     const escapedPrompt = prompt.replace(/'/g, "'\\''");
     const cmd = `cd '${project.path}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude '${escapedPrompt}'`;
 
     try {
-      if (i === 0) {
+      if (launchIndex === 0) {
         // Create the tmux session with the first project
         execSync(
           `tmux new-session -d -s ${TMUX_SESSION} -n "projects-1" "${cmd}"`,
@@ -238,11 +324,16 @@ export async function dispatchAll(
         },
       });
 
+      launchIndex++;
+
       results.push({
         success: true,
         projectName: project.name,
+        projectSlug: project.slug,
         mode,
-        prompt: prompt.slice(0, 200),
+        prompt: prompt.slice(0, 300),
+        ready: true,
+        readyIssues: [],
         error: null,
       });
     } catch (err) {
@@ -250,8 +341,11 @@ export async function dispatchAll(
       results.push({
         success: false,
         projectName: project.name,
+        projectSlug: project.slug,
         mode,
-        prompt: prompt.slice(0, 200),
+        prompt: prompt.slice(0, 300),
+        ready: true,
+        readyIssues: [],
         error: message,
       });
     }
