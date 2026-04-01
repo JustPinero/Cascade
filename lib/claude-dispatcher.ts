@@ -260,11 +260,15 @@ export async function dispatchAll(
     await new Promise((r) => setTimeout(r, 300));
   }
 
-  // Open Terminal with the tmux session attached
+  // Open Terminal fullscreen with the tmux session attached
   const attachScript = `
     tell application "Terminal"
       do script "tmux attach-session -t ${TMUX_SESSION}"
       activate
+      delay 0.5
+      tell application "System Events" to tell process "Terminal"
+        set value of attribute "AXFullScreen" of front window to true
+      end tell
     end tell
   `;
   const child = spawn("osascript", ["-e", attachScript], {
