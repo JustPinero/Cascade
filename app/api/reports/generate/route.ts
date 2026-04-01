@@ -5,10 +5,11 @@ import {
   generateCrossProjectReport,
   reportToMarkdown,
 } from "@/lib/report-generator";
+import { reportToPdf } from "@/lib/report-pdf";
 
 export async function POST(request: NextRequest) {
   try {
-    const { type, slug } = await request.json();
+    const { type, slug, format = "markdown" } = await request.json();
 
     if (type === "single") {
       if (!slug) {
@@ -26,12 +27,34 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      if (format === "pdf") {
+        const pdfBuffer = reportToPdf(report);
+        return new Response(new Uint8Array(pdfBuffer), {
+          headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `attachment; filename="report-${slug}.pdf"`,
+          },
+        });
+      }
+
       const markdown = reportToMarkdown(report);
       return NextResponse.json({ report, markdown });
     }
 
     if (type === "cross-project") {
       const report = await generateCrossProjectReport(prisma);
+
+      if (format === "pdf") {
+        const pdfBuffer = reportToPdf(report);
+        return new Response(new Uint8Array(pdfBuffer), {
+          headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition":
+              'attachment; filename="cross-project-report.pdf"',
+          },
+        });
+      }
+
       const markdown = reportToMarkdown(report);
       return NextResponse.json({ report, markdown });
     }
