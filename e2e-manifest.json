@@ -1,0 +1,20 @@
+{
+  "version": "1.0.0",
+  "project": "cascade",
+  "flows": {
+    "dashboard-load": "not-started",
+    "project-import": "not-started",
+    "project-tile-render": "not-started",
+    "dashboard-filter": "not-started",
+    "dashboard-search": "not-started",
+    "knowledge-browse": "not-started",
+    "knowledge-search": "not-started",
+    "wizard-flow": "not-started",
+    "wizard-claude-chat": "not-started",
+    "wizard-launch": "not-started",
+    "template-management": "not-started",
+    "report-generation": "not-started",
+    "onepassword-status": "not-started",
+    "activity-feed": "not-started"
+  }
+}
