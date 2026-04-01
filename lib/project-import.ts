@@ -1,5 +1,6 @@
 import { PrismaClient } from "@/app/generated/prisma/client";
-import { scanProjects, type ProjectScanResult } from "./scanner";
+import { scanProjects } from "./scanner";
+import { computeHealth } from "./health-engine";
 
 export interface ImportResult {
   created: number;
@@ -11,6 +12,7 @@ export interface ImportResult {
 /**
  * Scan PROJECTS_DIR and create/update Project records in the database.
  * Uses upsert to ensure idempotency — running twice won't duplicate.
+ * Computes real health using the health engine (debt, git, audits).
  */
 export async function importProjects(
   prisma: PrismaClient,
@@ -30,7 +32,27 @@ export async function importProjects(
       where: { slug: scan.slug },
     });
 
-    const data = buildProjectData(scan);
+    // Compute real health from project filesystem
+    const healthResult = await computeHealth(scan.path);
+
+    const data = {
+      name: scan.name,
+      slug: scan.slug,
+      path: scan.path,
+      health: healthResult.health,
+      healthDetails: JSON.stringify({
+        hasClaude: scan.hasClaude,
+        hasGit: scan.hasGit,
+        hasAudits: scan.hasAudits,
+        hasRequests: scan.hasRequests,
+        gitBranch: healthResult.details.gitBranch,
+        gitDirty: healthResult.gitDirty,
+        openDebtCount: healthResult.openDebtCount,
+        debtItems: healthResult.details.debtItems,
+        lastAuditGrade: healthResult.lastAuditGrade,
+        auditFindings: healthResult.details.auditFindings,
+      }),
+    };
 
     if (existing) {
       await prisma.project.update({
@@ -64,29 +86,4 @@ export async function importProjects(
   }
 
   return result;
-}
-
-function buildProjectData(scan: ProjectScanResult) {
-  const health = deriveHealth(scan);
-
-  return {
-    name: scan.name,
-    slug: scan.slug,
-    path: scan.path,
-    health,
-    healthDetails: JSON.stringify({
-      hasClaude: scan.hasClaude,
-      hasGit: scan.hasGit,
-      hasAudits: scan.hasAudits,
-      hasRequests: scan.hasRequests,
-      gitBranch: scan.gitBranch,
-      gitDirty: scan.gitDirty,
-    }),
-  };
-}
-
-function deriveHealth(scan: ProjectScanResult): string {
-  if (!scan.hasGit) return "idle";
-  if (!scan.hasClaude) return "warning";
-  return "healthy";
 }

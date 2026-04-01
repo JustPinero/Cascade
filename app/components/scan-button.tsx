@@ -17,7 +17,12 @@ export function ScanButton({ onScanComplete }: ScanButtonProps) {
       const res = await fetch("/api/projects/scan", { method: "POST" });
       const data = await res.json();
       if (res.ok) {
-        setResult(`Scanned ${data.total} projects: ${data.created} new, ${data.updated} updated`);
+        const s = data.scan;
+        const h = data.harvest;
+        const a = data.advisories;
+        setResult(
+          `${s.total} projects (${s.created} new) | ${h.newLessons} lessons | ${a.advisoriesWritten} advisories`
+        );
         onScanComplete();
       } else {
         setResult(`Error: ${data.error}`);
