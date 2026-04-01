@@ -2,10 +2,18 @@
 
 How I want my projects handled. These preferences are included in every dispatch prompt.
 
+## Testing Protocol (HIGHEST PRIORITY)
+- ALWAYS write failing tests FIRST from the acceptance criteria before writing any implementation code
+- Follow Red → Green → Refactor: (1) write tests that fail, (2) implement until they pass, (3) clean up
+- Every acceptance criterion in the request file must map to at least one test
+- Run `pnpm test` after writing tests to confirm they FAIL — if they pass before implementation, the tests are too weak
+- No request is complete without tests. No exceptions.
+- If the project has no test framework, set one up before doing anything else
+
 ## General Rules
+- Follow the action loop: Prime → Plan → Red → Green → Validate
 - Always run tests before committing
 - Never push to main without all tests passing
-- Follow the action loop: Prime → Plan → Execute → Validate
 - Update .claude/handoff.md at the end of every session
 - Log any new debt to audits/debt.md immediately
 - If you hit a blocker, write a diagnosis and stop — don't spin

@@ -125,7 +125,9 @@ export async function generatePrompt(
       prompt = [
         "Read CLAUDE.md and .claude/handoff.md to restore context.",
         "Continue with the next request in the requests/ directory.",
-        "Follow the action loop: Prime → Plan → Execute → Validate.",
+        "Follow the action loop: Prime → Plan → RED → GREEN → Validate.",
+        "RED FIRST: Write failing tests for every acceptance criterion BEFORE writing implementation code.",
+        "GREEN: Implement until all tests pass. Then validate.",
         handoff
           ? `\nLast session handoff:\n${handoff.slice(0, 500)}`
           : "",
