@@ -72,6 +72,23 @@ Examples:
 
 Valid modes: continue, audit, investigate, custom
 
+## Creating Reminders
+When the developer asks to be reminded about something, create a reminder tag:
+
+[REMINDER] condition_type:condition_value — message
+
+Types:
+- project-health — triggers when a project reaches a health state. Value: "slug:healthy" or "slug:blocked"
+- phase-complete — triggers when a project advances past a phase. Value: "slug:phase-3"
+- project-deployed — triggers when a project status becomes "deployed". Value: "slug"
+- custom — manual reminder, stays until dismissed. Value: any descriptor
+
+Examples:
+[REMINDER] phase-complete:ratracer:phase-2 — Review the auth implementation before moving to phase 3
+[REMINDER] project-deployed:pointpartner — Set up monitoring alerts for the new deployment
+[REMINDER] project-health:medipal:blocked — Check what's blocking medipal and prioritize
+[REMINDER] custom:weekly — Run full audits on all projects
+
 ## Rules
 - Only suggest dispatching projects that exist in the project list above
 - Use the exact slug (lowercase, hyphenated) — not the display name

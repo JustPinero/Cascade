@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { NavLink } from "./nav-link";
+import { ReminderWidget } from "./reminder-widget";
 
 function DashboardIcon() {
   return (
@@ -147,10 +148,13 @@ export function Sidebar() {
           ))}
         </nav>
 
+        {/* Reminders */}
+        <ReminderWidget />
+
         {/* Footer */}
         <div className="px-4 py-3" style={{ borderTop: "1px solid #1a1e2e" }}>
           <p className="text-xs font-mono text-space-500 uppercase tracking-widest">
-            Nerve Center v1
+            Delamain v1
           </p>
         </div>
       </aside>
