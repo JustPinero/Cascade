@@ -79,9 +79,9 @@ describe("template seeding", () => {
       env: { ...process.env, DATABASE_URL: TEST_DB_URL },
     });
 
-    // Still only one template (upsert)
+    // Same count after re-seed (upsert, not duplicate)
     return prisma.kickoffTemplate.findMany().then((templates) => {
-      expect(templates).toHaveLength(1);
+      expect(templates).toHaveLength(6);
     });
   });
 });
