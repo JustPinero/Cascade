@@ -20,6 +20,7 @@ const eventTypeColors: Record<string, string> = {
   "project-created": "text-success",
   "blocker-detected": "text-danger",
   "debt-resolved": "text-success",
+  "scan-complete": "text-cyan",
 };
 
 const eventTypeLabels: Record<string, string> = {
@@ -31,6 +32,7 @@ const eventTypeLabels: Record<string, string> = {
   "project-created": "NEW",
   "blocker-detected": "BLOCKED",
   "debt-resolved": "RESOLVED",
+  "scan-complete": "SCAN",
 };
 
 function formatTimestamp(dateStr: string): string {
