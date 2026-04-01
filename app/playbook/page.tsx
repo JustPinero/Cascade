@@ -41,11 +41,11 @@ export default function PlaybookPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold font-mono tracking-wide text-text-bright uppercase">
-            Overseer Playbook
+            Delamain Playbook
           </h1>
           <p className="text-sm text-text font-mono mt-1">
             Rules that shape every dispatched Claude session. Edit these to train
-            the overseer.
+            Delamain.
           </p>
         </div>
         <div className="flex items-center gap-3">

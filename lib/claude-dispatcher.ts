@@ -175,7 +175,7 @@ export async function generatePrompt(
   return prompt + playbookBlock;
 }
 
-const TMUX_SESSION = "cascade";
+const TMUX_SESSION = "delamain";
 const PANES_PER_WINDOW = 6; // 3x2 grid
 
 /**
@@ -290,6 +290,28 @@ export async function dispatchAll(
           `tmux new-session -d -s ${TMUX_SESSION} -n "projects-1" "${cmd}"`,
           { stdio: "pipe" }
         );
+        // Configure tmux to show pane titles as borders
+        execSync(
+          `tmux set-option -t ${TMUX_SESSION} pane-border-status top`,
+          { stdio: "pipe" }
+        );
+        execSync(
+          `tmux set-option -t ${TMUX_SESSION} pane-border-format " #{pane_title} "`,
+          { stdio: "pipe" }
+        );
+        execSync(
+          `tmux set-option -t ${TMUX_SESSION} pane-border-style "fg=#2e3550"`,
+          { stdio: "pipe" }
+        );
+        execSync(
+          `tmux set-option -t ${TMUX_SESSION} pane-active-border-style "fg=#41a6b5"`,
+          { stdio: "pipe" }
+        );
+        // Set pane title to project name
+        execSync(
+          `tmux select-pane -t ${TMUX_SESSION} -T "${project.name}"`,
+          { stdio: "pipe" }
+        );
         windowCount = 1;
         paneCount = 1;
       } else if (paneCount >= PANES_PER_WINDOW) {
@@ -299,11 +321,20 @@ export async function dispatchAll(
           `tmux new-window -t ${TMUX_SESSION} -n "projects-${windowCount}" "${cmd}"`,
           { stdio: "pipe" }
         );
+        execSync(
+          `tmux select-pane -t ${TMUX_SESSION} -T "${project.name}"`,
+          { stdio: "pipe" }
+        );
         paneCount = 1;
       } else {
         // Split the current window to add a new pane
         execSync(
           `tmux split-window -t ${TMUX_SESSION} "${cmd}"`,
+          { stdio: "pipe" }
+        );
+        // Set pane title
+        execSync(
+          `tmux select-pane -t ${TMUX_SESSION} -T "${project.name}"`,
           { stdio: "pipe" }
         );
         // Rebalance to keep the grid tidy
