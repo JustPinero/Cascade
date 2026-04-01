@@ -153,7 +153,7 @@ export function dispatchClaude(
 
     const script = `
       tell application "Terminal"
-        do script "cd '${escapedPath}' && claude --dangerously-skip-permissions '${escapedPrompt}'"
+        do script "cd '${escapedPath}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude '${escapedPrompt}'"
         set targetWindow to front window
         set bounds of targetWindow to {${x}, ${y}, ${x + tileW}, ${y + tileH}}
         activate
