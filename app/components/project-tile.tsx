@@ -14,6 +14,7 @@ export interface ProjectTileData {
   unreadAuditCount?: number;
   hasAdvisory?: boolean;
   advisoryRead?: boolean;
+  currentRequest?: string;
 }
 
 interface ProjectTileProps {
@@ -36,14 +37,20 @@ function formatTimeAgo(dateStr: string): string {
 }
 
 export function ProjectTile({ project }: ProjectTileProps) {
-  const borderColor =
-    project.health === "blocked"
-      ? "border-danger/40"
-      : project.health === "warning"
-        ? "border-amber/30"
-        : project.health === "healthy"
-          ? "border-cyan/20"
-          : "border-space-600";
+  const isDeployed = project.status === "deployed";
+  const hasActiveSession = project.currentRequest?.includes("dispatched");
+
+  const tileClass = isDeployed
+    ? "glow-deployed"
+    : hasActiveSession
+      ? "pulse-session"
+      : project.health === "blocked"
+        ? "border-danger/40"
+        : project.health === "warning"
+          ? "border-amber/30"
+          : project.health === "healthy"
+            ? "border-cyan/20"
+            : "border-space-600";
 
   return (
     <Link
@@ -52,7 +59,7 @@ export function ProjectTile({ project }: ProjectTileProps) {
         group block p-4 border bg-space-800
         transition-all duration-200 hover:glow-border
         hover:border-cyan/40 hover:bg-space-700/50
-        ${borderColor}
+        ${tileClass}
       `}
     >
       {/* Header: name + health */}
@@ -98,10 +105,27 @@ export function ProjectTile({ project }: ProjectTileProps) {
       </div>
 
       {/* Status badge */}
-      <div className="mt-3 pt-3 border-t border-space-600/50">
-        <span className="text-[10px] font-mono uppercase tracking-widest text-space-500">
-          {project.status}
+      <div className="mt-3 pt-3 border-t border-space-600/50 flex items-center justify-between">
+        <span
+          className={`text-[10px] font-mono uppercase tracking-widest ${
+            isDeployed
+              ? "text-amber"
+              : hasActiveSession
+                ? "text-cyan"
+                : "text-space-500"
+          }`}
+        >
+          {isDeployed
+            ? "deployed"
+            : hasActiveSession
+              ? "claude active"
+              : project.status}
         </span>
+        {project.currentRequest && !hasActiveSession && (
+          <span className="text-[10px] font-mono text-info">
+            {project.currentRequest}
+          </span>
+        )}
       </div>
     </Link>
   );

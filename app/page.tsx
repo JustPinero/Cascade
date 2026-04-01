@@ -23,9 +23,56 @@ const projectSchema = z.object({
   unreadAuditCount: z.number().optional(),
   hasAdvisory: z.boolean().optional(),
   advisoryRead: z.boolean().optional(),
+  currentRequest: z.string().nullable().optional(),
 });
 
 const projectsArraySchema = z.array(projectSchema);
+
+function ResumeAllButton() {
+  const [launching, setLaunching] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function handleResumeAll() {
+    setLaunching(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/dispatch/all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "continue" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setResult(`Launched ${data.launched} sessions`);
+      } else {
+        setResult(`Error: ${data.error}`);
+      }
+    } catch {
+      setResult("Failed to dispatch");
+    } finally {
+      setLaunching(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={handleResumeAll}
+        disabled={launching}
+        className={`px-4 py-2 text-sm font-mono uppercase tracking-wider border transition-all ${
+          launching
+            ? "border-space-500 text-space-500 cursor-wait"
+            : "border-success text-success hover:bg-success/10 hover:shadow-[0_0_12px_rgba(100,212,118,0.15)]"
+        }`}
+      >
+        {launching ? "Dispatching..." : "Resume All"}
+      </button>
+      {result && (
+        <span className="text-xs font-mono text-text">{result}</span>
+      )}
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   return (
@@ -73,6 +120,7 @@ function DashboardContent() {
             unreadAuditCount: p.unreadAuditCount || 0,
             hasAdvisory: p.hasAdvisory || false,
             advisoryRead: p.advisoryRead || false,
+            currentRequest: p.currentRequest || undefined,
           }))
         );
       }
@@ -127,6 +175,7 @@ function DashboardContent() {
           <ScanButton
             onScanComplete={() => setRefreshKey((k) => k + 1)}
           />
+          <ResumeAllButton />
         </div>
       </div>
 
