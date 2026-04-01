@@ -1,26 +1,89 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-space-900: #0a0e14;
+  --color-space-800: #111620;
+  --color-space-700: #1a1e2e;
+  --color-space-600: #242a3d;
+  --color-space-500: #2e3550;
+  --color-cyan: #41a6b5;
+  --color-cyan-dim: #2d7a87;
+  --color-amber: #e0af68;
+  --color-danger: #f0535f;
+  --color-info: #7887c7;
+  --color-accent: #bb6bd9;
+  --color-success: #64d476;
+  --color-text: #c5ccd8;
+  --color-text-bright: #e4e8ee;
+  --font-sans: var(--font-space-grotesk);
+  --font-mono: var(--font-jetbrains-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-space-900);
+  color: var(--color-text);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Scan-line overlay for cyberpunk feel */
+.scanlines::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+  z-index: 50;
+}
+
+/* Glow effect for borders */
+.glow-border {
+  box-shadow:
+    inset 0 0 12px rgba(65, 166, 181, 0.08),
+    0 0 8px rgba(65, 166, 181, 0.06);
+}
+
+/* Pulse animation for health indicators */
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes pulse-fast {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+@keyframes pulse-flash {
+  0%, 100% { opacity: 1; }
+  25% { opacity: 0.1; }
+  50% { opacity: 0.9; }
+  75% { opacity: 0.2; }
+}
+
+.pulse-healthy { animation: pulse-slow 3s ease-in-out infinite; }
+.pulse-warning { animation: pulse-fast 1.5s ease-in-out infinite; }
+.pulse-blocked { animation: pulse-flash 0.8s ease-in-out infinite; }
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-space-800);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-space-500);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-cyan-dim);
 }
