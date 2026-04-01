@@ -1,4 +1,4 @@
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 import fs from "fs/promises";
 import path from "path";
 import { PrismaClient } from "@/app/generated/prisma/client";
@@ -47,7 +47,6 @@ export async function generatePrompt(
   try {
     const requestsDir = path.join(projectPath, "requests");
     const phases = await fs.readdir(requestsDir);
-    // Get the last phase directory (most recent)
     const sortedPhases = phases.filter((p) => p.startsWith("phase-")).sort();
     if (sortedPhases.length > 0) {
       const lastPhase = sortedPhases[sortedPhases.length - 1];
@@ -110,18 +109,25 @@ export async function generatePrompt(
   }
 }
 
-// 3x2 grid layout: 3 columns, 2 rows per screen
-const GRID_COLS = 3;
-const GRID_ROWS = 2;
-const TILES_PER_SCREEN = GRID_COLS * GRID_ROWS;
-
-// Track how many windows we've opened for grid positioning
-let windowIndex = 0;
+const TMUX_SESSION = "cascade";
+const PANES_PER_WINDOW = 6; // 3x2 grid
 
 /**
- * Launch Claude Code in a tiled Terminal window for a project.
- * Windows are arranged in a 3x2 grid. After 6, a new set overlaps.
- * Uses --dangerously-skip-permissions so Claude can work autonomously.
+ * Kill any existing Cascade tmux session.
+ */
+function killTmuxSession(): void {
+  try {
+    execSync(`tmux kill-session -t ${TMUX_SESSION} 2>/dev/null`, {
+      stdio: "pipe",
+    });
+  } catch {
+    // Session didn't exist
+  }
+}
+
+/**
+ * Launch Claude Code in a single tmux pane for one project.
+ * Used for single-project dispatch from the project detail page.
  */
 export function dispatchClaude(
   projectPath: string,
@@ -134,28 +140,12 @@ export function dispatchClaude(
   try {
     const escapedPrompt = prompt.replace(/'/g, "'\\''");
     const escapedPath = projectPath.replace(/'/g, "'\\''");
+    const cmd = `cd '${escapedPath}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude '${escapedPrompt}'`;
 
-    // Calculate grid position for this window
-    const posInGrid = windowIndex % TILES_PER_SCREEN;
-    const col = posInGrid % GRID_COLS;
-    const row = Math.floor(posInGrid / GRID_COLS);
-
-    // Get screen dimensions and calculate tile size
-    // Standard MacBook: ~1440x900, with menu bar ~875 usable
-    const screenW = 1440;
-    const screenH = 875;
-    const menuBarH = 25;
-    const tileW = Math.floor(screenW / GRID_COLS);
-    const tileH = Math.floor(screenH / GRID_ROWS);
-
-    const x = col * tileW;
-    const y = menuBarH + row * tileH;
-
+    // For single dispatch, open in a new Terminal window
     const script = `
       tell application "Terminal"
-        do script "cd '${escapedPath}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude '${escapedPrompt}'"
-        set targetWindow to front window
-        set bounds of targetWindow to {${x}, ${y}, ${x + tileW}, ${y + tileH}}
+        do script "${cmd.replace(/"/g, '\\"')}"
         activate
       end tell
     `;
@@ -164,9 +154,7 @@ export function dispatchClaude(
       detached: true,
       stdio: "ignore",
     });
-
     child.unref();
-    windowIndex++;
     return { success: true, error: null };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -175,15 +163,14 @@ export function dispatchClaude(
 }
 
 /**
- * Reset the window grid counter (call before a batch dispatch).
- */
-export function resetWindowGrid(): void {
-  windowIndex = 0;
-}
-
-/**
  * Dispatch Claude to all projects with "building" status.
- * Arranges Terminal windows in a 3x2 tiled grid.
+ * Uses tmux with 3x2 pane grids. Each tmux window holds 6 panes.
+ * Swipe between tmux windows for groups of 6.
+ *
+ * Controls:
+ *   Ctrl+B, n  → next window (next 6 projects)
+ *   Ctrl+B, p  → previous window
+ *   Ctrl+B, arrow → navigate between panes
  */
 export async function dispatchAll(
   prisma: PrismaClient,
@@ -193,16 +180,55 @@ export async function dispatchAll(
     where: { status: "building" },
   });
 
-  // Reset grid so windows tile from top-left
-  resetWindowGrid();
+  if (projects.length === 0) {
+    return { launched: 0, results: [] };
+  }
+
+  // Kill any existing session
+  killTmuxSession();
 
   const results: DispatchResult[] = [];
+  let paneCount = 0;
+  let windowCount = 0;
 
-  for (const project of projects) {
+  for (let i = 0; i < projects.length; i++) {
+    const project = projects[i];
     const prompt = await generatePrompt(project.path, mode);
-    const result = dispatchClaude(project.path, prompt);
+    const escapedPrompt = prompt.replace(/'/g, "'\\''");
+    const cmd = `cd '${project.path}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude '${escapedPrompt}'`;
 
-    if (result.success) {
+    try {
+      if (i === 0) {
+        // Create the tmux session with the first project
+        execSync(
+          `tmux new-session -d -s ${TMUX_SESSION} -n "projects-1" "${cmd}"`,
+          { stdio: "pipe" }
+        );
+        windowCount = 1;
+        paneCount = 1;
+      } else if (paneCount >= PANES_PER_WINDOW) {
+        // Start a new tmux window for the next group
+        windowCount++;
+        execSync(
+          `tmux new-window -t ${TMUX_SESSION} -n "projects-${windowCount}" "${cmd}"`,
+          { stdio: "pipe" }
+        );
+        paneCount = 1;
+      } else {
+        // Split the current window to add a new pane
+        execSync(
+          `tmux split-window -t ${TMUX_SESSION} "${cmd}"`,
+          { stdio: "pipe" }
+        );
+        // Rebalance to keep the grid tidy
+        execSync(
+          `tmux select-layout -t ${TMUX_SESSION} tiled`,
+          { stdio: "pipe" }
+        );
+        paneCount++;
+      }
+
+      // Log the event
       await prisma.activityEvent.create({
         data: {
           projectId: project.id,
@@ -211,19 +237,41 @@ export async function dispatchAll(
           details: JSON.stringify({ mode, promptLength: prompt.length }),
         },
       });
+
+      results.push({
+        success: true,
+        projectName: project.name,
+        mode,
+        prompt: prompt.slice(0, 200),
+        error: null,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      results.push({
+        success: false,
+        projectName: project.name,
+        mode,
+        prompt: prompt.slice(0, 200),
+        error: message,
+      });
     }
 
-    results.push({
-      success: result.success,
-      projectName: project.name,
-      mode,
-      prompt: prompt.slice(0, 200),
-      error: result.error,
-    });
-
-    // Small delay between launches to avoid overwhelming the system
-    await new Promise((r) => setTimeout(r, 500));
+    // Small delay between launches
+    await new Promise((r) => setTimeout(r, 300));
   }
+
+  // Open Terminal with the tmux session attached
+  const attachScript = `
+    tell application "Terminal"
+      do script "tmux attach-session -t ${TMUX_SESSION}"
+      activate
+    end tell
+  `;
+  const child = spawn("osascript", ["-e", attachScript], {
+    detached: true,
+    stdio: "ignore",
+  });
+  child.unref();
 
   return {
     launched: results.filter((r) => r.success).length,
