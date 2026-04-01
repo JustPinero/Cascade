@@ -1,14 +1,23 @@
-# Auth Patterns Lessons
+# Auth Patterns
 
 Category: auth
-Last harvested: —
+Source: deployment-playbook (10 OAuth/auth lessons)
 
-## Lessons
+## From Deployment Playbook
 
-_No lessons harvested yet. The knowledge harvester will populate this file automatically._
+### OAuth Deployment Gotchas
+- [LESSON] Vercel env vars with trailing newlines break OAuth callbacks — use `printf` not `echo`
+- [LESSON] NextAuth custom middleware required for database sessions (default only works with JWT)
+- [LESSON] HTTPS cookie name prefix: `__Secure-` in production vs `next-auth.session-token` in dev
+- [LESSON] OAuthAccountNotLinked: seed existing users with provider accounts to prevent error
+- [LESSON] iOS OAuth requires reversed client ID domain notation (com.googleusercontent.apps.*)
+- [LESSON] Token expiry: preemptive refresh with 5-minute buffer, not on-error retry
 
-<!-- Harvester instructions:
-- Look for [LESSON] tags in audits/ and .claude/handoff.md files
-- Look for auth-related findings in bughunt and optimize audits
-- Keywords: auth, login, session, token, password, oauth, jwt, middleware
--->
+### API Key Security
+- [LESSON] Never expose API keys via VITE_, NEXT_PUBLIC_, or EXPO_PUBLIC_ prefixes
+- [LESSON] Implement server-side proxy for third-party API calls (Claude, TMDB, etc.)
+- [LESSON] Client-side rate limiting prevents cost overruns on AI API calls
+
+### Mobile Auth (Expo/EAS)
+- [LESSON] Apple Sign-In: different OAuth config per platform (web vs iOS)
+- [LESSON] Broken OAuth buttons cause App Store rejection — remove incomplete auth methods
