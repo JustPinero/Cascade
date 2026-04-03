@@ -1,6 +1,16 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import { useTheme } from "../components/theme-provider";
+
+interface AuthStatus {
+  service: string;
+  label: string;
+  installed: boolean;
+  authenticated: boolean;
+  user: string | null;
+  error: string | null;
+}
 
 const themes = [
   {
@@ -16,6 +26,127 @@ const themes = [
     preview: ["#f0f2f5", "#ffffff", "#1a8a99", "#c49030"],
   },
 ];
+
+function IntegrationsPanel() {
+  const [statuses, setStatuses] = useState<AuthStatus[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [launching, setLaunching] = useState<string | null>(null);
+
+  const fetchStatuses = useCallback(async () => {
+    try {
+      const res = await fetch("/api/integrations/auth");
+      const data = await res.json();
+      if (Array.isArray(data)) setStatuses(data);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchStatuses();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleLogin(service: string) {
+    setLaunching(service);
+    try {
+      await fetch("/api/integrations/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ service }),
+      });
+      // Wait a moment then refresh statuses
+      setTimeout(() => {
+        fetchStatuses();
+        setLaunching(null);
+      }, 3000);
+    } catch {
+      setLaunching(null);
+    }
+  }
+
+  return (
+    <div className="mb-8">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-mono font-bold text-cyan uppercase tracking-wider">
+          Integrations
+        </h2>
+        <button
+          onClick={() => {
+            setLoading(true);
+            fetchStatuses();
+          }}
+          className="px-2 py-1 text-[10px] font-mono uppercase border border-space-600 text-space-400 hover:text-text hover:border-space-500 transition-colors"
+        >
+          Refresh
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="text-xs font-mono text-space-500">Checking CLI auth status...</p>
+      ) : (
+        <div className="space-y-2">
+          {statuses.map((s) => (
+            <div
+              key={s.service}
+              className="flex items-center justify-between p-3 border border-space-600 bg-space-800"
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    !s.installed
+                      ? "bg-space-600"
+                      : s.authenticated
+                        ? "bg-success"
+                        : "bg-amber"
+                  }`}
+                />
+                <div>
+                  <span className="text-sm font-mono text-text-bright">
+                    {s.label}
+                  </span>
+                  <span className="text-xs font-mono text-space-500 ml-2">
+                    {!s.installed
+                      ? "not installed"
+                      : s.authenticated
+                        ? s.user || "authenticated"
+                        : "not authenticated"}
+                  </span>
+                </div>
+              </div>
+
+              {s.installed && !s.authenticated && (
+                <button
+                  onClick={() => handleLogin(s.service)}
+                  disabled={launching === s.service}
+                  className={`px-3 py-1 text-xs font-mono border transition-colors ${
+                    launching === s.service
+                      ? "border-space-500 text-space-500 cursor-wait"
+                      : "border-cyan text-cyan hover:bg-cyan/10"
+                  }`}
+                >
+                  {launching === s.service ? "Opening..." : "Login"}
+                </button>
+              )}
+
+              {s.installed && s.authenticated && (
+                <span className="text-[10px] font-mono text-success uppercase tracking-wider">
+                  Connected
+                </span>
+              )}
+
+              {!s.installed && (
+                <span className="text-[10px] font-mono text-space-500 uppercase tracking-wider">
+                  Not Found
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
@@ -78,6 +209,10 @@ export default function SettingsPage() {
           ))}
         </div>
       </div>
+
+      <div className="divider-h mb-8" />
+
+      <IntegrationsPanel />
 
       <div className="divider-h mb-8" />
 
