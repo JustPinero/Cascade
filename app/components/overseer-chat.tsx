@@ -1,6 +1,29 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+
+// SpeechRecognition types for browser API
+interface SpeechRecognitionEvent {
+  results: { [index: number]: { [index: number]: { transcript: string } } };
+}
+
+interface SpeechRecognitionInstance extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+  onend: (() => void) | null;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognitionInstance;
+    webkitSpeechRecognition: new () => SpeechRecognitionInstance;
+  }
+}
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -25,8 +48,61 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
     null
   );
   const [dispatching, setDispatching] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [listening, setListening] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+
+  const hasSpeechSupport =
+    typeof window !== "undefined" &&
+    (!!window.SpeechRecognition || !!window.webkitSpeechRecognition);
+
+  const stopListening = useCallback(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    setListening(false);
+  }, []);
+
+  const startListening = useCallback(() => {
+    if (!hasSpeechSupport) return;
+
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      const transcript = event.results[0][0].transcript;
+      setInput((prev) => (prev ? prev + " " + transcript : transcript));
+      setListening(false);
+    };
+
+    recognition.onerror = () => {
+      setListening(false);
+    };
+
+    recognition.onend = () => {
+      setListening(false);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setListening(true);
+  }, [hasSpeechSupport]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight);
@@ -192,14 +268,36 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
     <div className="border border-cyan/20 bg-space-900">
       {/* Header */}
       <div className="px-4 py-2 border-b border-space-600 bg-space-800">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-cyan pulse-healthy" />
-          <span className="text-xs font-mono text-cyan uppercase tracking-wider font-bold">
-            Delamain — Sprint Planning
-          </span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-cyan pulse-healthy" />
+            <span className="text-xs font-mono text-cyan uppercase tracking-wider font-bold">
+              Delamain — Sprint Planning
+            </span>
+          </div>
+          {hasSpeechSupport && (
+            <button
+              onClick={() => {
+                if (voiceEnabled && listening) stopListening();
+                setVoiceEnabled(!voiceEnabled);
+              }}
+              className={`flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-mono uppercase border transition-colors ${
+                voiceEnabled
+                  ? "border-cyan text-cyan"
+                  : "border-space-600 text-space-500 hover:text-text"
+              }`}
+            >
+              <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+              </svg>
+              {voiceEnabled ? "Voice On" : "Voice"}
+            </button>
+          )}
         </div>
         <p className="text-[10px] font-mono text-space-500 mt-0.5">
-          Tell me what you want done today. I&apos;ll create the dispatch plan.
+          {voiceEnabled
+            ? "Voice mode active — click the mic to speak"
+            : "Tell me what you want done today. I\u2019ll create the dispatch plan."}
         </p>
       </div>
 
@@ -280,13 +378,35 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
 
       {/* Input */}
       <div className="flex border-t border-space-600">
+        {voiceEnabled && (
+          <button
+            onClick={listening ? stopListening : startListening}
+            disabled={streaming}
+            className={`px-3 flex items-center justify-center border-r border-space-600 transition-colors ${
+              listening
+                ? "text-danger bg-danger/10 pulse-blocked"
+                : "text-cyan hover:bg-cyan/10"
+            }`}
+            title={listening ? "Stop recording" : "Start recording"}
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+              <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+            </svg>
+          </button>
+        )}
         <input
           ref={inputRef}
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          placeholder="What should we work on today?"
+          placeholder={
+            listening
+              ? "Listening..."
+              : voiceEnabled
+                ? "Speak or type..."
+                : "What should we work on today?"
+          }
           disabled={streaming}
           className="flex-1 px-3 py-2.5 text-sm font-mono bg-transparent text-text-bright placeholder:text-space-500 focus:outline-none disabled:opacity-50"
         />
