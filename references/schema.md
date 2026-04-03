@@ -9,7 +9,7 @@ The central entity. Represents a software project being monitored.
 | name | String | — | Display name |
 | slug | String | — | Unique, URL-safe identifier |
 | path | String | — | Absolute filesystem path |
-| status | String | "building" | building, deployed, paused, archived |
+| status | String | "building" | building, complete, deployed, paused, archived |
 | stack | String (JSON) | "{}" | Frontend, backend, db, hosting, language |
 | currentPhase | String | "phase-1-foundation" | Current development phase |
 | currentRequest | String? | null | Current request number (e.g., "2.3") |
@@ -21,6 +21,8 @@ The central entity. Represents a software project being monitored.
 | prWorkflowEnabled | Boolean | false | — |
 | progressScore | Int | 0 | 0-100 composite progress score |
 | progressDetails | String (JSON) | "{}" | Breakdown: phases, tests, readiness scores |
+| deploymentInfo | String (JSON) | "{}" | Deployment URL, provider, health endpoint |
+| lastSessionEndedAt | DateTime? | null | When last Claude session ended |
 | kickoffTemplateId | Int? | null | FK to KickoffTemplate |
 | lastActivityAt | DateTime | now() | — |
 | lastScannedAt | DateTime | now() | — |
@@ -88,7 +90,7 @@ Timeline of project events.
 |-------|------|---------|-------|
 | id | Int | autoincrement | Primary key |
 | projectId | Int? | null | FK to Project (null for cross-project) |
-| eventType | String | — | commit, phase-complete, audit-complete, lesson-harvested, advisory-sent, project-created, blocker-detected, debt-resolved |
+| eventType | String | — | commit, phase-complete, audit-complete, lesson-harvested, advisory-sent, project-created, blocker-detected, debt-resolved, session-complete |
 | summary | String | — | Event description |
 | details | String? | null | JSON details |
 | createdAt | DateTime | now() | — |

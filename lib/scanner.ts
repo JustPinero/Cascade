@@ -23,7 +23,7 @@ export interface ScanOptions {
 /**
  * Convert a project directory name to a URL-safe slug.
  */
-function toSlug(name: string): string {
+export function toSlug(name: string): string {
   return name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -87,7 +87,7 @@ async function getDirMtime(dir: string): Promise<Date> {
 /**
  * Scan a single project directory and return metadata.
  */
-async function scanProject(projectDir: string): Promise<ProjectScanResult> {
+export async function scanProject(projectDir: string): Promise<ProjectScanResult> {
   const name = path.basename(projectDir);
   const hasGit = await exists(path.join(projectDir, ".git"));
 

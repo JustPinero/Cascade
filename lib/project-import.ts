@@ -1,5 +1,5 @@
 import { PrismaClient } from "@/app/generated/prisma/client";
-import { scanProjects } from "./scanner";
+import { scanProjects, scanProject } from "./scanner";
 import { computeHealth } from "./health-engine";
 import { computeProgress } from "./progress-engine";
 
@@ -45,23 +45,28 @@ export async function importProjects(
       currentRequest
     );
 
+    const healthDetails: Record<string, unknown> = {
+      hasClaude: scan.hasClaude,
+      hasGit: scan.hasGit,
+      hasAudits: scan.hasAudits,
+      hasRequests: scan.hasRequests,
+      gitBranch: healthResult.details.gitBranch,
+      gitDirty: healthResult.gitDirty,
+      openDebtCount: healthResult.openDebtCount,
+      debtItems: healthResult.details.debtItems,
+      lastAuditGrade: healthResult.lastAuditGrade,
+      auditFindings: healthResult.details.auditFindings,
+    };
+    if (healthResult.details.needsAttention) {
+      healthDetails.needsAttention = healthResult.details.needsAttention;
+    }
+
     const data = {
       name: scan.name,
       slug: scan.slug,
       path: scan.path,
       health: healthResult.health,
-      healthDetails: JSON.stringify({
-        hasClaude: scan.hasClaude,
-        hasGit: scan.hasGit,
-        hasAudits: scan.hasAudits,
-        hasRequests: scan.hasRequests,
-        gitBranch: healthResult.details.gitBranch,
-        gitDirty: healthResult.gitDirty,
-        openDebtCount: healthResult.openDebtCount,
-        debtItems: healthResult.details.debtItems,
-        lastAuditGrade: healthResult.lastAuditGrade,
-        auditFindings: healthResult.details.auditFindings,
-      }),
+      healthDetails: JSON.stringify(healthDetails),
       progressScore: progressResult.total,
       progressDetails: JSON.stringify(progressResult),
     };
@@ -98,4 +103,79 @@ export async function importProjects(
   }
 
   return result;
+}
+
+export interface SingleImportResult {
+  slug: string;
+  name: string;
+  action: "created" | "updated";
+}
+
+/**
+ * Scan and import a single project by its filesystem path.
+ * Used by the session-complete webhook for targeted updates.
+ */
+export async function importSingleProject(
+  prisma: PrismaClient,
+  projectPath: string
+): Promise<SingleImportResult> {
+  const scan = await scanProject(projectPath);
+
+  const existing = await prisma.project.findUnique({
+    where: { slug: scan.slug },
+  });
+
+  const healthResult = await computeHealth(scan.path);
+
+  const currentPhase = existing?.currentPhase || "phase-1-foundation";
+  const currentRequest = existing?.currentRequest || null;
+  const progressResult = await computeProgress(
+    scan.path,
+    currentPhase,
+    currentRequest
+  );
+
+  const healthDetails: Record<string, unknown> = {
+    hasClaude: scan.hasClaude,
+    hasGit: scan.hasGit,
+    hasAudits: scan.hasAudits,
+    hasRequests: scan.hasRequests,
+    gitBranch: healthResult.details.gitBranch,
+    gitDirty: healthResult.gitDirty,
+    openDebtCount: healthResult.openDebtCount,
+    debtItems: healthResult.details.debtItems,
+    lastAuditGrade: healthResult.lastAuditGrade,
+    auditFindings: healthResult.details.auditFindings,
+  };
+  if (healthResult.details.needsAttention) {
+    healthDetails.needsAttention = healthResult.details.needsAttention;
+  }
+
+  const data = {
+    name: scan.name,
+    slug: scan.slug,
+    path: scan.path,
+    health: healthResult.health,
+    healthDetails: JSON.stringify(healthDetails),
+    progressScore: progressResult.total,
+    progressDetails: JSON.stringify(progressResult),
+    lastScannedAt: new Date(),
+    lastSessionEndedAt: new Date(),
+  };
+
+  if (existing) {
+    await prisma.project.update({
+      where: { slug: scan.slug },
+      data,
+    });
+    return { slug: scan.slug, name: scan.name, action: "updated" };
+  } else {
+    await prisma.project.create({
+      data: {
+        ...data,
+        lastActivityAt: scan.lastModified,
+      },
+    });
+    return { slug: scan.slug, name: scan.name, action: "created" };
+  }
 }

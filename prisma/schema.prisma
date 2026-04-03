@@ -15,7 +15,7 @@ model Project {
   name               String
   slug               String            @unique
   path               String
-  status             String            @default("building") // building | deployed | paused | archived
+  status             String            @default("building") // building | complete | deployed | paused | archived
   stack              String            @default("{}") // JSON string
   currentPhase       String            @default("phase-1-foundation")
   currentRequest     String?
@@ -27,6 +27,8 @@ model Project {
   prWorkflowEnabled  Boolean           @default(false)
   progressScore      Int               @default(0)
   progressDetails    String            @default("{}")
+  deploymentInfo     String            @default("{}") // JSON: { url, provider, healthEndpoint }
+  lastSessionEndedAt DateTime?
   kickoffTemplateId  Int?
   lastActivityAt     DateTime          @default(now())
   lastScannedAt      DateTime          @default(now())
@@ -85,7 +87,7 @@ model AuditSnapshot {
 model ActivityEvent {
   id        Int      @id @default(autoincrement())
   projectId Int?
-  eventType String // commit | phase-complete | audit-complete | lesson-harvested | advisory-sent | project-created | blocker-detected | debt-resolved
+  eventType String // commit | phase-complete | audit-complete | lesson-harvested | advisory-sent | project-created | blocker-detected | debt-resolved | session-complete
   summary   String
   details   String? // JSON
   createdAt DateTime @default(now())

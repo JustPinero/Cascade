@@ -12,6 +12,7 @@ export interface HealthResult {
     gitBranch: string | null;
     hasUncommittedChanges: boolean;
     auditFindings: number;
+    needsAttention?: string;
   };
 }
 
@@ -110,15 +111,33 @@ async function getLastAuditGrade(
 }
 
 /**
+ * Check .claude/handoff.md for [NEEDS ATTENTION] tag.
+ * Returns the attention message if found, null otherwise.
+ */
+async function checkNeedsAttention(
+  projectPath: string
+): Promise<string | null> {
+  try {
+    const handoffPath = path.join(projectPath, ".claude", "handoff.md");
+    const content = await fs.readFile(handoffPath, "utf-8");
+    const match = content.match(/\[NEEDS ATTENTION\]\s*(.*)/);
+    return match ? match[1].trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Compute health for a project by reading its filesystem.
  */
 export async function computeHealth(
   projectPath: string
 ): Promise<HealthResult> {
-  const [debt, git, audit] = await Promise.all([
+  const [debt, git, audit, attention] = await Promise.all([
     countOpenDebt(projectPath),
     checkGitStatus(projectPath),
     getLastAuditGrade(projectPath),
+    checkNeedsAttention(projectPath),
   ]);
 
   let health: HealthResult["health"] = "idle";
@@ -127,6 +146,7 @@ export async function computeHealth(
     // No git — idle
     health = "idle";
   } else if (
+    attention !== null ||
     audit.grade === "Critical" ||
     debt.count >= 5 ||
     audit.findingsCount >= 10
@@ -144,16 +164,22 @@ export async function computeHealth(
     health = "healthy";
   }
 
+  const details: HealthResult["details"] = {
+    debtItems: debt.items,
+    gitBranch: git.branch,
+    hasUncommittedChanges: git.dirty,
+    auditFindings: audit.findingsCount,
+  };
+
+  if (attention !== null) {
+    details.needsAttention = attention;
+  }
+
   return {
     health,
     openDebtCount: debt.count,
     gitDirty: git.dirty,
     lastAuditGrade: audit.grade,
-    details: {
-      debtItems: debt.items,
-      gitBranch: git.branch,
-      hasUncommittedChanges: git.dirty,
-      auditFindings: audit.findingsCount,
-    },
+    details,
   };
 }

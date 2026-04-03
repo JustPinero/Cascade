@@ -65,10 +65,12 @@ export async function PATCH(
       "stack",
       "progressScore",
       "progressDetails",
+      "deploymentInfo",
+      "lastSessionEndedAt",
     ]);
 
     // Enum validation for constrained fields
-    const VALID_STATUS = new Set(["building", "deployed", "paused", "archived"]);
+    const VALID_STATUS = new Set(["building", "complete", "deployed", "paused", "archived"]);
     const VALID_HEALTH = new Set(["healthy", "warning", "blocked", "idle"]);
     const VALID_AUTONOMY = new Set(["full", "semi", "manual"]);
 
