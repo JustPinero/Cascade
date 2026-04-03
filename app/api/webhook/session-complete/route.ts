@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { importSingleProject } from "@/lib/project-import";
 import { toSlug } from "@/lib/scanner";
+import { getSessionLogs } from "@/lib/session-reader";
+import { detectEscalations } from "@/lib/escalation-detector";
 import path from "path";
 
 /**
@@ -49,6 +51,27 @@ export async function POST(request: NextRequest) {
           }),
         },
       });
+
+      // Detect escalation signals from the latest session log
+      const logs = await getSessionLogs(projectPath, 1);
+      if (logs.length > 0) {
+        const signals = detectEscalations(logs[0].content);
+        for (const signal of signals) {
+          const eventTypeMap: Record<string, string> = {
+            "needs-attention": "blocker-detected",
+            lesson: "lesson-harvested",
+            "test-failure": "blocker-detected",
+            "phase-complete": "phase-complete",
+          };
+          await prisma.activityEvent.create({
+            data: {
+              projectId: project.id,
+              eventType: eventTypeMap[signal.type] || signal.type,
+              summary: `[${signal.type}] ${signal.message}`,
+            },
+          });
+        }
+      }
     }
 
     return NextResponse.json({

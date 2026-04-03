@@ -44,6 +44,17 @@ async function buildOverseerSystemPrompt(): Promise<string> {
   const projectEntries: string[] = [];
   for (const p of projects) {
     let entry = `- ${p.name} (slug: ${p.slug}) — status: ${p.status}, health: ${p.health}, phase: ${p.currentPhase}, progress: ${p.progressScore}%`;
+
+    // Add progress breakdown
+    try {
+      const pd = JSON.parse(p.progressDetails);
+      if (pd.phases && pd.tests && pd.readiness) {
+        entry += ` (phases: ${pd.phases.completed}/${pd.phases.total}, tests: ${pd.tests.fileCount} files, build: ${pd.readiness.hasTypeCheck ? "tsc" : ""}${pd.readiness.hasLint ? "+lint" : ""}${pd.readiness.hasBuild ? "+build" : ""})`;
+      }
+    } catch {
+      // ignore
+    }
+
     if (p.currentRequest) {
       entry += `, working on: ${p.currentRequest}`;
     }
@@ -155,7 +166,29 @@ You have visibility into what each project's last Claude session actually accomp
 - Planning dispatches — if a session ended with [NEEDS ATTENTION], recommend "investigate" mode
 - Reporting status — mention what was accomplished, not just phase numbers
 - A project's progress score hasn't changed across sessions — flag it as potentially stalled
-If a project has no session history, note that you have no visibility into recent work.`;
+If a project has no session history, note that you have no visibility into recent work.
+
+## Smart Dispatch Decisions
+Use the data above to make intelligent dispatch recommendations:
+- **Blocked + NEEDS ATTENTION**: Always recommend "investigate" mode. Quote the attention message.
+- **Low progress score + many sessions**: Flag as potentially stalled. Ask if the developer wants to reprioritize.
+- **Phase complete signal**: Suggest advancing to the next phase. Congratulate briefly.
+- **Test failures**: Recommend "investigate" mode focused on fixing tests before continuing.
+- **High progress + healthy**: Safe to "continue" — the project is on track.
+- **No recent sessions (>3 days)**: Note the project may need attention or may be intentionally paused.
+- **Progress breakdown**: Use phases/tests/build data to give specific advice. E.g., "ratracer has 0 test files — recommend running audits before continuing."
+When multiple projects compete for priority, prefer: blocked > warning > healthy. Fix broken things before advancing healthy ones.
+
+## Playbook Learning
+When you notice patterns across projects (same issues recurring, same lessons appearing), suggest additions to the overseer playbook:
+
+[PLAYBOOK] suggestion text here
+
+Examples:
+[PLAYBOOK] Add "run prisma generate after schema changes" to the pre-dispatch checklist — 3 projects hit this.
+[PLAYBOOK] Add CORS middleware template to kickoff templates — recurring blocker across web projects.
+
+Only suggest when you see clear patterns (3+ projects or 3+ sessions with the same issue). Quality over quantity.`;
 }
 
 export async function POST(request: NextRequest) {
