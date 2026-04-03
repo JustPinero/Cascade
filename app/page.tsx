@@ -26,6 +26,7 @@ const projectSchema = z.object({
   hasAdvisory: z.boolean().optional(),
   advisoryRead: z.boolean().optional(),
   currentRequest: z.string().nullable().optional(),
+  progressScore: z.number().optional(),
 });
 
 const projectsArraySchema = z.array(projectSchema);
@@ -130,6 +131,7 @@ function DashboardContent() {
             hasAdvisory: p.hasAdvisory || false,
             advisoryRead: p.advisoryRead || false,
             currentRequest: p.currentRequest || undefined,
+            progressScore: p.progressScore || 0,
           }))
         );
       }
@@ -141,6 +143,19 @@ function DashboardContent() {
   useEffect(() => {
     fetchProjects();
   }, [refreshKey, fetchProjects]);
+
+  // Auto-refresh when tab regains focus (debounced)
+  useEffect(() => {
+    let lastRefresh = Date.now();
+    function handleVisibility() {
+      if (document.visibilityState === "visible" && Date.now() - lastRefresh > 10_000) {
+        lastRefresh = Date.now();
+        fetchProjects();
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [fetchProjects]);
 
   // Sync filters to URL
   function handleFilterChange(newFilters: FilterState) {
