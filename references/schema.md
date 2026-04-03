@@ -19,6 +19,8 @@ The central entity. Represents a software project being monitored.
 | autonomyMode | String | "semi" | full, semi, manual |
 | agentTeamsEnabled | Boolean | false | — |
 | prWorkflowEnabled | Boolean | false | — |
+| progressScore | Int | 0 | 0-100 composite progress score |
+| progressDetails | String (JSON) | "{}" | Breakdown: phases, tests, readiness scores |
 | kickoffTemplateId | Int? | null | FK to KickoffTemplate |
 | lastActivityAt | DateTime | now() | — |
 | lastScannedAt | DateTime | now() | — |

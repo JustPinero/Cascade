@@ -11,6 +11,8 @@ interface Project {
   currentPhase: string;
   currentRequest: string | null;
   lastActivityAt: string;
+  progressScore: number;
+  progressDetails: string;
 }
 
 const healthOrder: Record<string, number> = {
@@ -34,25 +36,39 @@ const statusColors: Record<string, string> = {
   archived: "text-space-500",
 };
 
-function PhaseBar({ currentPhase }: { currentPhase: string }) {
-  const phaseMatch = currentPhase.match(/phase-(\d+)/);
-  const current = phaseMatch ? parseInt(phaseMatch[1]) : 1;
-  const total = 6;
+function ProgressBar({ score, details }: { score: number; details: string }) {
+  let parsed: { phases?: { score: number }; tests?: { score: number }; readiness?: { score: number } } | null = null;
+  try {
+    parsed = JSON.parse(details);
+  } catch {
+    // ignore
+  }
+
+  const color =
+    score >= 75
+      ? "bg-success"
+      : score >= 40
+        ? "bg-cyan"
+        : score > 0
+          ? "bg-amber"
+          : "bg-space-600";
 
   return (
-    <div className="flex gap-0.5">
-      {Array.from({ length: total }).map((_, i) => (
+    <div className="flex items-center gap-2">
+      <div className="w-24 h-2 bg-space-700 overflow-hidden">
         <div
-          key={i}
-          className={`h-2 w-6 ${
-            i + 1 < current
-              ? "bg-success"
-              : i + 1 === current
-                ? "bg-cyan"
-                : "bg-space-600"
-          }`}
+          className={`h-full ${color} transition-all duration-300`}
+          style={{ width: `${Math.min(score, 100)}%` }}
         />
-      ))}
+      </div>
+      <span className="text-[10px] font-mono text-space-400 w-8">
+        {score}%
+      </span>
+      {parsed && (
+        <span className="text-[10px] font-mono text-space-600 hidden lg:inline">
+          P{parsed.phases?.score ?? 0} T{parsed.tests?.score ?? 0} R{parsed.readiness?.score ?? 0}
+        </span>
+      )}
     </div>
   );
 }
@@ -203,7 +219,7 @@ export default function RoadmapPage() {
                   {p.currentPhase.replace(/-/g, " ").replace(/phase /, "P")}
                 </td>
                 <td className="px-3 py-2">
-                  <PhaseBar currentPhase={p.currentPhase} />
+                  <ProgressBar score={p.progressScore} details={p.progressDetails} />
                 </td>
                 <td className="px-3 py-2">
                   <span className={statusColors[p.status] || "text-text"}>

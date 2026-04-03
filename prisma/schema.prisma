@@ -25,6 +25,8 @@ model Project {
   autonomyMode       String            @default("semi") // full | semi | manual
   agentTeamsEnabled  Boolean           @default(false)
   prWorkflowEnabled  Boolean           @default(false)
+  progressScore      Int               @default(0)
+  progressDetails    String            @default("{}")
   kickoffTemplateId  Int?
   lastActivityAt     DateTime          @default(now())
   lastScannedAt      DateTime          @default(now())

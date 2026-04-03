@@ -72,15 +72,24 @@ export function TemplateStep({ state, onChange }: TemplateStepProps) {
               )}
             </div>
             <p className="text-xs font-mono text-space-500">{t.description}</p>
-            <button
+            <span
+              role="button"
+              tabIndex={0}
               onClick={(e) => {
                 e.stopPropagation();
                 setPreview(preview === t.content ? null : t.content);
               }}
-              className="text-[10px] font-mono text-info mt-2 hover:text-cyan"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setPreview(preview === t.content ? null : t.content);
+                }
+              }}
+              className="text-[10px] font-mono text-info mt-2 hover:text-cyan cursor-pointer inline-block"
             >
               {preview === t.content ? "Hide preview" : "Preview"}
-            </button>
+            </span>
           </button>
         ))}
       </div>

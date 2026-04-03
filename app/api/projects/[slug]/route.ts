@@ -63,6 +63,8 @@ export async function PATCH(
       "agentTeamsEnabled",
       "prWorkflowEnabled",
       "stack",
+      "progressScore",
+      "progressDetails",
     ]);
 
     // Enum validation for constrained fields

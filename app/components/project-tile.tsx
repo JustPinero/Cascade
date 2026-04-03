@@ -15,6 +15,7 @@ export interface ProjectTileData {
   hasAdvisory?: boolean;
   advisoryRead?: boolean;
   currentRequest?: string;
+  progressScore?: number;
 }
 
 interface ProjectTileProps {
@@ -81,11 +82,30 @@ export function ProjectTile({ project }: ProjectTileProps) {
         </div>
       </div>
 
-      {/* Phase */}
+      {/* Phase + Progress */}
       <div className="mb-3">
-        <span className="text-xs font-mono text-info">
-          {project.currentPhase.replace(/-/g, " ").replace(/phase /, "P")}
-        </span>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs font-mono text-info">
+            {project.currentPhase.replace(/-/g, " ").replace(/phase /, "P")}
+          </span>
+          <span className="text-[10px] font-mono text-space-400">
+            {project.progressScore ?? 0}%
+          </span>
+        </div>
+        <div className="w-full h-1 bg-space-700 overflow-hidden">
+          <div
+            className={`h-full transition-all duration-300 ${
+              (project.progressScore ?? 0) >= 75
+                ? "bg-success"
+                : (project.progressScore ?? 0) >= 40
+                  ? "bg-cyan"
+                  : (project.progressScore ?? 0) > 0
+                    ? "bg-amber"
+                    : "bg-space-600"
+            }`}
+            style={{ width: `${Math.min(project.progressScore ?? 0, 100)}%` }}
+          />
+        </div>
       </div>
 
       {/* Footer: debt count + last activity */}
