@@ -105,6 +105,19 @@ Phase 1 complete.
     expect(types).toContain("needs-attention");
   });
 
+  it("detects [HUMAN TODO] tags", () => {
+    const content = `# Handoff
+
+[HUMAN TODO] Upload the logo assets to /public/images
+[HUMAN TODO] Get a Stripe test API key
+`;
+    const signals = detectEscalations(content);
+    const todos = signals.filter((s) => s.type === "human-todo");
+    expect(todos).toHaveLength(2);
+    expect(todos[0].message).toContain("logo assets");
+    expect(todos[1].message).toContain("Stripe");
+  });
+
   it("handles empty content", () => {
     expect(detectEscalations("")).toEqual([]);
   });

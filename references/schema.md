@@ -31,6 +31,24 @@ The central entity. Represents a software project being monitored.
 
 **Relations:** lessons[], auditSnapshots[], activityEvents[], kickoffTemplate?
 
+## HumanTask
+Tasks that require human action — assets, credentials, manual testing, etc.
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| id | Int | autoincrement | Primary key |
+| title | String | — | Task description |
+| category | String | "other" | asset, credential, testing, deploy, review, external, other |
+| priority | String | "normal" | high, normal, low |
+| status | String | "pending" | pending, done |
+| projectId | Int? | null | FK to Project |
+| projectSlug | String? | null | Project slug for display |
+| createdBy | String | "claude" | claude, user, delamain |
+| createdAt | DateTime | now() | — |
+| completedAt | DateTime? | null | When marked done |
+
+**Relations:** project?
+
 ## KnowledgeLesson
 Lessons harvested from project audits and corrections.
 

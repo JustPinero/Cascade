@@ -149,6 +149,16 @@ Examples:
 [REMINDER] project-health:medipal:blocked — Check what's blocking medipal and prioritize
 [REMINDER] custom:weekly — Run full audits on all projects
 
+## Creating Human Tasks
+When you identify something the developer needs to do manually (upload assets, get API keys, manual testing, etc.), create a task tag:
+
+[HUMAN TODO] project-slug — description of what the developer needs to do
+
+Examples:
+[HUMAN TODO] ratracer — Upload the logo assets to /public/images
+[HUMAN TODO] pointpartner — Get a Stripe test API key and add to 1Password
+[HUMAN TODO] medipal — Record a manual testing video of the onboarding flow
+
 ## Rules
 - Only suggest dispatching projects that exist in the project list above
 - Use the exact slug (lowercase, hyphenated) — not the display name
