@@ -185,6 +185,165 @@ function DeployStatusPanel({ project }: { project: Project }) {
   );
 }
 
+interface WorkRequest {
+  number: string;
+  title: string;
+  filename: string;
+  status: "done" | "current" | "upcoming";
+}
+
+interface WorkPhase {
+  name: string;
+  label: string;
+  isCurrent: boolean;
+  requests: WorkRequest[];
+}
+
+interface RemainingWorkData {
+  type: "phased" | "flat" | "empty";
+  phases: WorkPhase[];
+  totalRequests: number;
+  completedRequests: number;
+  remainingRequests: number;
+}
+
+function RemainingWorkPanel({ slug }: { slug: string }) {
+  const [work, setWork] = useState<RemainingWorkData | null>(null);
+  const [expandedPhase, setExpandedPhase] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/projects/${slug}/work`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.phases) {
+          setWork(data);
+          // Auto-expand current phase
+          const current = data.phases.find(
+            (p: WorkPhase) => p.isCurrent
+          );
+          if (current) setExpandedPhase(current.name);
+        }
+      })
+      .finally(() => setLoaded(true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!loaded) {
+    return (
+      <div className="p-4 border border-space-600 bg-space-800">
+        <p className="text-xs font-mono text-space-500">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!work || work.type === "empty" || work.phases.length === 0) {
+    return (
+      <div className="p-4 border border-space-600 bg-space-800 space-y-3">
+        <h2 className="text-sm font-mono font-bold text-cyan uppercase tracking-wider">
+          Remaining Work
+        </h2>
+        <p className="text-xs font-mono text-space-500">
+          No requests found
+        </p>
+      </div>
+    );
+  }
+
+  const statusIcon = (status: WorkRequest["status"]) => {
+    switch (status) {
+      case "done":
+        return <span className="text-success">&#10003;</span>;
+      case "current":
+        return <span className="text-cyan">&#8594;</span>;
+      case "upcoming":
+        return <span className="text-space-600">&middot;</span>;
+    }
+  };
+
+  const statusColor = (status: WorkRequest["status"]) => {
+    switch (status) {
+      case "done":
+        return "text-space-500 line-through";
+      case "current":
+        return "text-cyan font-bold";
+      case "upcoming":
+        return "text-text";
+    }
+  };
+
+  return (
+    <div className="p-4 border border-space-600 bg-space-800 space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-mono font-bold text-cyan uppercase tracking-wider">
+          Remaining Work
+        </h2>
+        <span className="text-[10px] font-mono text-space-400">
+          {work.completedRequests}/{work.totalRequests} done
+          {work.remainingRequests > 0 &&
+            ` \u2022 ${work.remainingRequests} remaining`}
+        </span>
+      </div>
+
+      <div className="space-y-1">
+        {work.phases.map((phase) => {
+          const isExpanded = expandedPhase === phase.name;
+          const doneCount = phase.requests.filter(
+            (r) => r.status === "done"
+          ).length;
+
+          return (
+            <div key={phase.name}>
+              <button
+                onClick={() =>
+                  setExpandedPhase(isExpanded ? null : phase.name)
+                }
+                className={`w-full text-left px-2 py-1.5 flex items-center justify-between text-xs font-mono transition-colors hover:bg-space-700/50 ${
+                  phase.isCurrent
+                    ? "border-l-2 border-cyan"
+                    : "border-l-2 border-transparent"
+                }`}
+              >
+                <span
+                  className={
+                    phase.isCurrent ? "text-cyan" : "text-text"
+                  }
+                >
+                  {phase.label}
+                </span>
+                <span className="text-space-500">
+                  {doneCount}/{phase.requests.length}
+                </span>
+              </button>
+
+              {isExpanded && (
+                <div className="ml-4 space-y-0.5 pb-2">
+                  {phase.requests.map((req) => (
+                    <div
+                      key={req.filename}
+                      className="flex items-center gap-2 px-2 py-0.5 text-xs font-mono"
+                    >
+                      <span className="w-4 text-center">
+                        {statusIcon(req.status)}
+                      </span>
+                      <span className="text-space-500 w-8">
+                        {req.number}
+                      </span>
+                      <span className={statusColor(req.status)}>
+                        {req.title}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 interface SessionLogEntry {
   filename: string;
   timestamp: string;
@@ -428,6 +587,9 @@ export default function ProjectDetailPage() {
             </div>
           )}
         </div>
+
+        {/* Remaining Work */}
+        <RemainingWorkPanel slug={slug} />
 
         {/* Session History */}
         <SessionHistoryPanel slug={slug} />
