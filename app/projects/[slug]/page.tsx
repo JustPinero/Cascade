@@ -185,6 +185,71 @@ function DeployStatusPanel({ project }: { project: Project }) {
   );
 }
 
+interface SessionLogEntry {
+  filename: string;
+  timestamp: string;
+  content: string;
+  summary: string;
+}
+
+function SessionHistoryPanel({ slug }: { slug: string }) {
+  const [sessions, setSessions] = useState<SessionLogEntry[]>([]);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/projects/${slug}/sessions?limit=10`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setSessions(data);
+      })
+      .finally(() => setLoaded(true));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="p-4 border border-space-600 bg-space-800 space-y-3">
+      <h2 className="text-sm font-mono font-bold text-cyan uppercase tracking-wider">
+        Session History
+      </h2>
+      {!loaded ? (
+        <p className="text-xs font-mono text-space-500">Loading...</p>
+      ) : sessions.length === 0 ? (
+        <p className="text-xs font-mono text-space-500">No sessions recorded yet</p>
+      ) : (
+        <div className="space-y-2">
+          {sessions.map((s) => (
+            <div key={s.filename} className="border border-space-700">
+              <button
+                onClick={() =>
+                  setExpanded(expanded === s.filename ? null : s.filename)
+                }
+                className="w-full text-left px-3 py-2 flex items-center justify-between hover:bg-space-700/50 transition-colors"
+              >
+                <span className="text-xs font-mono text-info">
+                  {s.timestamp.replace("T", " ")}
+                </span>
+                <span className="text-[10px] font-mono text-space-500">
+                  {expanded === s.filename ? "collapse" : "expand"}
+                </span>
+              </button>
+              {expanded === s.filename ? (
+                <pre className="px-3 pb-3 text-xs font-mono text-text whitespace-pre-wrap max-h-64 overflow-auto">
+                  {s.content}
+                </pre>
+              ) : (
+                <p className="px-3 pb-2 text-xs font-mono text-space-400 truncate">
+                  {s.summary.replace(/^#.*\n/gm, "").trim().slice(0, 120)}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ProjectDetailPage() {
   const params = useParams();
   const slug = params.slug as string;
@@ -363,6 +428,9 @@ export default function ProjectDetailPage() {
             </div>
           )}
         </div>
+
+        {/* Session History */}
+        <SessionHistoryPanel slug={slug} />
 
         {/* Deploy Status */}
         <DeployStatusPanel project={project} />

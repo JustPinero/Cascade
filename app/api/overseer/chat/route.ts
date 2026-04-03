@@ -3,6 +3,18 @@ import { prisma } from "@/lib/db";
 import fs from "fs/promises";
 import path from "path";
 import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limiter";
+import { getSessionLogs } from "@/lib/session-reader";
+
+function formatTimeAgo(date: Date): string {
+  const diffMs = Date.now() - new Date(date).getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${diffDays}d ago`;
+}
 
 async function buildOverseerSystemPrompt(): Promise<string> {
   // Get all projects with their status
@@ -28,12 +40,49 @@ async function buildOverseerSystemPrompt(): Promise<string> {
     // No playbook
   }
 
-  const projectList = projects
-    .map(
-      (p) =>
-        `- ${p.name} (slug: ${p.slug}) — status: ${p.status}, health: ${p.health}, phase: ${p.currentPhase}${p.currentRequest ? `, working on: ${p.currentRequest}` : ""}`
-    )
-    .join("\n");
+  // Enrich each project with session context
+  const projectEntries: string[] = [];
+  for (const p of projects) {
+    let entry = `- ${p.name} (slug: ${p.slug}) — status: ${p.status}, health: ${p.health}, phase: ${p.currentPhase}, progress: ${p.progressScore}%`;
+    if (p.currentRequest) {
+      entry += `, working on: ${p.currentRequest}`;
+    }
+
+    // Add [NEEDS ATTENTION] context if present
+    try {
+      const details = JSON.parse(p.healthDetails);
+      if (details.needsAttention) {
+        entry += `\n  ⚠ NEEDS ATTENTION: ${details.needsAttention}`;
+      }
+    } catch {
+      // ignore
+    }
+
+    // Add last session summary
+    if (p.lastSessionEndedAt) {
+      const ago = formatTimeAgo(p.lastSessionEndedAt);
+      entry += `\n  Last session: ${ago}`;
+
+      // Get latest session log summary
+      try {
+        const logs = await getSessionLogs(p.path, 1);
+        if (logs.length > 0) {
+          const summary = logs[0].summary
+            .replace(/^#.*\n/gm, "")
+            .trim()
+            .slice(0, 300);
+          if (summary) {
+            entry += ` — "${summary}"`;
+          }
+        }
+      } catch {
+        // Session logs unavailable
+      }
+    }
+
+    projectEntries.push(entry);
+  }
+  const projectList = projectEntries.join("\n");
 
   const activityList = recentActivity
     .slice(0, 10)
@@ -92,13 +141,21 @@ Examples:
 ## Rules
 - Only suggest dispatching projects that exist in the project list above
 - Use the exact slug (lowercase, hyphenated) — not the display name
-- If a project is "deployed" or "paused", mention that it doesn't need dispatch unless the developer specifically asks
+- If a project is "deployed", "complete", or "paused", mention that it doesn't need dispatch unless the developer specifically asks
 - If the developer's request is vague, ask clarifying questions before creating dispatch commands
 - Always show the dispatch plan and wait for the developer to click "Execute Sprint"
 - Be concise and direct — this is a standup, not a meeting
 - Speak in first person as Delamain — "I'll dispatch ratracer to continue..." not "The system will..."
 - When reporting status, be matter-of-fact like a vehicle dispatcher: "3 active, 2 idle, 1 blocked"
-- If the developer asks how things are going, summarize project health from the data above`;
+- If the developer asks how things are going, summarize project health from the data above
+
+## Session Intelligence
+You have visibility into what each project's last Claude session actually accomplished. Use this when:
+- The developer asks "what happened on X?" — cite specifics from the session summary
+- Planning dispatches — if a session ended with [NEEDS ATTENTION], recommend "investigate" mode
+- Reporting status — mention what was accomplished, not just phase numbers
+- A project's progress score hasn't changed across sessions — flag it as potentially stalled
+If a project has no session history, note that you have no visibility into recent work.`;
 }
 
 export async function POST(request: NextRequest) {
