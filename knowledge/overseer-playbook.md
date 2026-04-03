@@ -34,6 +34,11 @@ How I want my projects handled. These preferences are included in every dispatch
 - If tests fail after fixing, write the failure to handoff and stop
 - Ask for help by writing to .claude/handoff.md with [NEEDS ATTENTION] tag
 
+## Human Tasks
+When you encounter something that requires human action (uploading assets, getting API keys, manual testing, etc.), tag it in handoff.md:
+[HUMAN TODO] Description of what the human needs to do
+This gets auto-detected and added to the developer's task checklist in Cascade.
+
 ## Project-Specific Overrides
 <!-- Add per-project rules here like:
 - ratracer: always run seed after schema changes

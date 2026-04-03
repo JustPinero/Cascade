@@ -57,11 +57,24 @@ export async function POST(request: NextRequest) {
       if (logs.length > 0) {
         const signals = detectEscalations(logs[0].content);
         for (const signal of signals) {
+          // Auto-create human tasks from [HUMAN TODO] signals
+          if (signal.type === "human-todo") {
+            await prisma.humanTask.create({
+              data: {
+                title: signal.message,
+                projectId: project.id,
+                projectSlug: slug,
+                createdBy: "claude",
+              },
+            });
+          }
+
           const eventTypeMap: Record<string, string> = {
             "needs-attention": "blocker-detected",
             lesson: "lesson-harvested",
             "test-failure": "blocker-detected",
             "phase-complete": "phase-complete",
+            "human-todo": "blocker-detected",
           };
           await prisma.activityEvent.create({
             data: {

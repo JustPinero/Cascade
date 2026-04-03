@@ -38,6 +38,7 @@ model Project {
   lessons          KnowledgeLesson[]
   auditSnapshots   AuditSnapshot[]
   activityEvents   ActivityEvent[]
+  humanTasks       HumanTask[]
   kickoffTemplate  KickoffTemplate?  @relation(fields: [kickoffTemplateId], references: [id])
 }
 
@@ -91,6 +92,21 @@ model ActivityEvent {
   summary   String
   details   String? // JSON
   createdAt DateTime @default(now())
+
+  project Project? @relation(fields: [projectId], references: [id])
+}
+
+model HumanTask {
+  id          Int       @id @default(autoincrement())
+  title       String
+  category    String    @default("other") // asset, credential, testing, deploy, review, external, other
+  priority    String    @default("normal") // high, normal, low
+  status      String    @default("pending") // pending, done
+  projectId   Int?
+  projectSlug String?
+  createdBy   String    @default("claude") // claude, user, delamain
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
 
   project Project? @relation(fields: [projectId], references: [id])
 }

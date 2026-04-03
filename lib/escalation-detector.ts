@@ -1,5 +1,5 @@
 export interface EscalationSignal {
-  type: "needs-attention" | "lesson" | "test-failure" | "phase-complete";
+  type: "needs-attention" | "lesson" | "test-failure" | "phase-complete" | "human-todo";
   message: string;
 }
 
@@ -22,6 +22,15 @@ export function detectEscalations(content: string): EscalationSignal[] {
   for (const match of attentionMatches) {
     signals.push({
       type: "needs-attention",
+      message: match[1].trim(),
+    });
+  }
+
+  // [HUMAN TODO] — tasks that require human action
+  const todoMatches = content.matchAll(/\[HUMAN TODO\]\s*(.*)/g);
+  for (const match of todoMatches) {
+    signals.push({
+      type: "human-todo",
       message: match[1].trim(),
     });
   }
