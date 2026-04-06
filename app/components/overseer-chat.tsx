@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { sendNotification } from "@/lib/notify";
 
 // SpeechRecognition types for browser API
 interface SpeechRecognitionEvent {
@@ -210,7 +211,20 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
       // Try to extract dispatch actions from the response
       const actions = extractActions(assistantContent);
       if (actions.length > 0) {
-        setPendingActions(actions);
+        // Check if auto-dispatch is safe (all continue mode)
+        const autoEnabled =
+          typeof window !== "undefined" &&
+          localStorage.getItem("cascade-auto-dispatch") === "true";
+        const allSafeContinue = actions.every(
+          (a) => a.action === "continue"
+        );
+
+        if (autoEnabled && allSafeContinue) {
+          // Auto-execute without user approval
+          autoExecuteActions(actions);
+        } else {
+          setPendingActions(actions);
+        }
       }
 
       // Save any reminders Delamain created
@@ -256,6 +270,44 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
       });
     }
     return actions;
+  }
+
+  async function autoExecuteActions(actions: ParsedAction[]) {
+    const allResults: unknown[] = [];
+    for (const action of actions) {
+      try {
+        const res = await fetch(`/api/projects/${action.project}/dispatch`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: action.action,
+            prompt: action.prompt || undefined,
+          }),
+        });
+        const data = await res.json();
+        allResults.push({ ...data, projectSlug: action.project });
+      } catch {
+        allResults.push({
+          success: false,
+          projectSlug: action.project,
+          error: "Failed to dispatch",
+        });
+      }
+    }
+
+    onDispatch(allResults);
+    sendNotification(
+      `Delamain auto-dispatched ${actions.length} project${actions.length > 1 ? "s" : ""} (continue)`,
+      { body: actions.map((a) => a.project).join(", "), tag: "auto-dispatch" }
+    );
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content: `Auto-dispatched ${actions.length} projects in continue mode. Check the dispatch report above.`,
+      },
+    ]);
   }
 
   async function executeActions() {
