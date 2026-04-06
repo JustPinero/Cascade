@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTheme } from "../components/theme-provider";
+import {
+  isNotificationSupported,
+  getNotificationPreference,
+  setNotificationPreference,
+  requestNotificationPermission,
+} from "@/lib/notify";
 
 interface AuthStatus {
   service: string;
@@ -148,6 +154,79 @@ function IntegrationsPanel() {
   );
 }
 
+function NotificationsPanel() {
+  const [enabled, setEnabled] = useState(() => getNotificationPreference());
+  const [supported] = useState(() => isNotificationSupported());
+  const [permission, setPermission] = useState(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      return Notification.permission;
+    }
+    return "default";
+  });
+
+  async function handleToggle() {
+    const newValue = !enabled;
+    setEnabled(newValue);
+    setNotificationPreference(newValue);
+    if (newValue && permission !== "granted") {
+      const granted = await requestNotificationPermission();
+      setPermission(granted ? "granted" : "denied");
+    }
+  }
+
+  if (!supported) {
+    return (
+      <div className="mb-8">
+        <h2 className="text-sm font-mono font-bold text-cyan uppercase tracking-wider mb-4">
+          Notifications
+        </h2>
+        <p className="text-xs font-mono text-space-500">
+          Desktop notifications not supported in this browser.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-8">
+      <h2 className="text-sm font-mono font-bold text-cyan uppercase tracking-wider mb-4">
+        Notifications
+      </h2>
+      <div className="flex items-center justify-between p-3 border border-space-600 bg-space-800">
+        <div>
+          <span className="text-sm font-mono text-text-bright">
+            Desktop Notifications
+          </span>
+          <p className="text-[10px] font-mono text-space-500 mt-0.5">
+            {permission === "granted"
+              ? "Get notified when sessions end, blockers are detected, or reminders trigger"
+              : permission === "denied"
+                ? "Browser notifications are blocked — enable in browser settings"
+                : "Click to enable browser notification permission"}
+          </p>
+        </div>
+        <button
+          onClick={handleToggle}
+          disabled={permission === "denied"}
+          className={`w-10 h-5 rounded-full transition-colors relative ${
+            enabled && permission === "granted"
+              ? "bg-cyan"
+              : "bg-space-600"
+          } ${permission === "denied" ? "opacity-50 cursor-not-allowed" : ""}`}
+        >
+          <div
+            className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+              enabled && permission === "granted"
+                ? "translate-x-5"
+                : "translate-x-0.5"
+            }`}
+          />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
 
@@ -213,6 +292,10 @@ export default function SettingsPage() {
       <div className="divider-h mb-8" />
 
       <IntegrationsPanel />
+
+      <div className="divider-h mb-8" />
+
+      <NotificationsPanel />
 
       <div className="divider-h mb-8" />
 

@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { requestNotificationPermission } from "@/lib/notify";
 import { ScanButton } from "./components/scan-button";
 import { ProjectGrid } from "./components/project-grid";
 import {
@@ -143,6 +144,11 @@ function DashboardContent() {
   useEffect(() => {
     fetchProjects();
   }, [refreshKey, fetchProjects]);
+
+  // Request notification permission on first load
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
 
   // Auto-refresh when tab regains focus (debounced)
   useEffect(() => {
