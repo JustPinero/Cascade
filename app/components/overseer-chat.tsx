@@ -356,7 +356,11 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
       <div className="px-4 py-2 border-b border-space-600 bg-space-800">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-cyan pulse-healthy" />
+            <img
+              src="/delamain.jpg"
+              alt="Delamain"
+              className="w-5 h-5 rounded-full ring-1 ring-cyan/40"
+            />
             <span className="text-xs font-mono text-cyan uppercase tracking-wider font-bold">
               Delamain — Sprint Planning
             </span>

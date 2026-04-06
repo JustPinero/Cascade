@@ -143,7 +143,12 @@ export function Sidebar() {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-cyan pulse-healthy" style={{ boxShadow: "0 0 8px rgba(65, 166, 181, 0.4)" }} />
+            <img
+              src="/delamain.jpg"
+              alt="Delamain"
+              className="w-7 h-7 rounded-full ring-1 ring-cyan/40"
+              style={{ boxShadow: "0 0 8px rgba(65, 166, 181, 0.4)" }}
+            />
             <h1 className="text-lg font-bold font-mono tracking-[0.2em] text-text-bright uppercase">
               Cascade
             </h1>
@@ -170,7 +175,12 @@ export function Sidebar() {
         <ReminderWidget />
 
         {/* Footer */}
-        <div className="px-4 py-3" style={{ borderTop: "1px solid #1a1e2e" }}>
+        <div className="flex items-center gap-2 px-4 py-3" style={{ borderTop: "1px solid #1a1e2e" }}>
+          <img
+            src="/delamain.jpg"
+            alt="Delamain"
+            className="w-4 h-4 rounded-full opacity-60"
+          />
           <p className="text-xs font-mono text-space-500 uppercase tracking-widest">
             Delamain v1
           </p>

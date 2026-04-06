@@ -74,7 +74,11 @@ export function MorningBriefing() {
     return (
       <div className="mb-6 p-4 border border-cyan/20 bg-space-900">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-cyan pulse-healthy" />
+          <img
+            src="/delamain.jpg"
+            alt="Delamain"
+            className="w-5 h-5 rounded-full ring-1 ring-cyan/40 pulse-healthy"
+          />
           <span className="text-xs font-mono text-cyan">
             Delamain is preparing your morning briefing...
           </span>
@@ -89,7 +93,11 @@ export function MorningBriefing() {
     <div className="mb-6 border border-cyan/20 bg-space-900 animate-fade-in">
       <div className="flex items-center justify-between px-4 py-2 border-b border-space-700">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-cyan" />
+          <img
+            src="/delamain.jpg"
+            alt="Delamain"
+            className="w-5 h-5 rounded-full ring-1 ring-cyan/40"
+          />
           <span className="text-xs font-mono text-cyan uppercase tracking-wider font-bold">
             Morning Briefing
           </span>
