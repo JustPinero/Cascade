@@ -286,25 +286,15 @@ export async function dispatchAll(
     try {
       if (launchIndex === 0) {
         // Create the tmux session with the first project
+        // Use shell wrapper to keep pane alive even if command fails
+        const wrappedCmd = `${cmd}; echo '[Session ended — press Enter to close]'; read`;
         execSync(
-          `tmux new-session -d -s ${TMUX_SESSION} -n "projects-1" "${cmd}"`,
+          `tmux new-session -d -s ${TMUX_SESSION} -n "projects-1" '${wrappedCmd.replace(/'/g, "'\\''")}'`,
           { stdio: "pipe" }
         );
         // Configure tmux to show pane titles as borders
         execSync(
-          `tmux set-option -t ${TMUX_SESSION} pane-border-status top`,
-          { stdio: "pipe" }
-        );
-        execSync(
-          `tmux set-option -t ${TMUX_SESSION} pane-border-format " #{pane_title} "`,
-          { stdio: "pipe" }
-        );
-        execSync(
-          `tmux set-option -t ${TMUX_SESSION} pane-border-style "fg=#2e3550"`,
-          { stdio: "pipe" }
-        );
-        execSync(
-          `tmux set-option -t ${TMUX_SESSION} pane-active-border-style "fg=#41a6b5"`,
+          `tmux set-option -t ${TMUX_SESSION} pane-border-status top && tmux set-option -t ${TMUX_SESSION} pane-border-format " #{pane_title} " && tmux set-option -t ${TMUX_SESSION} pane-border-style "fg=#2e3550" && tmux set-option -t ${TMUX_SESSION} pane-active-border-style "fg=#41a6b5"`,
           { stdio: "pipe" }
         );
         // Set pane title to project name
