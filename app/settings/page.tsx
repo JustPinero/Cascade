@@ -227,6 +227,50 @@ function NotificationsPanel() {
   );
 }
 
+function AutomationPanel() {
+  const [autoDispatch, setAutoDispatch] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("cascade-auto-dispatch") === "true";
+  });
+
+  function handleToggle() {
+    const newValue = !autoDispatch;
+    setAutoDispatch(newValue);
+    localStorage.setItem("cascade-auto-dispatch", String(newValue));
+  }
+
+  return (
+    <div className="mb-8">
+      <h2 className="text-sm font-mono font-bold text-cyan uppercase tracking-wider mb-4">
+        Automation
+      </h2>
+      <div className="flex items-center justify-between p-3 border border-space-600 bg-space-800">
+        <div>
+          <span className="text-sm font-mono text-text-bright">
+            Auto-Dispatch (Continue)
+          </span>
+          <p className="text-[10px] font-mono text-space-500 mt-0.5">
+            When Delamain suggests only &quot;continue&quot; on healthy
+            projects, execute immediately without waiting for approval
+          </p>
+        </div>
+        <button
+          onClick={handleToggle}
+          className={`w-10 h-5 rounded-full transition-colors relative ${
+            autoDispatch ? "bg-cyan" : "bg-space-600"
+          }`}
+        >
+          <div
+            className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+              autoDispatch ? "translate-x-5" : "translate-x-0.5"
+            }`}
+          />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
 
@@ -296,6 +340,10 @@ export default function SettingsPage() {
       <div className="divider-h mb-8" />
 
       <NotificationsPanel />
+
+      <div className="divider-h mb-8" />
+
+      <AutomationPanel />
 
       <div className="divider-h mb-8" />
 
