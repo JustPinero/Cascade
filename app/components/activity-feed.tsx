@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { sendNotification } from "@/lib/notify";
 
 interface ActivityEvent {
   id: number;
@@ -10,6 +11,12 @@ interface ActivityEvent {
   createdAt: string;
   project: { name: string; slug: string } | null;
 }
+
+const NOTIFY_EVENT_TYPES = new Set([
+  "blocker-detected",
+  "session-complete",
+  "phase-complete",
+]);
 
 const eventTypeColors: Record<string, string> = {
   commit: "text-cyan",
@@ -63,6 +70,7 @@ export function ActivityFeed({
   const [loading, setLoading] = useState(true);
   const [showAll, setShowAll] = useState(false);
   const [filterType, setFilterType] = useState<string | null>(null);
+  const lastSeenIdRef = useRef<number>(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -77,6 +85,31 @@ export function ActivityFeed({
         });
         const data = await res.json();
         if (Array.isArray(data)) {
+          // Notify for new escalation events
+          if (lastSeenIdRef.current > 0) {
+            for (const event of data) {
+              if (
+                event.id > lastSeenIdRef.current &&
+                NOTIFY_EVENT_TYPES.has(event.eventType)
+              ) {
+                const label =
+                  eventTypeLabels[event.eventType] || event.eventType;
+                sendNotification(
+                  `Delamain: [${label}]${event.project ? ` ${event.project.name}` : ""}`,
+                  {
+                    body: event.summary,
+                    tag: `cascade-event-${event.id}`,
+                  }
+                );
+              }
+            }
+          }
+          if (data.length > 0) {
+            lastSeenIdRef.current = Math.max(
+              lastSeenIdRef.current,
+              ...data.map((e: ActivityEvent) => e.id)
+            );
+          }
           setEvents(data);
         }
       } catch (err) {
