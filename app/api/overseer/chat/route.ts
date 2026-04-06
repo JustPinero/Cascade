@@ -29,6 +29,23 @@ async function buildOverseerSystemPrompt(): Promise<string> {
     include: { project: { select: { name: true, slug: true } } },
   });
 
+  // Load yesterday's conversation summary
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    .toISOString()
+    .split("T")[0];
+  const yesterdayMessages = await prisma.chatMessage.findMany({
+    where: { sessionDate: yesterday, role: "assistant" },
+    orderBy: { createdAt: "desc" },
+    take: 3,
+  });
+  const yesterdaySummary =
+    yesterdayMessages.length > 0
+      ? yesterdayMessages
+          .map((m) => m.content.slice(0, 300))
+          .reverse()
+          .join("\n---\n")
+      : "";
+
   // Load playbook
   let playbook = "";
   try {
@@ -113,6 +130,7 @@ ${projectList}
 
 ## Recent Activity
 ${activityList}
+${yesterdaySummary ? `\n## Yesterday's Sprint Plan (your previous recommendations)\n${yesterdaySummary}\nUse this context to maintain continuity. Reference what was planned if relevant.` : ""}
 
 ## Overseer Playbook (Developer's Preferences)
 ${playbook}

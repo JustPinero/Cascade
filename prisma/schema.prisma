@@ -96,6 +96,14 @@ model ActivityEvent {
   project Project? @relation(fields: [projectId], references: [id])
 }
 
+model ChatMessage {
+  id          Int      @id @default(autoincrement())
+  role        String // user | assistant
+  content     String
+  sessionDate String // YYYY-MM-DD, groups conversations by day
+  createdAt   DateTime @default(now())
+}
+
 model HumanTask {
   id          Int       @id @default(autoincrement())
   title       String

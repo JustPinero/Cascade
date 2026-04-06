@@ -53,6 +53,28 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const historyLoaded = useRef(false);
+
+  // Load today's conversation history on mount
+  useEffect(() => {
+    if (historyLoaded.current) return;
+    historyLoaded.current = true;
+    fetch("/api/overseer/history")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setMessages(
+            data.map((m: { role: string; content: string }) => ({
+              role: m.role as "user" | "assistant",
+              content: m.content,
+            }))
+          );
+        }
+      })
+      .catch(() => {
+        // History load failed — start fresh
+      });
+  }, []);
 
   const hasSpeechSupport =
     typeof window !== "undefined" &&
@@ -172,6 +194,18 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
         { role: "assistant", content: assistantContent },
       ];
       setMessages(finalMessages);
+
+      // Persist the new messages to history
+      fetch("/api/overseer/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: "user", content: userMessage.content }),
+      }).catch(() => {});
+      fetch("/api/overseer/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: "assistant", content: assistantContent }),
+      }).catch(() => {});
 
       // Try to extract dispatch actions from the response
       const actions = extractActions(assistantContent);
