@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { requestNotificationPermission } from "@/lib/notify";
 import { ScanButton } from "./components/scan-button";
+import { MorningBriefing } from "./components/morning-briefing";
 import { ProjectGrid } from "./components/project-grid";
 import {
   DashboardFilters,
@@ -208,6 +209,8 @@ function DashboardContent() {
           <ResumeAllButton onResults={setDispatchResults} />
         </div>
       </div>
+
+      <MorningBriefing />
 
       <DashboardFilters
         filters={filters}
