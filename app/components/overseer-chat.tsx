@@ -77,9 +77,14 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
       });
   }, []);
 
-  const hasSpeechSupport =
-    typeof window !== "undefined" &&
-    (!!window.SpeechRecognition || !!window.webkitSpeechRecognition);
+  const [hasSpeechSupport, setHasSpeechSupport] = useState(false);
+
+  useEffect(() => {
+    setHasSpeechSupport(
+      typeof window !== "undefined" &&
+        (!!window.SpeechRecognition || !!window.webkitSpeechRecognition)
+    );
+  }, []);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
