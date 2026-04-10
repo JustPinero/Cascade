@@ -39,6 +39,32 @@ function DispatchPanel({
   const [dispatching, setDispatching] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [customPrompt, setCustomPrompt] = useState("");
+  const [harvesting, setHarvesting] = useState(false);
+
+  async function harvestHistory() {
+    setHarvesting(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/knowledge/harvest-history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setResult(
+          `Harvested ${data.lessonsStored} lessons (${data.duplicatesSkipped} duplicates skipped)`
+        );
+        onAction();
+      } else {
+        setResult(`Harvest error: ${data.error}`);
+      }
+    } catch {
+      setResult("Failed to harvest");
+    } finally {
+      setHarvesting(false);
+    }
+  }
 
   async function dispatch(mode: string, prompt?: string) {
     setDispatching(mode);
@@ -94,6 +120,17 @@ function DispatchPanel({
               : "Investigate Blocker"}
           </button>
         )}
+        <button
+          onClick={harvestHistory}
+          disabled={harvesting}
+          className={`px-3 py-1.5 text-xs font-mono border transition-colors ${
+            harvesting
+              ? "border-space-500 text-space-500 cursor-wait"
+              : "border-accent text-accent hover:bg-accent/10"
+          } disabled:opacity-50`}
+        >
+          {harvesting ? "Harvesting..." : "Harvest History"}
+        </button>
       </div>
       <div className="flex gap-2">
         <input

@@ -85,6 +85,56 @@ function ResumeAllButton({
   );
 }
 
+function HarvestAllButton() {
+  const [harvesting, setHarvesting] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function handleHarvest() {
+    setHarvesting(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/knowledge/harvest-history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setResult(
+          `Harvested ${data.totalLessons} lessons from ${data.totalProjects} projects`
+        );
+      } else {
+        setResult(`Error: ${data.error}`);
+      }
+    } catch {
+      setResult("Failed to harvest");
+    } finally {
+      setHarvesting(false);
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={handleHarvest}
+        disabled={harvesting}
+        className={`px-4 py-2 text-sm font-mono uppercase tracking-wider border transition-all ${
+          harvesting
+            ? "border-space-500 text-space-500 cursor-wait"
+            : "border-accent text-accent hover:bg-accent/10 hover:shadow-[0_0_12px_rgba(187,154,247,0.15)]"
+        }`}
+      >
+        {harvesting ? "Harvesting..." : "Harvest All"}
+      </button>
+      {result && (
+        <div className="absolute top-full right-0 mt-1 px-3 py-1.5 text-[10px] font-mono text-text bg-space-800 border border-space-600 whitespace-nowrap z-10">
+          {result}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   return (
     <Suspense
@@ -206,6 +256,7 @@ function DashboardContent() {
           <ScanButton
             onScanComplete={() => setRefreshKey((k) => k + 1)}
           />
+          <HarvestAllButton />
           <ResumeAllButton onResults={setDispatchResults} />
         </div>
       </div>
