@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { sendNotification } from "@/lib/notify";
+import { playStartSound, playEndSound } from "@/lib/sounds";
 
 // SpeechRecognition types for browser API
 interface SpeechRecognitionEvent {
@@ -145,6 +146,7 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
     setMessages(newMessages);
     setInput("");
     setStreaming(true);
+    playStartSound();
     setPendingActions(null);
 
     try {
@@ -273,6 +275,7 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
       ]);
     } finally {
       setStreaming(false);
+      playEndSound();
     }
   }
 
@@ -372,6 +375,40 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
 
   return (
     <div className={`border border-cyan/20 bg-space-900 ${fullPage ? "flex flex-col h-full" : ""}`}>
+      {/* RPG Portrait — full page only */}
+      {fullPage && (
+        <div className="flex items-center gap-4 px-6 py-4 border-b border-space-600 bg-space-800/80">
+          <div className="relative">
+            <div
+              className={`w-16 h-16 rounded border-2 overflow-hidden transition-all duration-300 ${
+                streaming
+                  ? "border-cyan shadow-[0_0_16px_rgba(65,166,181,0.5)] delamain-talking"
+                  : "border-space-600 shadow-[0_0_4px_rgba(65,166,181,0.1)]"
+              }`}
+            >
+              <img
+                src="/delamain.jpg"
+                alt="Delamain"
+                className={`w-full h-full object-cover transition-all duration-300 ${
+                  streaming ? "brightness-125" : "brightness-90"
+                }`}
+              />
+            </div>
+            {streaming && (
+              <div className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-cyan pulse-healthy" />
+            )}
+          </div>
+          <div>
+            <h2 className="text-lg font-bold font-mono text-cyan uppercase tracking-[0.15em]">
+              Delamain
+            </h2>
+            <p className="text-[10px] font-mono text-space-500 uppercase tracking-wider">
+              {streaming ? "Responding..." : "Fleet Dispatcher — Sprint Planning"}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="px-4 py-2 border-b border-space-600 bg-space-800">
         <div className="flex items-center justify-between">
