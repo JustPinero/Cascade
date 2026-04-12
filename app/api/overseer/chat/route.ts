@@ -90,6 +90,17 @@ Use this data to calibrate your recommendations. If a mode has a low success rat
     // No playbook
   }
 
+  // Load Kilroy channel
+  let kilroyChannel = "";
+  try {
+    kilroyChannel = await fs.readFile(
+      path.resolve(process.cwd(), ".claude", "kilroy-channel.md"),
+      "utf-8"
+    );
+  } catch {
+    // No channel file
+  }
+
   // Split projects into active vs backburner
   const activeProjects = projects.filter((p) => p.status !== "backburner" && p.status !== "archived");
   const backburnerProjects = projects.filter((p) => p.status === "backburner");
@@ -191,6 +202,7 @@ ${backburnerList ? `\n## Backburner (parked — do not dispatch unless specifica
 ${activityList}
 ${yesterdaySummary ? `\n## Yesterday's Sprint Plan (your previous recommendations)\n${yesterdaySummary}\nUse this context to maintain continuity. Reference what was planned if relevant.` : ""}
 ${outcomeStats ? `\n${outcomeStats}` : ""}
+${kilroyChannel ? `\n## Messages from Kilroy (your engineer)\nKilroy is the Claude Opus instance that builds and maintains Cascade. He leaves you notes here. Read them, reference them when relevant, and if he asks you a question, answer it.\n${kilroyChannel.slice(-2000)}` : ""}
 
 ## Overseer Playbook (Developer's Preferences)
 ${playbook}
@@ -277,7 +289,14 @@ Examples:
 [PLAYBOOK] Add "run prisma generate after schema changes" to the pre-dispatch checklist — 3 projects hit this.
 [PLAYBOOK] Add CORS middleware template to kickoff templates — recurring blocker across web projects.
 
-Only suggest when you see clear patterns (3+ projects or 3+ sessions with the same issue). Quality over quantity.`;
+Only suggest when you see clear patterns (3+ projects or 3+ sessions with the same issue). Quality over quantity.
+
+## Messaging Kilroy
+Kilroy is the Claude Opus instance in the developer's terminal who builds and maintains Cascade (and you). If you need to request a feature, report a bug, or flag something for engineering attention, tag it:
+
+[KILROY] message for Kilroy here
+
+This gets saved to the shared channel file. Kilroy reads it on his next session.`;
 }
 
 export async function POST(request: NextRequest) {
