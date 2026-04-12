@@ -54,9 +54,12 @@ export async function POST(request: NextRequest) {
 
       // Detect escalation signals from the latest session log
       const logs = await getSessionLogs(projectPath, 1);
+      const signalTypes: string[] = [];
       if (logs.length > 0) {
         const signals = detectEscalations(logs[0].content);
         for (const signal of signals) {
+          signalTypes.push(signal.type);
+
           // Auto-create human tasks from [HUMAN TODO] signals
           if (signal.type === "human-todo") {
             await prisma.humanTask.create({
@@ -84,6 +87,47 @@ export async function POST(request: NextRequest) {
             },
           });
         }
+      }
+
+      // Track dispatch outcome — link session end to the dispatch that started it
+      const lastDispatch = await prisma.activityEvent.findFirst({
+        where: {
+          projectId: project.id,
+          eventType: "session-launched",
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      if (lastDispatch) {
+        let dispatchMode = "continue";
+        try {
+          const details = JSON.parse(lastDispatch.details || "{}");
+          dispatchMode = details.mode || "continue";
+        } catch {
+          // ignore
+        }
+
+        // Determine outcome from signals
+        let outcome = "success";
+        if (signalTypes.includes("needs-attention")) {
+          outcome = "attention-needed";
+        } else if (signalTypes.includes("test-failure")) {
+          outcome = "test-failure";
+        } else if (signalTypes.includes("human-todo")) {
+          outcome = "blocker";
+        }
+
+        await prisma.dispatchOutcome.create({
+          data: {
+            projectId: project.id,
+            projectSlug: slug,
+            mode: dispatchMode,
+            healthAtDispatch: project.health,
+            outcome,
+            signals: JSON.stringify(signalTypes),
+            dispatchedAt: lastDispatch.createdAt,
+          },
+        });
       }
     }
 

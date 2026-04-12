@@ -39,6 +39,7 @@ model Project {
   auditSnapshots   AuditSnapshot[]
   activityEvents   ActivityEvent[]
   humanTasks       HumanTask[]
+  dispatchOutcomes DispatchOutcome[]
   kickoffTemplate  KickoffTemplate?  @relation(fields: [kickoffTemplateId], references: [id])
 }
 
@@ -94,6 +95,20 @@ model ActivityEvent {
   createdAt DateTime @default(now())
 
   project Project? @relation(fields: [projectId], references: [id])
+}
+
+model DispatchOutcome {
+  id             Int      @id @default(autoincrement())
+  projectId      Int
+  projectSlug    String
+  mode           String // continue, audit, investigate, custom
+  healthAtDispatch String // healthy, warning, blocked, idle
+  outcome        String // success, blocker, attention-needed, test-failure, unknown
+  signals        String   @default("[]") // JSON array of escalation signal types detected
+  dispatchedAt   DateTime
+  completedAt    DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
 }
 
 model ChatMessage {
