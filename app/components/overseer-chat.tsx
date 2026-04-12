@@ -387,7 +387,7 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
               }`}
             >
               <img
-                src="/delamain.jpg"
+                src={streaming ? "/delamain-talking.jpg" : "/delamain.jpg"}
                 alt="Delamain"
                 className={`w-full h-full object-cover transition-all duration-300 ${
                   streaming ? "brightness-125" : "brightness-90"
