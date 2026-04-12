@@ -12,7 +12,6 @@ import {
 } from "./components/dashboard-filters";
 import { ActivityFeed } from "./components/activity-feed";
 import { DispatchResults } from "./components/dispatch-results";
-import { OverseerChat } from "./components/overseer-chat";
 import type { ProjectTileData } from "./components/project-tile";
 import { z } from "zod/v4";
 
@@ -274,11 +273,6 @@ function DashboardContent() {
           onDismiss={() => setDispatchResults([])}
         />
       )}
-
-      {/* Overseer Chat */}
-      <div className="mb-6">
-        <OverseerChat onDispatch={(r) => setDispatchResults(r as DispatchResultData[])} />
-      </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
         <ProjectGrid

@@ -39,9 +39,10 @@ interface ParsedAction {
 
 interface OverseerChatProps {
   onDispatch: (results: unknown[]) => void;
+  fullPage?: boolean;
 }
 
-export function OverseerChat({ onDispatch }: OverseerChatProps) {
+export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -370,7 +371,7 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
   }
 
   return (
-    <div className="border border-cyan/20 bg-space-900">
+    <div className={`border border-cyan/20 bg-space-900 ${fullPage ? "flex flex-col h-full" : ""}`}>
       {/* Header */}
       <div className="px-4 py-2 border-b border-space-600 bg-space-800">
         <div className="flex items-center justify-between">
@@ -411,7 +412,7 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="h-56 overflow-y-auto p-3 space-y-3">
+      <div ref={scrollRef} className={`${fullPage ? "flex-1" : "h-56"} overflow-y-auto ${fullPage ? "p-6 space-y-4" : "p-3 space-y-3"}`}>
         {messages.length === 0 && (
           <div className="space-y-2">
             <p className="text-xs font-mono text-space-500">
@@ -441,22 +442,22 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
         {messages.map((msg, i) => (
           <div
             key={i}
-            className={`text-xs font-mono ${
+            className={`${fullPage ? "text-sm" : "text-xs"} font-mono ${
               msg.role === "user"
-                ? "text-cyan pl-3 border-l-2 border-cyan/30"
-                : "text-text pl-3 border-l-2 border-accent/30"
+                ? `text-cyan ${fullPage ? "pl-4" : "pl-3"} border-l-2 border-cyan/30`
+                : `text-text ${fullPage ? "pl-4" : "pl-3"} border-l-2 border-accent/30`
             }`}
           >
-            <span className="text-[10px] uppercase text-space-500 block mb-0.5">
+            <span className={`${fullPage ? "text-xs" : "text-[10px]"} uppercase text-space-500 block mb-0.5`}>
               {msg.role === "user" ? "you" : "delamain"}
             </span>
-            <div className="whitespace-pre-wrap leading-relaxed">
+            <div className={`whitespace-pre-wrap ${fullPage ? "leading-7" : "leading-relaxed"}`}>
               {msg.content}
             </div>
           </div>
         ))}
         {streaming && (
-          <div className="text-xs font-mono text-accent pulse-healthy">
+          <div className={`${fullPage ? "text-sm" : "text-xs"} font-mono text-accent pulse-healthy`}>
             Delamain is thinking...
           </div>
         )}
@@ -517,7 +518,7 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
                 : "What should we work on today?"
           }
           disabled={streaming}
-          className="flex-1 px-3 py-2.5 text-sm font-mono bg-transparent text-text-bright placeholder:text-space-500 focus:outline-none disabled:opacity-50"
+          className={`flex-1 ${fullPage ? "px-4 py-3.5 text-base" : "px-3 py-2.5 text-sm"} font-mono bg-transparent text-text-bright placeholder:text-space-500 focus:outline-none disabled:opacity-50`}
         />
         <button
           onClick={sendMessage}
