@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { sendNotification } from "@/lib/notify";
+import { playAlertSound } from "@/lib/sounds";
 
 interface ActivityEvent {
   id: number;
@@ -94,6 +95,7 @@ export function ActivityFeed({
               ) {
                 const label =
                   eventTypeLabels[event.eventType] || event.eventType;
+                playAlertSound();
                 sendNotification(
                   `Delamain: [${label}]${event.project ? ` ${event.project.name}` : ""}`,
                   {

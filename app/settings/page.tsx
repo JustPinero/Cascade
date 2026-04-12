@@ -8,6 +8,10 @@ import {
   setNotificationPreference,
   requestNotificationPermission,
 } from "@/lib/notify";
+import {
+  getSoundPreference,
+  setSoundPreference,
+} from "@/lib/sounds";
 
 interface AuthStatus {
   service: string;
@@ -227,6 +231,41 @@ function NotificationsPanel() {
   );
 }
 
+function SoundsPanel() {
+  const [enabled, setEnabled] = useState(() => getSoundPreference());
+
+  function handleToggle() {
+    const newValue = !enabled;
+    setEnabled(newValue);
+    setSoundPreference(newValue);
+  }
+
+  return (
+    <div className="flex items-center justify-between p-3 border border-space-600 bg-space-800 mt-2">
+      <div>
+        <span className="text-sm font-mono text-text-bright">
+          Delamain Sound Effects
+        </span>
+        <p className="text-[10px] font-mono text-space-500 mt-0.5">
+          Chimes when Delamain starts and finishes responding, alerts on blockers
+        </p>
+      </div>
+      <button
+        onClick={handleToggle}
+        className={`w-10 h-5 rounded-full transition-colors relative ${
+          enabled ? "bg-cyan" : "bg-space-600"
+        }`}
+      >
+        <div
+          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+            enabled ? "translate-x-5" : "translate-x-0.5"
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
 function AutomationPanel() {
   const [autoDispatch, setAutoDispatch] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -340,6 +379,7 @@ export default function SettingsPage() {
       <div className="divider-h mb-8" />
 
       <NotificationsPanel />
+      <SoundsPanel />
 
       <div className="divider-h mb-8" />
 

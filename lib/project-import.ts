@@ -177,7 +177,7 @@ export async function importSingleProject(
     readProjectFile(scan.path, "done.md"),
   ]);
 
-  const data: Record<string, unknown> = {
+  const data = {
     name: scan.name,
     slug: scan.slug,
     path: scan.path,
@@ -187,10 +187,9 @@ export async function importSingleProject(
     progressDetails: JSON.stringify(progressResult),
     lastScannedAt: new Date(),
     lastSessionEndedAt: new Date(),
+    ...(projectContext !== null ? { projectContext } : {}),
+    ...(completionCriteria !== null ? { completionCriteria } : {}),
   };
-
-  if (projectContext !== null) data.projectContext = projectContext;
-  if (completionCriteria !== null) data.completionCriteria = completionCriteria;
 
   if (existing) {
     await prisma.project.update({

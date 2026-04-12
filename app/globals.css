@@ -233,6 +233,35 @@ body::before {
 }
 .pulse-session { animation: pulse-session 2s ease-in-out infinite; }
 
+/* Delamain talking animation — RPG portrait effect */
+@keyframes delamain-talk {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(65, 166, 181, 0.4);
+    transform: scale(1);
+  }
+  15% {
+    box-shadow: 0 0 20px rgba(65, 166, 181, 0.6);
+    transform: scale(1.02);
+  }
+  30% {
+    box-shadow: 0 0 12px rgba(65, 166, 181, 0.3);
+    transform: scale(1);
+  }
+  45% {
+    box-shadow: 0 0 18px rgba(65, 166, 181, 0.55);
+    transform: scale(1.015);
+  }
+  60% {
+    box-shadow: 0 0 10px rgba(65, 166, 181, 0.35);
+    transform: scale(1);
+  }
+  75% {
+    box-shadow: 0 0 22px rgba(65, 166, 181, 0.65);
+    transform: scale(1.02);
+  }
+}
+.delamain-talking { animation: delamain-talk 1.2s ease-in-out infinite; }
+
 .glow-deployed {
   border-color: var(--amber) !important;
   box-shadow: 0 0 20px var(--amber-glow), inset 0 0 12px rgba(224, 175, 104, 0.04);
