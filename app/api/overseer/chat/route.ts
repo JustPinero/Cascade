@@ -90,10 +90,29 @@ Use this data to calibrate your recommendations. If a mode has a low success rat
     // No playbook
   }
 
+  // Split projects into active vs backburner
+  const activeProjects = projects.filter((p) => p.status !== "backburner" && p.status !== "archived");
+  const backburnerProjects = projects.filter((p) => p.status === "backburner");
+
   // Enrich each project with session context
   const projectEntries: string[] = [];
-  for (const p of projects) {
+  for (const p of activeProjects) {
     let entry = `- ${p.name} (slug: ${p.slug}) — status: ${p.status}, health: ${p.health}, phase: ${p.currentPhase}, progress: ${p.progressScore}%`;
+
+    // Add business stage if not default
+    if (p.businessStage && p.businessStage !== "building") {
+      entry += `, business: ${p.businessStage}`;
+    }
+
+    // Add project context summary if available
+    if (p.projectContext) {
+      entry += `\n  Context: ${p.projectContext.slice(0, 200)}`;
+    }
+
+    // Add completion criteria if available
+    if (p.completionCriteria) {
+      entry += `\n  Done when: ${p.completionCriteria.slice(0, 150)}`;
+    }
 
     // Add progress breakdown
     try {
@@ -145,6 +164,12 @@ Use this data to calibrate your recommendations. If a mode has a low success rat
   }
   const projectList = projectEntries.join("\n");
 
+  const backburnerList = backburnerProjects.length > 0
+    ? backburnerProjects
+        .map((p) => `- ${p.name} (slug: ${p.slug}) — parked${p.projectContext ? `: ${p.projectContext.slice(0, 100)}` : ""}`)
+        .join("\n")
+    : "";
+
   const activityList = recentActivity
     .slice(0, 10)
     .map(
@@ -158,8 +183,9 @@ Use this data to calibrate your recommendations. If a mode has a low success rat
 ## Your Role
 You help the developer plan their daily sprint. You know every project's current state, recent activity, and the developer's preferences. When the developer describes what they want done, you create specific dispatch plans.
 
-## Current Projects
+## Active Projects
 ${projectList}
+${backburnerList ? `\n## Backburner (parked — do not dispatch unless specifically asked)\n${backburnerList}` : ""}
 
 ## Recent Activity
 ${activityList}
@@ -214,7 +240,8 @@ Examples:
 ## Rules
 - Only suggest dispatching projects that exist in the project list above
 - Use the exact slug (lowercase, hyphenated) — not the display name
-- If a project is "deployed", "complete", or "paused", mention that it doesn't need dispatch unless the developer specifically asks
+- If a project is "deployed", "complete", "backburner", or "paused", mention that it doesn't need dispatch unless the developer specifically asks
+- Backburner projects are intentionally parked. Don't generate warnings about them. Periodically (once a week) ask "want to check in on [backburner project]?" but don't push it
 - If the developer's request is vague, ask clarifying questions before creating dispatch commands
 - Always show the dispatch plan and wait for the developer to click "Execute Sprint"
 - Be concise and direct — this is a standup, not a meeting

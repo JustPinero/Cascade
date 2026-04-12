@@ -15,7 +15,7 @@ model Project {
   name               String
   slug               String            @unique
   path               String
-  status             String            @default("building") // building | complete | deployed | paused | archived
+  status             String            @default("building") // building | complete | deployed | backburner | paused | archived
   stack              String            @default("{}") // JSON string
   currentPhase       String            @default("phase-1-foundation")
   currentRequest     String?
@@ -28,6 +28,9 @@ model Project {
   progressScore      Int               @default(0)
   progressDetails    String            @default("{}")
   deploymentInfo     String            @default("{}") // JSON: { url, provider, healthEndpoint }
+  businessStage      String            @default("building") // building, pre-sale, active-sale, revenue, growth, internal
+  projectContext     String?           // persisted context.md content — project story, stakeholders, goals
+  completionCriteria String?           // persisted done.md content — what "done" means for this project
   lastSessionEndedAt DateTime?
   kickoffTemplateId  Int?
   lastActivityAt     DateTime          @default(now())
