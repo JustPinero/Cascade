@@ -12,11 +12,16 @@ export async function buildProjectSystemPrompt(
   projectPath: string,
   projectName: string
 ): Promise<string> {
-  const [claudeMd, handoff, debt] = await Promise.all([
+  const [claudeMdRaw, handoffRaw, debtRaw] = await Promise.all([
     readIfExists(path.join(projectPath, "CLAUDE.md")),
     readIfExists(path.join(projectPath, ".claude", "handoff.md")),
     readIfExists(path.join(projectPath, "audits", "debt.md")),
   ]);
+
+  // Truncate to avoid exceeding context limits
+  const claudeMd = claudeMdRaw?.slice(0, 3000) || "";
+  const handoff = handoffRaw?.slice(0, 2000) || "";
+  const debt = debtRaw?.slice(0, 1500) || "";
 
   // Get current request file
   let currentRequest = "";

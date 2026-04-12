@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { buildProjectSystemPrompt } from "@/lib/project-chat";
 import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limiter";
+import { validateMessages } from "@/lib/chat-validation";
 
 export async function POST(
   request: NextRequest,
@@ -24,11 +25,11 @@ export async function POST(
     }
 
     const { slug } = await params;
-    const { messages } = await request.json();
-
-    if (!messages || !Array.isArray(messages)) {
+    const body = await request.json();
+    const validation = validateMessages(body.messages);
+    if (!validation.valid) {
       return NextResponse.json(
-        { error: "messages array is required" },
+        { error: validation.error },
         { status: 400 }
       );
     }
@@ -61,7 +62,7 @@ export async function POST(
         model: "claude-sonnet-4-6",
         max_tokens: 4096,
         system: systemPrompt,
-        messages,
+        messages: validation.messages,
         stream: true,
       }),
       signal: controller.signal,

@@ -4,6 +4,7 @@ import fs from "fs/promises";
 import path from "path";
 import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limiter";
 import { getSessionLogs } from "@/lib/session-reader";
+import { validateMessages } from "@/lib/chat-validation";
 
 function formatTimeAgo(date: Date): string {
   const diffMs = Date.now() - new Date(date).getTime();
@@ -101,8 +102,10 @@ Use this data to calibrate your recommendations. If a mode has a low success rat
     // No channel file
   }
 
-  // Split projects into active vs backburner
-  const activeProjects = projects.filter((p) => p.status !== "backburner" && p.status !== "archived");
+  // Split projects into active vs backburner, cap at 25 active to avoid prompt overflow
+  const activeProjects = projects
+    .filter((p) => p.status !== "backburner" && p.status !== "archived")
+    .slice(0, 25);
   const backburnerProjects = projects.filter((p) => p.status === "backburner");
 
   // Enrich each project with session context
@@ -316,11 +319,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { messages } = await request.json();
-
-    if (!messages || !Array.isArray(messages)) {
+    const body = await request.json();
+    const validation = validateMessages(body.messages);
+    if (!validation.valid) {
       return NextResponse.json(
-        { error: "messages array is required" },
+        { error: validation.error },
         { status: 400 }
       );
     }
@@ -341,7 +344,7 @@ export async function POST(request: NextRequest) {
         model: "claude-sonnet-4-6",
         max_tokens: 2048,
         system: systemPrompt,
-        messages,
+        messages: validation.messages,
         stream: true,
       }),
       signal: controller.signal,

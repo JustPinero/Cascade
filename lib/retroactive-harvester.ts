@@ -199,6 +199,9 @@ async function extractLessonsWithClaude(
 ): Promise<Array<{ title: string; content: string; severity: string }>> {
   const prompt = buildExtractionPrompt(projectName, artifacts);
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -207,11 +210,14 @@ async function extractLessonsWithClaude(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
+      model: "claude-haiku-4-5-20251001",
       max_tokens: 2048,
       messages: [{ role: "user", content: prompt }],
     }),
+    signal: controller.signal,
   });
+
+  clearTimeout(timeout);
 
   if (!response.ok) {
     throw new Error(`Claude API error: ${response.status}`);
