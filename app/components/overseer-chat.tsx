@@ -251,6 +251,20 @@ export function OverseerChat({ onDispatch }: OverseerChatProps) {
           // Reminder save failed silently — non-critical
         });
       }
+
+      // Save any messages Delamain wants to send to Kilroy
+      const kilroyRegex = /\[KILROY\]\s*(.+)/gi;
+      let kMatch;
+      while ((kMatch = kilroyRegex.exec(assistantContent)) !== null) {
+        fetch("/api/kilroy-channel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from: "delamain",
+            message: kMatch[1].trim(),
+          }),
+        }).catch(() => {});
+      }
     } catch {
       setMessages([
         ...newMessages,
