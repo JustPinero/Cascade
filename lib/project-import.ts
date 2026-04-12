@@ -1,7 +1,27 @@
 import { PrismaClient } from "@/app/generated/prisma/client";
+import fs from "fs/promises";
+import path from "path";
 import { scanProjects, scanProject } from "./scanner";
 import { computeHealth } from "./health-engine";
 import { computeProgress } from "./progress-engine";
+
+/**
+ * Read a project's context.md or done.md if it exists.
+ */
+async function readProjectFile(
+  projectPath: string,
+  filename: string
+): Promise<string | null> {
+  try {
+    const content = await fs.readFile(
+      path.join(projectPath, ".claude", filename),
+      "utf-8"
+    );
+    return content.trim() || null;
+  } catch {
+    return null;
+  }
+}
 
 export interface ImportResult {
   created: number;
@@ -151,7 +171,13 @@ export async function importSingleProject(
     healthDetails.needsAttention = healthResult.details.needsAttention;
   }
 
-  const data = {
+  // Read context.md and done.md if they exist
+  const [projectContext, completionCriteria] = await Promise.all([
+    readProjectFile(scan.path, "context.md"),
+    readProjectFile(scan.path, "done.md"),
+  ]);
+
+  const data: Record<string, unknown> = {
     name: scan.name,
     slug: scan.slug,
     path: scan.path,
@@ -162,6 +188,9 @@ export async function importSingleProject(
     lastScannedAt: new Date(),
     lastSessionEndedAt: new Date(),
   };
+
+  if (projectContext !== null) data.projectContext = projectContext;
+  if (completionCriteria !== null) data.completionCriteria = completionCriteria;
 
   if (existing) {
     await prisma.project.update({

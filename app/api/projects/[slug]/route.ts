@@ -66,11 +66,15 @@ export async function PATCH(
       "progressScore",
       "progressDetails",
       "deploymentInfo",
+      "businessStage",
+      "projectContext",
+      "completionCriteria",
       "lastSessionEndedAt",
     ]);
 
     // Enum validation for constrained fields
-    const VALID_STATUS = new Set(["building", "complete", "deployed", "paused", "archived"]);
+    const VALID_STATUS = new Set(["building", "complete", "deployed", "backburner", "paused", "archived"]);
+    const VALID_BUSINESS_STAGE = new Set(["building", "pre-sale", "active-sale", "revenue", "growth", "internal"]);
     const VALID_HEALTH = new Set(["healthy", "warning", "blocked", "idle"]);
     const VALID_AUTONOMY = new Set(["full", "semi", "manual"]);
 
@@ -82,6 +86,7 @@ export async function PATCH(
       if (key === "status" && !VALID_STATUS.has(value as string)) continue;
       if (key === "health" && !VALID_HEALTH.has(value as string)) continue;
       if (key === "autonomyMode" && !VALID_AUTONOMY.has(value as string)) continue;
+      if (key === "businessStage" && !VALID_BUSINESS_STAGE.has(value as string)) continue;
       if ((key === "agentTeamsEnabled" || key === "prWorkflowEnabled") && typeof value !== "boolean") continue;
 
       data[key] = value;
