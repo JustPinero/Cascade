@@ -382,7 +382,7 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
         <div className="flex items-center gap-4 px-6 py-4 border-b border-space-600 bg-space-800/80">
           <div className="relative">
             <div
-              className={`w-16 h-16 rounded border-2 overflow-hidden transition-all duration-300 ${
+              className={`w-32 h-32 rounded border-2 overflow-hidden transition-all duration-300 ${
                 streaming
                   ? "border-cyan shadow-[0_0_16px_rgba(65,166,181,0.5)] delamain-talking"
                   : "border-space-600 shadow-[0_0_4px_rgba(65,166,181,0.1)]"
