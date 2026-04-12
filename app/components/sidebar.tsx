@@ -12,6 +12,16 @@ function DashboardIcon() {
   );
 }
 
+function DelamainIcon() {
+  return (
+    <img
+      src="/delamain.jpg"
+      alt="Delamain"
+      className="w-5 h-5 rounded-full"
+    />
+  );
+}
+
 function TasksIcon() {
   return (
     <svg viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
@@ -95,6 +105,7 @@ function SettingsIcon() {
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: <DashboardIcon /> },
+  { href: "/delamain", label: "Delamain", icon: <DelamainIcon /> },
   { href: "/tasks", label: "My Tasks", icon: <TasksIcon /> },
   { href: "/roadmap", label: "Roadmap", icon: <RoadmapIcon /> },
   { href: "/playbook", label: "Playbook", icon: <PlaybookIcon /> },
