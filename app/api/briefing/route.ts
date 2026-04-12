@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionLogs } from "@/lib/session-reader";
+import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limiter";
 
 /**
  * POST /api/briefing
@@ -9,7 +10,14 @@ import { getSessionLogs } from "@/lib/session-reader";
  * recent activity, and session summaries, then calling Claude
  * to produce a concise summary.
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const limited = checkRateLimit(
+    getRateLimitKey(request, "briefing"),
+    5,
+    60_000
+  );
+  if (limited) return limited;
+
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey || !apiKey.startsWith("sk-")) {
@@ -121,6 +129,9 @@ ${sessionList}
 ## Pending Human Tasks
 ${taskList}`;
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -129,12 +140,15 @@ ${taskList}`;
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 512,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
 
     if (!response.ok) {
       const err = await response.text();
