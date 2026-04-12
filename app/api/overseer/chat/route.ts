@@ -46,6 +46,39 @@ async function buildOverseerSystemPrompt(): Promise<string> {
           .join("\n---\n")
       : "";
 
+  // Load dispatch outcome stats for learning
+  const outcomes = await prisma.dispatchOutcome.findMany({
+    orderBy: { completedAt: "desc" },
+    take: 50,
+  });
+
+  let outcomeStats = "";
+  if (outcomes.length >= 3) {
+    const byMode: Record<string, { total: number; success: number; blocker: number }> = {};
+    for (const o of outcomes) {
+      if (!byMode[o.mode]) byMode[o.mode] = { total: 0, success: 0, blocker: 0 };
+      byMode[o.mode].total++;
+      if (o.outcome === "success") byMode[o.mode].success++;
+      if (o.outcome !== "success") byMode[o.mode].blocker++;
+    }
+
+    const lines = Object.entries(byMode).map(
+      ([mode, stats]) =>
+        `- ${mode}: ${stats.total} dispatches, ${Math.round((stats.success / stats.total) * 100)}% success, ${stats.blocker} hit blockers`
+    );
+
+    const recentFailures = outcomes
+      .filter((o) => o.outcome !== "success")
+      .slice(0, 3)
+      .map((o) => `- ${o.projectSlug} (${o.mode}): ${o.outcome}`)
+      .join("\n");
+
+    outcomeStats = `## Dispatch Track Record (last ${outcomes.length} dispatches)
+${lines.join("\n")}
+${recentFailures ? `\nRecent issues:\n${recentFailures}` : ""}
+Use this data to calibrate your recommendations. If a mode has a low success rate on certain project states, suggest a different approach.`;
+  }
+
   // Load playbook
   let playbook = "";
   try {
@@ -131,6 +164,7 @@ ${projectList}
 ## Recent Activity
 ${activityList}
 ${yesterdaySummary ? `\n## Yesterday's Sprint Plan (your previous recommendations)\n${yesterdaySummary}\nUse this context to maintain continuity. Reference what was planned if relevant.` : ""}
+${outcomeStats ? `\n${outcomeStats}` : ""}
 
 ## Overseer Playbook (Developer's Preferences)
 ${playbook}
