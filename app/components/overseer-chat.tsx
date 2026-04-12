@@ -153,7 +153,9 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
       const res = await fetch("/api/overseer/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMessages }),
+        // Send only the last 10 messages to avoid bloating context.
+        // Del's system prompt already has full project state.
+        body: JSON.stringify({ messages: newMessages.slice(-10) }),
       });
 
       if (!res.ok) {
