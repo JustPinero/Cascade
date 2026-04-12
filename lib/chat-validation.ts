@@ -61,5 +61,22 @@ export function validateMessages(
     };
   }
 
+  // Anthropic API requires the conversation to end with a user message.
+  // Trim any trailing assistant messages.
+  while (
+    validated.length > 0 &&
+    validated[validated.length - 1].role !== "user"
+  ) {
+    validated.pop();
+  }
+
+  if (validated.length === 0) {
+    return {
+      valid: false,
+      error: "Conversation must contain at least one user message",
+      messages: [],
+    };
+  }
+
   return { valid: true, error: null, messages: validated };
 }

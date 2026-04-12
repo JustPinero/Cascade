@@ -2,13 +2,24 @@ import { describe, it, expect } from "vitest";
 import { validateMessages } from "./chat-validation";
 
 describe("validateMessages", () => {
-  it("accepts valid messages", () => {
+  it("accepts valid messages ending with user", () => {
+    const result = validateMessages([
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "Hi there" },
+      { role: "user", content: "What now?" },
+    ]);
+    expect(result.valid).toBe(true);
+    expect(result.messages).toHaveLength(3);
+  });
+
+  it("trims trailing assistant messages", () => {
     const result = validateMessages([
       { role: "user", content: "Hello" },
       { role: "assistant", content: "Hi there" },
     ]);
     expect(result.valid).toBe(true);
-    expect(result.messages).toHaveLength(2);
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0].role).toBe("user");
   });
 
   it("rejects null/undefined input", () => {
