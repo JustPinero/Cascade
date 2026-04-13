@@ -236,6 +236,70 @@ export function dispatchClaude(
  *   Ctrl+B, p  → previous window
  *   Ctrl+B, arrow → navigate between panes
  */
+/**
+ * Build a shell command that keeps the pane alive after the Claude session ends.
+ */
+function wrapCommand(cmd: string): string {
+  return `${cmd}; echo ''; echo '[Session ended — press Enter to close]'; read`;
+}
+
+/**
+ * Escape a command for use inside tmux shell invocations.
+ * Uses double-quote escaping for tmux send-keys / new-window.
+ */
+function escapeForTmux(cmd: string): string {
+  return cmd.replace(/'/g, "'\\''");
+}
+
+/**
+ * Configure a tmux session with pane border styling.
+ */
+function configureTmuxSession(): void {
+  const cmds = [
+    `tmux set-option -t ${TMUX_SESSION} pane-border-status top`,
+    `tmux set-option -t ${TMUX_SESSION} pane-border-format " #{pane_title} "`,
+    `tmux set-option -t ${TMUX_SESSION} pane-border-style "fg=#2e3550"`,
+    `tmux set-option -t ${TMUX_SESSION} pane-active-border-style "fg=#41a6b5"`,
+  ];
+  execSync(cmds.join(" && "), { stdio: "pipe" });
+}
+
+/**
+ * Add a pane to the current tmux window.
+ *
+ * Grid layout logic:
+ *   1 pane  → full screen
+ *   2 panes → split horizontal (top/bottom)
+ *   3 panes → 2 top, 1 bottom
+ *   4 panes → 2x2 grid
+ *   5 panes → 3 top, 2 bottom
+ *   6 panes → 3x2 grid
+ *
+ * tmux's "tiled" layout handles this automatically when we
+ * split and re-tile after each addition.
+ */
+function addPaneToWindow(
+  windowTarget: string,
+  cmd: string,
+  projectName: string
+): void {
+  const wrapped = wrapCommand(cmd);
+  // Split the current pane. -t targets the window.
+  execSync(
+    `tmux split-window -t ${windowTarget} '${escapeForTmux(wrapped)}'`,
+    { stdio: "pipe" }
+  );
+  // Re-tile all panes in the window for even grid distribution
+  execSync(`tmux select-layout -t ${windowTarget} tiled`, {
+    stdio: "pipe",
+  });
+  // Label the new pane (always the last/active one after split)
+  execSync(
+    `tmux select-pane -t ${windowTarget} -T "${projectName}"`,
+    { stdio: "pipe" }
+  );
+}
+
 export async function dispatchAll(
   prisma: PrismaClient,
   mode: DispatchMode
@@ -254,14 +318,21 @@ export async function dispatchAll(
   const results: DispatchResult[] = [];
   let paneCount = 0;
   let windowCount = 0;
-
-  // Filter to only dispatch-ready projects, track skipped ones
   let launchIndex = 0;
+
+  // First pass: collect all dispatch-ready projects with their commands
+  interface DispatchJob {
+    project: typeof projects[0];
+    cmd: string;
+    prompt: string;
+    tmpFile: string;
+  }
+
+  const jobs: DispatchJob[] = [];
 
   for (let i = 0; i < projects.length; i++) {
     const project = projects[i];
 
-    // Check readiness
     const readiness = await checkDispatchReadiness(project.path);
     if (!readiness.ready) {
       results.push({
@@ -278,26 +349,43 @@ export async function dispatchAll(
     }
 
     const prompt = await generatePrompt(project.path, mode);
-    // Write prompt to temp file to avoid shell injection
-    const tmpFile = path.join(os.tmpdir(), `cascade-prompt-${Date.now()}-${i}.txt`);
+    const tmpFile = path.join(
+      os.tmpdir(),
+      `cascade-prompt-${Date.now()}-${i}.txt`
+    );
     fsSync.writeFileSync(tmpFile, prompt, "utf-8");
-    const cmd = `cd '${project.path}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
+    const escapedPath = project.path.replace(/'/g, "'\\''");
+    const cmd = `cd '${escapedPath}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
+
+    jobs.push({ project, cmd, prompt, tmpFile });
+  }
+
+  if (jobs.length === 0) {
+    return { launched: 0, results };
+  }
+
+  // Second pass: create tmux session and add panes
+  for (const job of jobs) {
+    const { project, cmd, prompt } = job;
+    const windowTarget = `${TMUX_SESSION}:projects-${windowCount || 1}`;
 
     try {
       if (launchIndex === 0) {
         // Create the tmux session with the first project
-        // Use shell wrapper to keep pane alive even if command fails
-        const wrappedCmd = `${cmd}; echo '[Session ended — press Enter to close]'; read`;
+        const wrapped = wrapCommand(cmd);
         execSync(
-          `tmux new-session -d -s ${TMUX_SESSION} -n "projects-1" '${wrappedCmd.replace(/'/g, "'\\''")}'`,
+          `tmux new-session -d -s ${TMUX_SESSION} -n "projects-1" '${escapeForTmux(wrapped)}'`,
           { stdio: "pipe" }
         );
-        // Configure tmux to show pane titles as borders
-        execSync(
-          `tmux set-option -t ${TMUX_SESSION} pane-border-status top && tmux set-option -t ${TMUX_SESSION} pane-border-format " #{pane_title} " && tmux set-option -t ${TMUX_SESSION} pane-border-style "fg=#2e3550" && tmux set-option -t ${TMUX_SESSION} pane-active-border-style "fg=#41a6b5"`,
-          { stdio: "pipe" }
-        );
-        // Set pane title to project name
+
+        // Configure pane border styling
+        try {
+          configureTmuxSession();
+        } catch {
+          // Non-fatal — styling is nice-to-have
+        }
+
+        // Label the first pane
         execSync(
           `tmux select-pane -t ${TMUX_SESSION} -T "${project.name}"`,
           { stdio: "pipe" }
@@ -305,37 +393,25 @@ export async function dispatchAll(
         windowCount = 1;
         paneCount = 1;
       } else if (paneCount >= PANES_PER_WINDOW) {
-        // Start a new tmux window for the next group
+        // Start a new tmux window for the next group of 6
         windowCount++;
+        const wrapped = wrapCommand(cmd);
         execSync(
-          `tmux new-window -t ${TMUX_SESSION} -n "projects-${windowCount}" "${cmd}"`,
+          `tmux new-window -t ${TMUX_SESSION} -n "projects-${windowCount}" '${escapeForTmux(wrapped)}'`,
           { stdio: "pipe" }
         );
         execSync(
-          `tmux select-pane -t ${TMUX_SESSION} -T "${project.name}"`,
+          `tmux select-pane -t ${TMUX_SESSION}:projects-${windowCount} -T "${project.name}"`,
           { stdio: "pipe" }
         );
         paneCount = 1;
       } else {
-        // Split the current window to add a new pane
-        execSync(
-          `tmux split-window -t ${TMUX_SESSION} "${cmd}"`,
-          { stdio: "pipe" }
-        );
-        // Set pane title
-        execSync(
-          `tmux select-pane -t ${TMUX_SESSION} -T "${project.name}"`,
-          { stdio: "pipe" }
-        );
-        // Rebalance to keep the grid tidy
-        execSync(
-          `tmux select-layout -t ${TMUX_SESSION} tiled`,
-          { stdio: "pipe" }
-        );
+        // Add a pane to the current window — tmux tiled layout handles the grid
+        addPaneToWindow(windowTarget, cmd, project.name);
         paneCount++;
       }
 
-      // Log the event
+      // Log the dispatch event
       await prisma.activityEvent.create({
         data: {
           projectId: project.id,
@@ -371,8 +447,18 @@ export async function dispatchAll(
       });
     }
 
-    // Small delay between launches
-    await new Promise((r) => setTimeout(r, 300));
+    // Small delay between pane launches to avoid race conditions
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  // Select the first window and first pane so the user starts there
+  try {
+    execSync(
+      `tmux select-window -t ${TMUX_SESSION}:projects-1 && tmux select-pane -t ${TMUX_SESSION}:projects-1.0`,
+      { stdio: "pipe" }
+    );
+  } catch {
+    // Non-fatal
   }
 
   // Open Terminal fullscreen with the tmux session attached
