@@ -322,9 +322,11 @@ function escapeForTmux(cmd: string): string {
 function configureTmuxSession(): void {
   const cmds = [
     `tmux set-option -t ${TMUX_SESSION} pane-border-status top`,
-    `tmux set-option -t ${TMUX_SESSION} pane-border-format " #{pane_title} "`,
+    `tmux set-option -t ${TMUX_SESSION} pane-border-format " [#{pane_index}] #{pane_title} "`,
     `tmux set-option -t ${TMUX_SESSION} pane-border-style "fg=#2e3550"`,
-    `tmux set-option -t ${TMUX_SESSION} pane-active-border-style "fg=#41a6b5"`,
+    `tmux set-option -t ${TMUX_SESSION} pane-active-border-style "fg=#41a6b5,bold"`,
+    `tmux set-option -t ${TMUX_SESSION} set-titles on`,
+    `tmux set-option -t ${TMUX_SESSION} set-titles-string "Cascade: #{pane_title}"`,
   ];
   execSync(cmds.join(" && "), { stdio: "pipe" });
 }

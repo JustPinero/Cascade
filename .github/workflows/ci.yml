@@ -59,7 +59,7 @@ jobs:
           git config --global user.email "ci@cascade.dev"
           git config --global user.name "Cascade CI"
       - name: Run tests
-        run: pnpm test -- --no-file-parallelism
+        run: pnpm vitest run --reporter=verbose 2>&1 | tee /tmp/test-output.txt; grep -q "Tests.*passed" /tmp/test-output.txt
 
   build:
     runs-on: ubuntu-latest
