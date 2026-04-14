@@ -58,3 +58,19 @@ prisma/dev.db-journal
 # IDE
 .idea/
 .vscode/
+
+# Personal data — never commit
+# These are populated by each user with their own content
+knowledge/overseer-playbook.md
+!knowledge/overseer-playbook.example.md
+!knowledge/README.md
+.claude/sessions/
+.claude/engineer-channel.md
+.claude/kilroy-channel.md
+.claude/handoff.md
+.claude/context.md
+.claude/done.md
+.claude/settings.local.json
+
+# Keep deployment-playbook (generic, not personal)
+!knowledge/deployment-playbook/
