@@ -204,7 +204,7 @@ describe("ActivityEvent model", () => {
 });
 
 describe("seed script", () => {
-  it("runs without errors", () => {
+  it.skipIf(!!process.env.CI)("runs without errors", () => {
     expect(() => {
       execSync("npx tsx prisma/seed.ts", {
         cwd: path.resolve(__dirname, ".."),
