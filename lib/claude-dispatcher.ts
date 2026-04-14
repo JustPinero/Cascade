@@ -6,6 +6,7 @@ import os from "os";
 import { PrismaClient } from "@/app/generated/prisma/client";
 import { isInsideProjectsDir } from "./validators";
 import { readIfExists } from "./file-utils";
+import { detectPlatform } from "./platform";
 
 export type DispatchMode = "continue" | "audit" | "investigate" | "custom";
 
@@ -188,7 +189,83 @@ function killTmuxSession(): void {
 }
 
 /**
- * Launch Claude Code in a single tmux pane for one project.
+ * Launch a command in a terminal window, platform-aware.
+ * macOS: opens Terminal.app via osascript
+ * Linux/WSL2: runs in a new tmux session directly
+ */
+function launchInTerminal(cmd: string, fullscreen = false): void {
+  const platform = detectPlatform();
+
+  if (platform === "macos") {
+    const script = fullscreen
+      ? `
+      tell application "Terminal"
+        do script "${cmd.replace(/"/g, '\\"')}"
+        activate
+        delay 0.5
+        tell application "System Events" to tell process "Terminal"
+          set value of attribute "AXFullScreen" of front window to true
+        end tell
+      end tell
+    `
+      : `
+      tell application "Terminal"
+        do script "${cmd.replace(/"/g, '\\"')}"
+        activate
+      end tell
+    `;
+    const child = spawn("osascript", ["-e", script], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+  } else {
+    // Linux/WSL2: launch directly in background
+    // If tmux is used, the caller handles session creation.
+    // For single commands, spawn a detached bash process.
+    const child = spawn("bash", ["-c", cmd], {
+      detached: true,
+      stdio: "ignore",
+      env: { ...process.env },
+    });
+    child.unref();
+  }
+}
+
+/**
+ * Attach to a tmux session in a terminal window, platform-aware.
+ */
+function attachTmuxSession(sessionName: string): void {
+  const platform = detectPlatform();
+
+  if (platform === "macos") {
+    const attachScript = `
+      tell application "Terminal"
+        do script "tmux attach-session -t ${sessionName}"
+        activate
+        delay 0.5
+        tell application "System Events" to tell process "Terminal"
+          set value of attribute "AXFullScreen" of front window to true
+        end tell
+      end tell
+    `;
+    const child = spawn("osascript", ["-e", attachScript], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+  } else {
+    // Linux/WSL2: just attach (user is already in a terminal)
+    const child = spawn("bash", ["-c", `tmux attach-session -t ${sessionName}`], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+  }
+}
+
+/**
+ * Launch Claude Code in a single terminal for one project.
  * Used for single-project dispatch from the project detail page.
  */
 export function dispatchClaude(
@@ -200,25 +277,13 @@ export function dispatchClaude(
   }
 
   try {
-    // Write prompt to temp file to avoid shell injection via osascript
     const tmpFile = path.join(os.tmpdir(), `cascade-prompt-${Date.now()}.txt`);
     fsSync.writeFileSync(tmpFile, prompt, "utf-8");
 
     const escapedPath = projectPath.replace(/'/g, "'\\''");
     const cmd = `cd '${escapedPath}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
 
-    const script = `
-      tell application "Terminal"
-        do script "${cmd.replace(/"/g, '\\"')}"
-        activate
-      end tell
-    `;
-
-    const child = spawn("osascript", ["-e", script], {
-      detached: true,
-      stdio: "ignore",
-    });
-    child.unref();
+    launchInTerminal(cmd);
     return { success: true, error: null };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -461,22 +526,8 @@ export async function dispatchAll(
     // Non-fatal
   }
 
-  // Open Terminal fullscreen with the tmux session attached
-  const attachScript = `
-    tell application "Terminal"
-      do script "tmux attach-session -t ${TMUX_SESSION}"
-      activate
-      delay 0.5
-      tell application "System Events" to tell process "Terminal"
-        set value of attribute "AXFullScreen" of front window to true
-      end tell
-    end tell
-  `;
-  const child = spawn("osascript", ["-e", attachScript], {
-    detached: true,
-    stdio: "ignore",
-  });
-  child.unref();
+  // Attach terminal to the tmux session
+  attachTmuxSession(TMUX_SESSION);
 
   return {
     launched: results.filter((r) => r.success).length,
@@ -646,22 +697,8 @@ export async function dispatchBatch(
     // Non-fatal
   }
 
-  // Open Terminal fullscreen with tmux attached
-  const attachScript = `
-    tell application "Terminal"
-      do script "tmux attach-session -t ${TMUX_SESSION}"
-      activate
-      delay 0.5
-      tell application "System Events" to tell process "Terminal"
-        set value of attribute "AXFullScreen" of front window to true
-      end tell
-    end tell
-  `;
-  const child = spawn("osascript", ["-e", attachScript], {
-    detached: true,
-    stdio: "ignore",
-  });
-  child.unref();
+  // Attach terminal to the tmux session
+  attachTmuxSession(TMUX_SESSION);
 
   return {
     launched: results.filter((r) => r.success).length,
@@ -756,22 +793,7 @@ Begin by spawning the team.`;
   try {
     const cmd = `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude --teammate-mode tmux "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
 
-    const script = `
-      tell application "Terminal"
-        do script "${cmd.replace(/"/g, '\\"')}"
-        activate
-        delay 0.5
-        tell application "System Events" to tell process "Terminal"
-          set value of attribute "AXFullScreen" of front window to true
-        end tell
-      end tell
-    `;
-
-    const teamChild = spawn("osascript", ["-e", script], {
-      detached: true,
-      stdio: "ignore",
-    });
-    teamChild.unref();
+    launchInTerminal(cmd, true);
 
     return { success: true, error: null };
   } catch (err) {

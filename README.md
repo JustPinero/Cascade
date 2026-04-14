@@ -25,12 +25,36 @@ A nerve center for orchestrating multi-project Claude Code workflows. Delamain �
 
 ### Prerequisites
 
-1. **Node.js 20+** — `brew install node`
+**All platforms:**
+1. **Node.js 20+**
 2. **pnpm** — `npm install -g pnpm`
-3. **Git** — `brew install git`
+3. **Git**
 4. **Anthropic API Key** — get from [console.anthropic.com](https://console.anthropic.com/settings/keys)
 5. **Claude Code CLI** (recommended) — `npm install -g @anthropic-ai/claude-code`
-6. **tmux** (optional, for tiled dispatch) — `brew install tmux`
+6. **tmux** (recommended for multi-project dispatch)
+
+**macOS:**
+```bash
+brew install node pnpm git tmux
+```
+
+**Windows (via WSL2):**
+```bash
+# 1. Install WSL2 (run in PowerShell as Admin)
+wsl --install
+
+# 2. Open Ubuntu from Start Menu, then inside WSL2:
+sudo apt update && sudo apt install -y nodejs npm git tmux
+npm install -g pnpm @anthropic-ai/claude-code
+
+# 3. Access Cascade at http://localhost:3000 from your Windows browser
+```
+
+**Linux:**
+```bash
+sudo apt install -y nodejs npm git tmux  # Ubuntu/Debian
+npm install -g pnpm @anthropic-ai/claude-code
+```
 
 ### Installation
 
