@@ -34,6 +34,8 @@ jobs:
           version: 9
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Generate Prisma Client
+        run: pnpm exec prisma generate
       - name: Type check
         run: pnpm exec tsc --noEmit
 
