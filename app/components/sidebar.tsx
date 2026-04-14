@@ -105,16 +105,16 @@ function SettingsIcon() {
 }
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: <DashboardIcon /> },
-  { href: "/delamain", label: "Overseer", icon: <DelamainIcon /> },
-  { href: "/tasks", label: "My Tasks", icon: <TasksIcon /> },
-  { href: "/roadmap", label: "Roadmap", icon: <RoadmapIcon /> },
-  { href: "/playbook", label: "Playbook", icon: <PlaybookIcon /> },
-  { href: "/knowledge", label: "Knowledge Base", icon: <KnowledgeIcon /> },
-  { href: "/create", label: "Create Project", icon: <CreateIcon /> },
-  { href: "/reports", label: "Reports", icon: <ReportsIcon /> },
-  { href: "/templates", label: "Templates", icon: <TemplatesIcon /> },
-  { href: "/settings", label: "Settings", icon: <SettingsIcon /> },
+  { href: "/", label: "Dashboard", icon: <DashboardIcon />, tooltip: "Project overview — health, progress, activity" },
+  { href: "/delamain", label: "Overseer", icon: <DelamainIcon />, tooltip: "Talk to your AI dispatcher" },
+  { href: "/tasks", label: "My Tasks", icon: <TasksIcon />, tooltip: "Things only you can do" },
+  { href: "/roadmap", label: "Roadmap", icon: <RoadmapIcon />, tooltip: "All projects with progress bars" },
+  { href: "/playbook", label: "Playbook", icon: <PlaybookIcon />, tooltip: "Rules for dispatched Claude sessions" },
+  { href: "/knowledge", label: "Knowledge Base", icon: <KnowledgeIcon />, tooltip: "Lessons harvested from your projects" },
+  { href: "/create", label: "Create Project", icon: <CreateIcon />, tooltip: "Launch a new project with the wizard" },
+  { href: "/reports", label: "Reports", icon: <ReportsIcon />, tooltip: "Generate project and fleet reports" },
+  { href: "/templates", label: "Templates", icon: <TemplatesIcon />, tooltip: "Manage kickoff templates" },
+  { href: "/settings", label: "Settings", icon: <SettingsIcon />, tooltip: "Theme, notifications, sounds, automation" },
 ];
 
 export function Sidebar() {

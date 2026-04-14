@@ -64,6 +64,7 @@ export function MorningBriefing() {
             generateBriefing();
           }}
           disabled={loading}
+          title="Generate an AI summary of your fleet status"
           className="px-3 py-1.5 text-xs font-mono border border-space-600 text-space-400 hover:text-cyan hover:border-cyan/30 transition-colors"
         >
           {loading ? "Generating..." : "Brief me"}

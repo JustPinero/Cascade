@@ -7,15 +7,17 @@ interface NavLinkProps {
   href: string;
   label: string;
   icon: React.ReactNode;
+  tooltip?: string;
 }
 
-export function NavLink({ href, label, icon }: NavLinkProps) {
+export function NavLink({ href, label, icon, tooltip }: NavLinkProps) {
   const pathname = usePathname();
   const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   return (
     <Link
       href={href}
+      title={tooltip}
       className={`
         group flex items-center gap-3 px-3 py-2.5 text-sm font-medium
         transition-all duration-150 border-l-2

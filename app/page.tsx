@@ -73,6 +73,7 @@ function ResumeAllButton({
     <button
       onClick={handleResumeAll}
       disabled={launching}
+      title="Dispatch Claude to all building projects"
       className={`px-4 py-2 text-sm font-mono uppercase tracking-wider border transition-all ${
         launching
           ? "border-space-500 text-space-500 cursor-wait"
@@ -117,6 +118,7 @@ function HarvestAllButton() {
       <button
         onClick={handleHarvest}
         disabled={harvesting}
+        title="Extract lessons from all project histories"
         className={`px-4 py-2 text-sm font-mono uppercase tracking-wider border transition-all ${
           harvesting
             ? "border-space-500 text-space-500 cursor-wait"
