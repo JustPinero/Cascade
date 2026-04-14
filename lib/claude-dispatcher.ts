@@ -668,3 +668,114 @@ export async function dispatchBatch(
     results,
   };
 }
+
+/**
+ * Dispatch a lead Claude with agent teams enabled.
+ * The lead receives a sprint plan and spawns/coordinates teammates
+ * to work on multiple projects simultaneously.
+ */
+export async function dispatchTeam(
+  prisma: PrismaClient,
+  items: BatchDispatchItem[]
+): Promise<{ success: boolean; error: string | null }> {
+  if (items.length === 0) {
+    return { success: false, error: "No projects to dispatch" };
+  }
+
+  killTmuxSession();
+
+  const projectDetails: string[] = [];
+
+  for (const item of items) {
+    const project = await prisma.project.findUnique({
+      where: { slug: item.slug },
+    });
+    if (!project) continue;
+
+    let handoff = "";
+    try {
+      handoff = fsSync
+        .readFileSync(`${project.path}/.claude/handoff.md`, "utf-8")
+        .slice(0, 500);
+    } catch {
+      // No handoff
+    }
+
+    projectDetails.push(`## ${project.name} (${project.slug})
+Path: ${project.path}
+Mode: ${item.mode}
+${item.prompt ? `Instructions: ${item.prompt}` : ""}
+${handoff ? `Last session: ${handoff.slice(0, 300)}` : "No previous context."}
+`);
+
+    await prisma.activityEvent.create({
+      data: {
+        projectId: project.id,
+        eventType: "session-launched",
+        summary: `Dispatched via agent team: ${item.mode} mode`,
+        details: JSON.stringify({ mode: item.mode, teamDispatch: true }),
+      },
+    });
+  }
+
+  let playbookContent = "";
+  try {
+    playbookContent = fsSync.readFileSync(
+      path.resolve(process.cwd(), "knowledge", "overseer-playbook.md"),
+      "utf-8"
+    );
+  } catch {
+    // No playbook
+  }
+
+  const sprintPrompt = `You are Delamain — the AI fleet dispatcher. Sprint plan: ${items.length} projects.
+
+## Your Role
+You are the LEAD agent. Spawn ${items.length} TEAMMATES, one per project. Each works in their project directory. You coordinate, monitor, reassign if stuck, synthesize results.
+
+## Sprint Plan
+${projectDetails.join("\n")}
+
+## Rules
+${playbookContent ? `### Overseer Playbook\n${playbookContent}\n` : ""}
+- Spawn one teammate per project
+- Each teammate: cd to project path, read CLAUDE.md, read .claude/handoff.md, then execute their mode
+- Use tmux teammate mode so all panes are visible
+- Monitor via shared task list
+- If teammate hits a blocker, investigate and help
+- When done, write sprint summary with [LESSON] and [HUMAN TODO] tags
+
+Begin by spawning the team.`;
+
+  const tmpFile = path.join(
+    os.tmpdir(),
+    `cascade-team-prompt-${Date.now()}.txt`
+  );
+  fsSync.writeFileSync(tmpFile, sprintPrompt, "utf-8");
+
+  try {
+    const cmd = `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude --teammate-mode tmux "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
+
+    const script = `
+      tell application "Terminal"
+        do script "${cmd.replace(/"/g, '\\"')}"
+        activate
+        delay 0.5
+        tell application "System Events" to tell process "Terminal"
+          set value of attribute "AXFullScreen" of front window to true
+        end tell
+      end tell
+    `;
+
+    const teamChild = spawn("osascript", ["-e", script], {
+      detached: true,
+      stdio: "ignore",
+    });
+    teamChild.unref();
+
+    return { success: true, error: null };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return { success: false, error: message };
+  }
+}
