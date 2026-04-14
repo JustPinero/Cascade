@@ -483,3 +483,188 @@ export async function dispatchAll(
     results,
   };
 }
+
+export interface BatchDispatchItem {
+  slug: string;
+  mode: DispatchMode;
+  prompt?: string;
+}
+
+/**
+ * Dispatch specific projects in a tmux grid.
+ * Unlike dispatchAll (which dispatches all building projects),
+ * this accepts a specific list with per-project modes and prompts.
+ */
+export async function dispatchBatch(
+  prisma: PrismaClient,
+  items: BatchDispatchItem[]
+): Promise<{ launched: number; results: DispatchResult[] }> {
+  if (items.length === 0) {
+    return { launched: 0, results: [] };
+  }
+
+  // Kill any existing session
+  killTmuxSession();
+
+  const results: DispatchResult[] = [];
+  let paneCount = 0;
+  let windowCount = 0;
+  let launchIndex = 0;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+
+    const project = await prisma.project.findUnique({
+      where: { slug: item.slug },
+    });
+
+    if (!project) {
+      results.push({
+        success: false,
+        projectName: item.slug,
+        projectSlug: item.slug,
+        mode: item.mode,
+        prompt: "",
+        ready: false,
+        readyIssues: ["Project not found"],
+        error: "Project not found",
+      });
+      continue;
+    }
+
+    const readiness = await checkDispatchReadiness(project.path);
+    if (!readiness.ready) {
+      results.push({
+        success: false,
+        projectName: project.name,
+        projectSlug: project.slug,
+        mode: item.mode,
+        prompt: "",
+        ready: false,
+        readyIssues: readiness.issues,
+        error: `Not dispatch-ready: ${readiness.issues.join(", ")}`,
+      });
+      continue;
+    }
+
+    const prompt = await generatePrompt(
+      project.path,
+      item.mode,
+      item.prompt
+    );
+    const tmpFile = path.join(
+      os.tmpdir(),
+      `cascade-prompt-${Date.now()}-${i}.txt`
+    );
+    fsSync.writeFileSync(tmpFile, prompt, "utf-8");
+    const escapedPath = project.path.replace(/'/g, "'\\''");
+    const cmd = `cd '${escapedPath}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
+    const windowTarget = `${TMUX_SESSION}:projects-${windowCount || 1}`;
+
+    try {
+      if (launchIndex === 0) {
+        const wrapped = wrapCommand(cmd);
+        execSync(
+          `tmux new-session -d -s ${TMUX_SESSION} -n "projects-1" '${escapeForTmux(wrapped)}'`,
+          { stdio: "pipe" }
+        );
+        try {
+          configureTmuxSession();
+        } catch {
+          // Non-fatal
+        }
+        execSync(
+          `tmux select-pane -t ${TMUX_SESSION} -T "${project.name}"`,
+          { stdio: "pipe" }
+        );
+        windowCount = 1;
+        paneCount = 1;
+      } else if (paneCount >= PANES_PER_WINDOW) {
+        windowCount++;
+        const wrapped = wrapCommand(cmd);
+        execSync(
+          `tmux new-window -t ${TMUX_SESSION} -n "projects-${windowCount}" '${escapeForTmux(wrapped)}'`,
+          { stdio: "pipe" }
+        );
+        execSync(
+          `tmux select-pane -t ${TMUX_SESSION}:projects-${windowCount} -T "${project.name}"`,
+          { stdio: "pipe" }
+        );
+        paneCount = 1;
+      } else {
+        addPaneToWindow(windowTarget, cmd, project.name);
+        paneCount++;
+      }
+
+      await prisma.activityEvent.create({
+        data: {
+          projectId: project.id,
+          eventType: "session-launched",
+          summary: `Dispatched: ${item.mode} mode`,
+          details: JSON.stringify({
+            mode: item.mode,
+            promptLength: prompt.length,
+          }),
+        },
+      });
+
+      launchIndex++;
+      results.push({
+        success: true,
+        projectName: project.name,
+        projectSlug: project.slug,
+        mode: item.mode,
+        prompt: prompt.slice(0, 300),
+        ready: true,
+        readyIssues: [],
+        error: null,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      results.push({
+        success: false,
+        projectName: project.name,
+        projectSlug: project.slug,
+        mode: item.mode,
+        prompt: prompt.slice(0, 300),
+        ready: true,
+        readyIssues: [],
+        error: message,
+      });
+    }
+
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  // Select first window/pane
+  try {
+    execSync(
+      `tmux select-window -t ${TMUX_SESSION}:projects-1 && tmux select-pane -t ${TMUX_SESSION}:projects-1.0`,
+      { stdio: "pipe" }
+    );
+  } catch {
+    // Non-fatal
+  }
+
+  // Open Terminal fullscreen with tmux attached
+  const attachScript = `
+    tell application "Terminal"
+      do script "tmux attach-session -t ${TMUX_SESSION}"
+      activate
+      delay 0.5
+      tell application "System Events" to tell process "Terminal"
+        set value of attribute "AXFullScreen" of front window to true
+      end tell
+    end tell
+  `;
+  const child = spawn("osascript", ["-e", attachScript], {
+    detached: true,
+    stdio: "ignore",
+  });
+  child.unref();
+
+  return {
+    launched: results.filter((r) => r.success).length,
+    results,
+  };
+}

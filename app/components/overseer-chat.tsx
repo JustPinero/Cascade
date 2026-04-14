@@ -297,33 +297,73 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
     return actions;
   }
 
-  async function autoExecuteActions(actions: ParsedAction[]) {
-    const allResults: unknown[] = [];
-    for (const action of actions) {
+  /**
+   * Dispatch actions — single project uses direct Terminal,
+   * multiple projects use tmux grid via /api/dispatch/batch.
+   */
+  async function dispatchActions(
+    actions: ParsedAction[]
+  ): Promise<unknown[]> {
+    if (actions.length === 1) {
       try {
-        const res = await fetch(`/api/projects/${action.project}/dispatch`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mode: action.action,
-            prompt: action.prompt || undefined,
-          }),
-        });
+        const res = await fetch(
+          `/api/projects/${actions[0].project}/dispatch`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mode: actions[0].action,
+              prompt: actions[0].prompt || undefined,
+            }),
+          }
+        );
         const data = await res.json();
-        allResults.push({ ...data, projectSlug: action.project });
+        return [{ ...data, projectSlug: actions[0].project }];
       } catch {
-        allResults.push({
-          success: false,
-          projectSlug: action.project,
-          error: "Failed to dispatch",
-        });
+        return [
+          {
+            success: false,
+            projectSlug: actions[0].project,
+            error: "Failed",
+          },
+        ];
       }
     }
+
+    // Multiple projects — batch dispatch into tmux grid
+    try {
+      const res = await fetch("/api/dispatch/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: actions.map((a) => ({
+            slug: a.project,
+            mode: a.action,
+            prompt: a.prompt || undefined,
+          })),
+        }),
+      });
+      const data = await res.json();
+      return data.results || [data];
+    } catch {
+      return actions.map((a) => ({
+        success: false,
+        projectSlug: a.project,
+        error: "Failed to dispatch batch",
+      }));
+    }
+  }
+
+  async function autoExecuteActions(actions: ParsedAction[]) {
+    const allResults = await dispatchActions(actions);
 
     onDispatch(allResults);
     sendNotification(
       `Delamain auto-dispatched ${actions.length} project${actions.length > 1 ? "s" : ""} (continue)`,
-      { body: actions.map((a) => a.project).join(", "), tag: "auto-dispatch" }
+      {
+        body: actions.map((a) => a.project).join(", "),
+        tag: "auto-dispatch",
+      }
     );
 
     setMessages((prev) => [
@@ -339,28 +379,7 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
     if (!pendingActions) return;
     setDispatching(true);
 
-    const allResults: unknown[] = [];
-
-    for (const action of pendingActions) {
-      try {
-        const res = await fetch(`/api/projects/${action.project}/dispatch`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mode: action.action,
-            prompt: action.prompt || undefined,
-          }),
-        });
-        const data = await res.json();
-        allResults.push({ ...data, projectSlug: action.project });
-      } catch {
-        allResults.push({
-          success: false,
-          projectSlug: action.project,
-          error: "Failed to dispatch",
-        });
-      }
-    }
+    const allResults = await dispatchActions(pendingActions);
 
     onDispatch(allResults);
     setPendingActions(null);
