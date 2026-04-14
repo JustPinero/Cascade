@@ -9,7 +9,7 @@ The central entity. Represents a software project being monitored.
 | name | String | — | Display name |
 | slug | String | — | Unique, URL-safe identifier |
 | path | String | — | Absolute filesystem path |
-| status | String | "building" | building, complete, deployed, paused, archived |
+| status | String | "building" | building, complete, deployed, backburner, paused, archived |
 | stack | String (JSON) | "{}" | Frontend, backend, db, hosting, language |
 | currentPhase | String | "phase-1-foundation" | Current development phase |
 | currentRequest | String? | null | Current request number (e.g., "2.3") |
@@ -114,3 +114,46 @@ Timeline of project events.
 | createdAt | DateTime | now() | — |
 
 **Relations:** project?
+
+## DispatchOutcome
+Tracks what the Overseer recommended vs what actually happened.
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| id | Int | autoincrement | Primary key |
+| projectId | Int | — | FK to Project |
+| projectSlug | String | — | Project slug |
+| mode | String | — | continue, audit, investigate, custom |
+| healthAtDispatch | String | — | Project health when dispatched |
+| outcome | String | — | success, blocker, attention-needed, test-failure, unknown |
+| signals | String (JSON) | "[]" | Escalation signal types detected |
+| dispatchedAt | DateTime | — | When dispatch was issued |
+| completedAt | DateTime | now() | When session ended |
+
+**Relations:** project
+
+## ChatMessage
+Overseer conversation history, grouped by date.
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| id | Int | autoincrement | Primary key |
+| role | String | — | user, assistant |
+| content | String | — | Message content |
+| sessionDate | String | — | YYYY-MM-DD grouping key |
+| createdAt | DateTime | now() | — |
+
+## Reminder
+Conditional alerts triggered by project state changes.
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| id | Int | autoincrement | Primary key |
+| message | String | — | Reminder text |
+| conditionType | String | — | project-health, phase-complete, project-deployed, custom |
+| conditionValue | String | — | e.g., "project-slug:healthy" |
+| projectSlug | String? | null | Related project |
+| status | String | "pending" | pending, triggered, dismissed |
+| createdBy | String | "overseer" | overseer or user |
+| createdAt | DateTime | now() | — |
+| triggeredAt | DateTime? | null | — |

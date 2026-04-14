@@ -8,8 +8,8 @@ A nerve center for orchestrating multi-project Claude Code workflows. The Overse
 
 - **Fleet Dashboard** — monitor health, progress, and status across all your projects at a glance
 - **the Overseer AI Dispatcher** — tell the Overseer what you want done today and he creates dispatch plans, launches Claude sessions, and tracks outcomes
-- **Closed Feedback Loop** — sessions report back automatically via Stop hooks. Cascade knows when sessions end, what happened, and what went wrong
-- **Knowledge Base** — 143+ lessons harvested from project history. the Overseer uses these to advise other projects
+- **Closed Feedback Loop** — sessions report back automatically via Stop hooks (Claude Code events that fire when a session ends). Cascade knows when sessions end, what happened, and what went wrong
+- **Knowledge Base** — 100+ lessons harvested from project history. the Overseer uses these to advise other projects
 - **Morning Briefing** — auto-generated summary of what happened overnight, what's blocked, and what to prioritize
 - **Conversation Memory** — the Overseer remembers yesterday's sprint plan and references it today
 - **Semi-Auto Dispatch** — routine "continue" operations execute automatically without approval
@@ -44,7 +44,9 @@ brew install node pnpm git tmux
 wsl --install
 
 # 2. Open Ubuntu from Start Menu, then inside WSL2:
-sudo apt update && sudo apt install -y nodejs npm git tmux
+sudo apt update && sudo apt install -y git tmux curl
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash
+source ~/.bashrc && nvm install 20
 npm install -g pnpm @anthropic-ai/claude-code
 
 # 3. Access Cascade at http://localhost:3000 from your Windows browser
@@ -52,7 +54,9 @@ npm install -g pnpm @anthropic-ai/claude-code
 
 **Linux:**
 ```bash
-sudo apt install -y nodejs npm git tmux  # Ubuntu/Debian
+sudo apt install -y git tmux curl  # Ubuntu/Debian
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash
+source ~/.bashrc && nvm install 20
 npm install -g pnpm @anthropic-ai/claude-code
 ```
 
@@ -135,7 +139,7 @@ npx tsx scripts/install-hooks.ts --dry-run  # preview first
 | `bash scripts/restart.sh` | Kill and restart |
 | `pnpm dev` | Dev server (Turbopack) |
 | `pnpm build` | Production build |
-| `pnpm test` | Run 343+ tests (Vitest) |
+| `pnpm test` | Run 360+ tests (Vitest) |
 | `pnpm lint` | ESLint |
 | `scripts/validate.sh` | Full CI validation (lint + types + test + build) |
 | `npx tsx scripts/install-hooks.ts` | Install Stop hooks on all projects |
@@ -147,7 +151,7 @@ npx tsx scripts/install-hooks.ts --dry-run  # preview first
 - **Frontend:** Next.js 16 (App Router), TypeScript strict, Tailwind CSS 4
 - **Database:** SQLite via Prisma 7 (local file)
 - **AI:** Anthropic Claude API (Sonnet for chat, Haiku for briefing/harvest)
-- **Testing:** Vitest (343+ tests) + Playwright E2E
+- **Testing:** Vitest (360+ tests) + Playwright E2E
 - **Dispatch:** tmux + Claude Code CLI
 - **Audio:** Web Audio API (synthesized tones)
 

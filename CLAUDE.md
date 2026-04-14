@@ -1,9 +1,17 @@
-# Cascade — Nerve Center for Multi-Project Orchestration
-Local-first Next.js dashboard for monitoring, knowledge harvesting, and project creation.
-Solo developer tool — cyberpunk/DBZ aesthetic.
+# Cascade — AI-Powered Multi-Project Orchestration
+Local-first Next.js dashboard with an AI dispatcher (the Overseer) that manages Claude Code sessions across projects. Features: fleet health monitoring, knowledge harvesting, session feedback loop, dispatch outcome tracking, morning briefings, conversation memory.
 
 ## Stack & Commands
-Next.js 14+ (App Router) | TypeScript strict | Tailwind CSS | Prisma + SQLite | Vitest + Playwright
+Next.js 16 (App Router) | TypeScript strict | Tailwind CSS 4 | Prisma 7 + SQLite | Vitest + Playwright
+
+## Key Architecture
+- `app/api/overseer/chat/` — Overseer AI chat (Claude Sonnet, streaming)
+- `app/api/webhook/session-complete/` — receives Stop hook pings from Claude sessions
+- `lib/claude-dispatcher.ts` — dispatches Claude Code sessions (single, batch, agent teams)
+- `lib/health-engine.ts` — computes project health from filesystem
+- `lib/progress-engine.ts` — computes progress score (phases + tests + build readiness)
+- `lib/escalation-detector.ts` — parses session logs for [NEEDS ATTENTION], [LESSON], [HUMAN TODO]
+- SQLite DB at `./dev.db` (project root, NOT prisma/)
 - `pnpm dev` — start dev server
 - `pnpm build` — production build
 - `pnpm test` — run Vitest
