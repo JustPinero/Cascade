@@ -269,15 +269,15 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
         });
       }
 
-      // Save any messages Delamain wants to send to Kilroy
-      const kilroyRegex = /\[KILROY\]\s*(.+)/gi;
+      // Save any messages the Overseer wants to send to the Engineer
+      const engineerRegex = /\[(?:ENGINEER|KILROY)\]\s*(.+)/gi;
       let kMatch;
-      while ((kMatch = kilroyRegex.exec(assistantContent)) !== null) {
-        fetch("/api/kilroy-channel", {
+      while ((kMatch = engineerRegex.exec(assistantContent)) !== null) {
+        fetch("/api/engineer-channel", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            from: "delamain",
+            from: "overseer",
             message: kMatch[1].trim(),
           }),
         }).catch(() => {});
