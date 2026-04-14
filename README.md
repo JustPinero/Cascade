@@ -18,6 +18,7 @@ A nerve center for orchestrating multi-project Claude Code workflows. The Overse
 - **Desktop Notifications** — get notified when sessions end or blockers are detected
 - **Retroactive Harvest** — extract lessons from project git history, even projects started before Cascade existed
 - **Dispatch Outcome Tracking** — the Overseer learns which recommendations actually work
+- **Engineering Methodology** — projects are bootstrapped via a 1,200-line kickoff template (v3.5) that generates CLAUDE.md, TDD-enforced request files, audit skills, deployment landmine references from 100+ real lessons, and a progressive CI pipeline — all from a single paste into Claude Code
 
 ---
 
