@@ -59,7 +59,7 @@ jobs:
           git config --global user.email "ci@cascade.dev"
           git config --global user.name "Cascade CI"
       - name: Run tests
-        run: pnpm test
+        run: pnpm test -- --no-file-parallelism
 
   build:
     runs-on: ubuntu-latest
