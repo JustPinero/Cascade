@@ -75,5 +75,7 @@ knowledge/overseer-playbook.md
 # Keep deployment-playbook (generic, not personal)
 !knowledge/deployment-playbook/
 
-# Templates — proprietary methodology
+# Templates and prompts — proprietary methodology
 templates/
+references/cascade-kickoff.md
+knowledge/deployment-playbook/COLLECTION-PROMPT.md
