@@ -48,6 +48,50 @@ const STOP_HOOK: HookEntry = {
   ],
 };
 
+/**
+ * Fix malformed hook entries that use the old flat format:
+ *   { "type": "command", "command": "...", "matcher": "Bash" }
+ * Convert to correct nested format:
+ *   { "matcher": "Bash", "hooks": [{ "type": "command", "command": "..." }] }
+ */
+function fixHookFormats(hooks: Record<string, unknown[]>): {
+  fixed: Record<string, HookEntry[]>;
+  repairsCount: number;
+} {
+  let repairsCount = 0;
+  const fixed: Record<string, HookEntry[]> = {};
+
+  for (const [event, entries] of Object.entries(hooks)) {
+    fixed[event] = [];
+    for (const entry of entries) {
+      const e = entry as Record<string, unknown>;
+      // Check if this is the old flat format (has "type" and "command" at top level, no "hooks" array)
+      if (e.type && e.command && !e.hooks) {
+        // Convert to correct format
+        fixed[event].push({
+          matcher: (e.matcher as string) || "",
+          hooks: [
+            {
+              type: e.type as string,
+              command: e.command as string,
+              description: e.description as string | undefined,
+            },
+          ],
+        });
+        repairsCount++;
+      } else if (e.hooks && Array.isArray(e.hooks)) {
+        // Already correct format
+        fixed[event].push(e as unknown as HookEntry);
+      } else {
+        // Unknown format, keep as-is
+        fixed[event].push(e as unknown as HookEntry);
+      }
+    }
+  }
+
+  return { fixed, repairsCount };
+}
+
 function isCascadeStopHook(entry: HookEntry): boolean {
   return entry.hooks.some(
     (h) =>
@@ -85,6 +129,14 @@ function processProject(projectDir: string): {
     settings.hooks = {};
   }
 
+  // Fix any malformed hook entries (old flat format → nested format)
+  const { fixed, repairsCount } = fixHookFormats(
+    settings.hooks as Record<string, unknown[]>
+  );
+  if (repairsCount > 0) {
+    settings.hooks = fixed;
+  }
+
   // Ensure Stop array exists
   if (!settings.hooks.Stop) {
     settings.hooks.Stop = [];
@@ -111,7 +163,10 @@ function processProject(projectDir: string): {
 
   // Write updated settings
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
-  return { name, action: "INSTALLED" };
+  const action = repairsCount > 0
+    ? `INSTALLED (repaired ${repairsCount} malformed hooks)`
+    : "INSTALLED";
+  return { name, action };
 }
 
 function main() {
