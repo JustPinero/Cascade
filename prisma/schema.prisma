@@ -31,6 +31,8 @@ model Project {
   businessStage      String            @default("building") // building, pre-sale, active-sale, revenue, growth, internal
   projectContext     String?           // persisted context.md content — project story, stakeholders, goals
   completionCriteria String?           // persisted done.md content — what "done" means for this project
+  badges             String            @default("[]") // JSON array: deployed, client, testing, awaiting-review, versioned
+  deadline           DateTime?
   lastSessionEndedAt DateTime?
   kickoffTemplateId  Int?
   lastActivityAt     DateTime          @default(now())

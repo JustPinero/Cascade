@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { markAuditsRead } from "@/lib/unread";
 import { isValidSlug } from "@/lib/validators";
+import { validateBadges } from "@/lib/badges";
 
 export async function GET(
   _request: NextRequest,
@@ -69,6 +70,8 @@ export async function PATCH(
       "businessStage",
       "projectContext",
       "completionCriteria",
+      "badges",
+      "deadline",
       "lastSessionEndedAt",
     ]);
 
@@ -88,6 +91,10 @@ export async function PATCH(
       if (key === "autonomyMode" && !VALID_AUTONOMY.has(value as string)) continue;
       if (key === "businessStage" && !VALID_BUSINESS_STAGE.has(value as string)) continue;
       if ((key === "agentTeamsEnabled" || key === "prWorkflowEnabled") && typeof value !== "boolean") continue;
+      if (key === "badges") {
+        data[key] = JSON.stringify(validateBadges(value as string[]));
+        continue;
+      }
 
       data[key] = value;
     }

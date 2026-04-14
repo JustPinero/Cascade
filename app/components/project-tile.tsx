@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { HealthIndicator } from "./health-indicator";
 import { AdvisoryBadge } from "./advisory-badge";
+import { BADGE_STYLES, type Badge } from "@/lib/badges";
 
 export interface ProjectTileData {
   slug: string;
@@ -16,6 +17,7 @@ export interface ProjectTileData {
   advisoryRead?: boolean;
   currentRequest?: string;
   progressScore?: number;
+  badges?: string;
 }
 
 interface ProjectTileProps {
@@ -107,6 +109,33 @@ export function ProjectTile({ project }: ProjectTileProps) {
           />
         </div>
       </div>
+
+      {/* Badges */}
+      {(() => {
+        let parsed: string[] = [];
+        try {
+          parsed = JSON.parse(project.badges || "[]");
+        } catch {
+          // ignore
+        }
+        if (parsed.length === 0) return null;
+        return (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {parsed.map((badge) => {
+              const style = BADGE_STYLES[badge as Badge];
+              if (!style) return null;
+              return (
+                <span
+                  key={badge}
+                  className={`text-[8px] font-mono uppercase tracking-wider px-1.5 py-0.5 border ${style.color}`}
+                >
+                  {style.label}
+                </span>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* Footer: debt count + last activity */}
       <div className="flex items-center justify-between text-xs font-mono">
