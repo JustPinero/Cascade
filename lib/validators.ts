@@ -21,7 +21,7 @@ export function isValidGithubUrl(url: string): boolean {
  * Resolve PROJECTS_DIR, handling ~ prefix.
  */
 export function resolveProjectsDir(): string {
-  const dir = process.env.PROJECTS_DIR || "~/Desktop/projects";
+  const dir = process.env.PROJECTS_DIR || "~/projects";
   if (dir.startsWith("~")) {
     return path.join(os.homedir(), dir.slice(1));
   }

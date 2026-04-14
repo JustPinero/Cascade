@@ -1,23 +1,23 @@
 # Cascade
 
-A nerve center for orchestrating multi-project Claude Code workflows. Delamain — the AI fleet dispatcher — manages your projects, learns from every session, and tells you when it needs you. Built by Kilroy.
+A nerve center for orchestrating multi-project Claude Code workflows. The Overseer — your customizable AI fleet dispatcher — manages your projects, learns from every session, and tells you when it needs you.
 
 ---
 
 ## What It Does
 
 - **Fleet Dashboard** — monitor health, progress, and status across all your projects at a glance
-- **Delamain AI Dispatcher** — tell Delamain what you want done today and he creates dispatch plans, launches Claude sessions, and tracks outcomes
+- **the Overseer AI Dispatcher** — tell the Overseer what you want done today and he creates dispatch plans, launches Claude sessions, and tracks outcomes
 - **Closed Feedback Loop** — sessions report back automatically via Stop hooks. Cascade knows when sessions end, what happened, and what went wrong
-- **Knowledge Base** — 143+ lessons harvested from project history. Delamain uses these to advise other projects
+- **Knowledge Base** — 143+ lessons harvested from project history. the Overseer uses these to advise other projects
 - **Morning Briefing** — auto-generated summary of what happened overnight, what's blocked, and what to prioritize
-- **Conversation Memory** — Delamain remembers yesterday's sprint plan and references it today
+- **Conversation Memory** — the Overseer remembers yesterday's sprint plan and references it today
 - **Semi-Auto Dispatch** — routine "continue" operations execute automatically without approval
 - **Human Tasks** — things only you can do (upload assets, get API keys) tracked in a checklist. Claude sessions auto-create them with `[HUMAN TODO]` tags
-- **Voice Input** — talk to Delamain with your voice via browser SpeechRecognition
+- **Voice Input** — talk to the Overseer with your voice via browser SpeechRecognition
 - **Desktop Notifications** — get notified when sessions end or blockers are detected
 - **Retroactive Harvest** — extract lessons from project git history, even projects started before Cascade existed
-- **Dispatch Outcome Tracking** — Delamain learns which recommendations actually work
+- **Dispatch Outcome Tracking** — the Overseer learns which recommendations actually work
 
 ---
 
@@ -81,8 +81,8 @@ Open **http://localhost:3000**.
 ### First Use
 
 1. Click **Scan Projects** to import your projects
-2. Click **Delamain** in the sidebar to talk to the AI dispatcher
-3. Tell Delamain what you want done — he'll create a dispatch plan
+2. Click **the Overseer** in the sidebar to talk to the AI dispatcher
+3. Tell the Overseer what you want done — he'll create a dispatch plan
 
 ### Making Projects Dispatch-Ready
 
@@ -104,7 +104,7 @@ npx tsx scripts/install-hooks.ts --dry-run  # preview first
 | Page | Purpose |
 |------|---------|
 | **Dashboard** | Project tiles with health, progress, activity feed, morning briefing |
-| **Delamain** | Full-screen AI chat — sprint planning, dispatch, fleet management |
+| **the Overseer** | Full-screen AI chat — sprint planning, dispatch, fleet management |
 | **My Tasks** | Human-only tasks checklist (assets, credentials, manual testing) |
 | **Roadmap** | Bird's-eye table of all projects with progress bars |
 | **Playbook** | Rules that shape every dispatched Claude session |
@@ -117,9 +117,9 @@ npx tsx scripts/install-hooks.ts --dry-run  # preview first
 
 ## Key Concepts
 
-**Delamain** — Claude Sonnet instance running inside Cascade. The AI fleet dispatcher. Plans sprints, recommends dispatches, tracks outcomes. Has conversation memory and learns from results.
+**The Overseer** — Claude Sonnet instance running inside Cascade. Your AI fleet dispatcher (customizable name and portrait via Settings). Plans sprints, recommends dispatches, tracks outcomes. Has conversation memory and learns from results.
 
-**Kilroy** — Claude Opus instance in the terminal. The engineer who builds and maintains Cascade and Delamain. Communicates with Delamain via a shared channel file.
+**Engineer Channel** — Optional feature for power users. If you have a dedicated Claude Code instance for building and maintaining Cascade itself, you can set up a shared communication channel between it and the Overseer.
 
 **Stop Hooks** — Claude Code hooks installed on every project. When a session ends, the hook copies the handoff to a session log and pings Cascade's webhook. Cascade auto-scans that project and fires desktop notifications.
 
