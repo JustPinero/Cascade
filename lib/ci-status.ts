@@ -1,4 +1,4 @@
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 
 export type CIStatus = "pass" | "fail" | "pending" | "none";
 
@@ -38,9 +38,15 @@ export function getCIStatus(githubRepo: string | null): CIStatus {
     return cached.status;
   }
 
+  // Validate repo format to prevent shell injection
+  if (!/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(githubRepo)) {
+    return "none";
+  }
+
   try {
-    const output = execSync(
-      `gh run list --repo ${githubRepo} --limit 1 --json conclusion -q ".[0].conclusion"`,
+    const output = execFileSync(
+      "gh",
+      ["run", "list", "--repo", githubRepo, "--limit", "1", "--json", "conclusion", "-q", ".[0].conclusion"],
       { stdio: "pipe", timeout: 10_000 }
     ).toString().trim();
 
