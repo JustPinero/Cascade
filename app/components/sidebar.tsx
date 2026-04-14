@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { NavLink } from "./nav-link";
 import { ReminderWidget } from "./reminder-widget";
+import { AttentionBadge } from "./attention-badge";
 
 function DashboardIcon() {
   return (
@@ -163,6 +164,7 @@ export function Sidebar() {
             <h1 className="text-lg font-bold font-mono tracking-[0.2em] text-text-bright uppercase">
               Cascade
             </h1>
+            <AttentionBadge />
           </div>
           <button
             onClick={() => setMobileOpen(false)}
