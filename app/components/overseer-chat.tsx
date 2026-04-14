@@ -330,9 +330,9 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
       }
     }
 
-    // Multiple projects — batch dispatch into tmux grid
+    // Multiple projects — agent team dispatch (lead coordinates teammates)
     try {
-      const res = await fetch("/api/dispatch/batch", {
+      const res = await fetch("/api/dispatch/team", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
