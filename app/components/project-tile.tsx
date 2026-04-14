@@ -18,6 +18,7 @@ export interface ProjectTileData {
   currentRequest?: string;
   progressScore?: number;
   badges?: string;
+  pendingHumanTasks?: number;
 }
 
 interface ProjectTileProps {
@@ -136,6 +137,13 @@ export function ProjectTile({ project }: ProjectTileProps) {
           </div>
         );
       })()}
+
+      {/* Blocked-on-human indicator */}
+      {(project.pendingHumanTasks ?? 0) > 0 && (
+        <div className="text-[10px] font-mono text-amber mb-2">
+          {project.pendingHumanTasks} task{(project.pendingHumanTasks ?? 0) > 1 ? "s" : ""} waiting on you
+        </div>
+      )}
 
       {/* Footer: debt count + last activity */}
       <div className="flex items-center justify-between text-xs font-mono">

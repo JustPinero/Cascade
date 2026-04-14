@@ -5,16 +5,26 @@ import { getAdvisoryStatuses } from "@/lib/advisory-tracker";
 
 export async function GET() {
   try {
-    const [projects, unreadCounts, advisoryStatuses] = await Promise.all([
-      prisma.project.findMany({
-        orderBy: { lastActivityAt: "desc" },
-      }),
-      getAllUnreadCounts(prisma),
-      getAdvisoryStatuses(prisma),
-    ]);
+    const [projects, unreadCounts, advisoryStatuses, humanTaskCounts] =
+      await Promise.all([
+        prisma.project.findMany({
+          orderBy: { lastActivityAt: "desc" },
+        }),
+        getAllUnreadCounts(prisma),
+        getAdvisoryStatuses(prisma),
+        prisma.humanTask.groupBy({
+          by: ["projectId"],
+          where: { status: "pending" },
+          _count: { id: true },
+        }),
+      ]);
 
     const advisoryMap = new Map(
       advisoryStatuses.map((s) => [s.projectSlug, s])
+    );
+
+    const taskCountMap = new Map(
+      humanTaskCounts.map((t) => [t.projectId, t._count.id])
     );
 
     const projectsWithExtras = projects.map((p) => {
@@ -24,6 +34,7 @@ export async function GET() {
         unreadAuditCount: unreadCounts.get(p.id) || 0,
         hasAdvisory: advisory?.hasAdvisory || false,
         advisoryRead: advisory?.isRead || false,
+        pendingHumanTasks: taskCountMap.get(p.id) || 0,
       };
     });
 
