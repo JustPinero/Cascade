@@ -92,12 +92,11 @@ Use this data to calibrate your recommendations. If a mode has a low success rat
   }
 
   // Load Kilroy channel
-  let kilroyChannel = "";
+  // Load engineer channel (backwards compatible with kilroy-channel.md)
+  let engineerChannel = "";
   try {
-    kilroyChannel = await fs.readFile(
-      path.resolve(process.cwd(), ".claude", "kilroy-channel.md"),
-      "utf-8"
-    );
+    const { readChannelContent } = await import("@/lib/engineer-channel");
+    engineerChannel = await readChannelContent(process.cwd());
   } catch {
     // No channel file
   }
@@ -205,7 +204,7 @@ ${backburnerList ? `\n## Backburner (parked — do not dispatch unless specifica
 ${activityList}
 ${yesterdaySummary ? `\n## Yesterday's Sprint Plan (your previous recommendations)\n${yesterdaySummary}\nUse this context to maintain continuity. Reference what was planned if relevant.` : ""}
 ${outcomeStats ? `\n${outcomeStats}` : ""}
-${kilroyChannel ? `\n## Messages from Kilroy (your engineer)\nKilroy is the Claude Opus instance that builds and maintains Cascade. He leaves you notes here. Read them, reference them when relevant, and if he asks you a question, answer it.\n${kilroyChannel.slice(-2000)}` : ""}
+${engineerChannel ? `\n## Messages from your Engineer\nThe Engineer is the Claude instance that builds and maintains Cascade. They leave you notes here. Read them, reference them when relevant, and if they ask you a question, answer it.\n${engineerChannel.slice(-2000)}` : ""}
 
 ## Overseer Playbook (Developer's Preferences)
 ${playbook}
@@ -294,12 +293,12 @@ Examples:
 
 Only suggest when you see clear patterns (3+ projects or 3+ sessions with the same issue). Quality over quantity.
 
-## Messaging Kilroy
-Kilroy is the Claude Opus instance in the developer's terminal who builds and maintains Cascade (and you). If you need to request a feature, report a bug, or flag something for engineering attention, tag it:
+## Messaging the Engineer
+If you have a dedicated engineer Claude instance maintaining Cascade, you can send messages using:
 
-[KILROY] message for Kilroy here
+[ENGINEER] message for the engineer here
 
-This gets saved to the shared channel file. Kilroy reads it on his next session.`;
+This gets saved to the shared channel file. The engineer reads it on their next session. If no engineer channel is set up, these tags are harmless.`;
 }
 
 export async function POST(request: NextRequest) {
