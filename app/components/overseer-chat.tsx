@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { sendNotification } from "@/lib/notify";
 import { playStartSound, playEndSound } from "@/lib/sounds";
+import { getOverseerSettings, getPortraitMode } from "@/lib/overseer-settings";
 
 // SpeechRecognition types for browser API
 interface SpeechRecognitionEvent {
@@ -80,6 +81,17 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
   }, []);
 
   const [hasSpeechSupport, setHasSpeechSupport] = useState(false);
+  const [overseerName, setOverseerName] = useState("Overseer");
+  const [portraitIdle, setPortraitIdle] = useState("/delamain.jpg");
+  const [portraitTalking, setPortraitTalking] = useState<string | null>(null);
+
+  // Load overseer settings on mount
+  useEffect(() => {
+    const settings = getOverseerSettings();
+    setOverseerName(settings.name);
+    setPortraitIdle(settings.portraitIdle);
+    setPortraitTalking(settings.portraitTalking);
+  }, []);
 
   useEffect(() => {
     setHasSpeechSupport(
@@ -273,7 +285,7 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
     } catch {
       setMessages([
         ...newMessages,
-        { role: "assistant", content: "Failed to connect to Delamain." },
+        { role: "assistant", content: `Failed to connect to ${overseerName}.` },
       ]);
     } finally {
       setStreaming(false);
@@ -408,8 +420,8 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
               }`}
             >
               <img
-                src={streaming ? "/delamain-talking.jpg" : "/delamain.jpg"}
-                alt="Delamain"
+                src={streaming && portraitTalking ? portraitTalking : portraitIdle}
+                alt={overseerName}
                 className={`w-full h-full object-cover transition-all duration-300 ${
                   streaming ? "brightness-125" : "brightness-90"
                 }`}
@@ -421,7 +433,7 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
           </div>
           <div>
             <h2 className="text-lg font-bold font-mono text-cyan uppercase tracking-[0.15em]">
-              Delamain
+              {overseerName}
             </h2>
             <p className="text-[10px] font-mono text-space-500 uppercase tracking-wider">
               {streaming ? "Responding..." : "Fleet Dispatcher — Sprint Planning"}
@@ -435,12 +447,12 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img
-              src="/delamain.jpg"
-              alt="Delamain"
+              src={portraitIdle}
+              alt={overseerName}
               className="w-5 h-5 rounded-full ring-1 ring-cyan/40"
             />
             <span className="text-xs font-mono text-cyan uppercase tracking-wider font-bold">
-              Delamain — Sprint Planning
+              {overseerName} — Sprint Planning
             </span>
           </div>
           {hasSpeechSupport && (
@@ -516,7 +528,7 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
         ))}
         {streaming && (
           <div className={`${fullPage ? "text-sm" : "text-xs"} font-mono text-accent pulse-healthy`}>
-            Delamain is thinking...
+            {overseerName} is thinking...
           </div>
         )}
       </div>

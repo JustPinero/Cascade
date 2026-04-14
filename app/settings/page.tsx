@@ -9,6 +9,10 @@ import {
   requestNotificationPermission,
 } from "@/lib/notify";
 import {
+  getOverseerSettings,
+  setOverseerSettings,
+} from "@/lib/overseer-settings";
+import {
   getSoundPreference,
   setSoundPreference,
 } from "@/lib/sounds";
@@ -310,6 +314,51 @@ function AutomationPanel() {
   );
 }
 
+function OverseerPanel() {
+  const [name, setName] = useState(() => getOverseerSettings().name);
+  const [saved, setSaved] = useState(false);
+
+  function handleSave() {
+    setOverseerSettings({ name: name.trim() || "Overseer" });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  return (
+    <div className="mb-8">
+      <h2 className="text-sm font-mono font-bold text-cyan uppercase tracking-wider mb-4">
+        Overseer Identity
+      </h2>
+      <div className="space-y-3">
+        <div className="p-3 border border-space-600 bg-space-800">
+          <label className="text-sm font-mono text-text-bright block mb-2">
+            Name
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSave()}
+              placeholder="Overseer"
+              className="flex-1 px-3 py-1.5 text-sm font-mono bg-space-900 border border-space-600 text-text-bright placeholder:text-space-500 focus:border-cyan focus:outline-none"
+            />
+            <button
+              onClick={handleSave}
+              className="px-3 py-1.5 text-xs font-mono border border-cyan text-cyan hover:bg-cyan/10 transition-colors"
+            >
+              {saved ? "Saved" : "Save"}
+            </button>
+          </div>
+          <p className="text-[10px] font-mono text-space-500 mt-1">
+            Your AI dispatcher&apos;s name. Appears in chat, sidebar, and briefings.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
 
@@ -319,8 +368,12 @@ export default function SettingsPage() {
         Settings
       </h1>
       <p className="text-sm text-text font-mono mb-8">
-        Customize Cascade&apos;s appearance
+        Customize Cascade
       </p>
+
+      <OverseerPanel />
+
+      <div className="divider-h mb-8" />
 
       <div className="mb-8">
         <h2 className="text-sm font-mono font-bold text-cyan uppercase tracking-wider mb-4">

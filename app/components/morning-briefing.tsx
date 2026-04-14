@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { getOverseerSettings } from "@/lib/overseer-settings";
 
 interface BriefingData {
   briefing: string;
@@ -15,6 +16,7 @@ export function MorningBriefing() {
   const [loading, setLoading] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [shouldShow, setShouldShow] = useState(false);
+  const settings = getOverseerSettings();
 
   // Check if we should show the briefing (first visit of the day)
   useEffect(() => {
@@ -75,12 +77,12 @@ export function MorningBriefing() {
       <div className="mb-6 p-4 border border-cyan/20 bg-space-900">
         <div className="flex items-center gap-2">
           <img
-            src="/delamain.jpg"
-            alt="Delamain"
+            src={settings.portraitIdle}
+            alt={settings.name}
             className="w-5 h-5 rounded-full ring-1 ring-cyan/40 pulse-healthy"
           />
           <span className="text-xs font-mono text-cyan">
-            Delamain is preparing your morning briefing...
+            {settings.name} is preparing your morning briefing...
           </span>
         </div>
       </div>
@@ -94,8 +96,8 @@ export function MorningBriefing() {
       <div className="flex items-center justify-between px-4 py-2 border-b border-space-700">
         <div className="flex items-center gap-2">
           <img
-            src="/delamain.jpg"
-            alt="Delamain"
+            src={settings.portraitIdle}
+            alt={settings.name}
             className="w-5 h-5 rounded-full ring-1 ring-cyan/40"
           />
           <span className="text-xs font-mono text-cyan uppercase tracking-wider font-bold">

@@ -105,7 +105,7 @@ function SettingsIcon() {
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: <DashboardIcon /> },
-  { href: "/delamain", label: "Delamain", icon: <DelamainIcon /> },
+  { href: "/delamain", label: "Overseer", icon: <DelamainIcon /> },
   { href: "/tasks", label: "My Tasks", icon: <TasksIcon /> },
   { href: "/roadmap", label: "Roadmap", icon: <RoadmapIcon /> },
   { href: "/playbook", label: "Playbook", icon: <PlaybookIcon /> },
