@@ -43,6 +43,15 @@ function formatTimeAgo(dateStr: string): string {
 export function ProjectTile({ project }: ProjectTileProps) {
   const isDeployed = project.status === "deployed";
   const hasActiveSession = project.currentRequest?.includes("dispatched");
+  const score = project.progressScore ?? 0;
+
+  // Parse badges once
+  let parsedBadges: string[] = [];
+  try {
+    parsedBadges = JSON.parse(project.badges || "[]");
+  } catch {
+    // ignore
+  }
 
   const tileClass = isDeployed
     ? "glow-deployed"
@@ -92,17 +101,17 @@ export function ProjectTile({ project }: ProjectTileProps) {
             {project.currentPhase.replace(/-/g, " ").replace(/phase /, "P")}
           </span>
           <span className="text-[10px] font-mono text-space-400">
-            {project.progressScore ?? 0}%
+            {score}%
           </span>
         </div>
         <div className="w-full h-1 bg-space-700 overflow-hidden">
           <div
             className={`h-full transition-all duration-300 ${
-              (project.progressScore ?? 0) >= 75
+              score >= 75
                 ? "bg-success"
-                : (project.progressScore ?? 0) >= 40
+                : score >= 40
                   ? "bg-cyan"
-                  : (project.progressScore ?? 0) > 0
+                  : score > 0
                     ? "bg-amber"
                     : "bg-space-600"
             }`}
@@ -112,31 +121,22 @@ export function ProjectTile({ project }: ProjectTileProps) {
       </div>
 
       {/* Badges */}
-      {(() => {
-        let parsed: string[] = [];
-        try {
-          parsed = JSON.parse(project.badges || "[]");
-        } catch {
-          // ignore
-        }
-        if (parsed.length === 0) return null;
-        return (
-          <div className="flex flex-wrap gap-1 mb-2">
-            {parsed.map((badge) => {
-              const style = BADGE_STYLES[badge as Badge];
-              if (!style) return null;
-              return (
-                <span
-                  key={badge}
-                  className={`text-[8px] font-mono uppercase tracking-wider px-1.5 py-0.5 border ${style.color}`}
-                >
-                  {style.label}
-                </span>
-              );
-            })}
-          </div>
-        );
-      })()}
+      {parsedBadges.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-2">
+          {parsedBadges.map((badge) => {
+            const style = BADGE_STYLES[badge as Badge];
+            if (!style) return null;
+            return (
+              <span
+                key={badge}
+                className={`text-[8px] font-mono uppercase tracking-wider px-1.5 py-0.5 border ${style.color}`}
+              >
+                {style.label}
+              </span>
+            );
+          })}
+        </div>
+      )}
 
       {/* Blocked-on-human indicator */}
       {(project.pendingHumanTasks ?? 0) > 0 && (

@@ -6,12 +6,10 @@ export type DeadlineUrgency = "none" | "normal" | "urgent" | "overdue";
 export function formatCountdown(deadline: Date | null): string | null {
   if (!deadline) return null;
 
-  const now = new Date();
-  const deadlineDate = new Date(deadline);
-  const diffMs = deadlineDate.getTime() - now.getTime();
+  const diffMs = new Date(deadline).getTime() - Date.now();
   const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
 
-  if (diffDays === 0 || (diffDays === -0)) return "due today";
+  if (diffDays === 0) return "due today";
   if (diffDays > 0) return `${diffDays}d left`;
   return `${Math.abs(diffDays)}d overdue`;
 }

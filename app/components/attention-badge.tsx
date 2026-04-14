@@ -1,32 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 export function AttentionBadge() {
   const [count, setCount] = useState(0);
-  const countRef = { current: setCount };
-
-  const fetchCount = useCallback(async () => {
-    try {
-      const res = await fetch("/api/attention");
-      const data = await res.json();
-      if (typeof data.total === "number") countRef.current(data.total);
-    } catch {
-      // Ignore
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const mounted = useRef(true);
 
   useEffect(() => {
+    mounted.current = true;
+
+    async function fetchCount() {
+      try {
+        const res = await fetch("/api/attention");
+        const data = await res.json();
+        if (mounted.current && typeof data.total === "number") {
+          setCount(data.total);
+        }
+      } catch {
+        // Ignore
+      }
+    }
+
     fetchCount();
+
     function handleVisibility() {
       if (document.visibilityState === "visible") fetchCount();
     }
     document.addEventListener("visibilitychange", handleVisibility);
-    return () =>
+    return () => {
+      mounted.current = false;
       document.removeEventListener("visibilitychange", handleVisibility);
-  }, [fetchCount]);
+    };
+  }, []);
 
   if (count === 0) return null;
 
