@@ -66,8 +66,11 @@ SQLite at ./dev.db (project root). 17 projects, 147+ knowledge lessons, dispatch
 ## People
 - Dawn Lynch: mentor and guiding light. Asked Justin to finish site-unseen, medipal, ratracer.
 - Mikey: cousin, 25yr coder, mentor. Bought Justin the PC.
+- Christina: co-founder/partner for romereno (ReModel OS).
+- Paula Sharpe: client for sharpesanimalhouse (pet platform).
+- Robert Loomis: client for Zen.
+- Deana: client for Canvas Caterers.
 - Tec: client for matinecock-site. Non-technical, admin panel only.
-- Christina: client/partner for sharpesanimalhouse.
 
 [LESSON] Cascade's dev.db lives at project root, not prisma/. DATABASE_URL relative path resolves from project root.
 [LESSON] Hook format bugs recur because terminal Claudes generate the old flat format. install-hooks.ts now auto-repairs.
