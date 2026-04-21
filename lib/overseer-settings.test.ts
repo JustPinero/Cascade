@@ -3,7 +3,6 @@ import {
   getOverseerSettings,
   setOverseerSettings,
   getPortraitMode,
-  type OverseerSettings,
 } from "./overseer-settings";
 
 const store: Record<string, string> = {};

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { sendNotification } from "@/lib/notify";
 import { playStartSound, playEndSound } from "@/lib/sounds";
-import { getOverseerSettings, getPortraitMode } from "@/lib/overseer-settings";
+import { getOverseerSettings } from "@/lib/overseer-settings";
 
 // SpeechRecognition types for browser API
 interface SpeechRecognitionEvent {

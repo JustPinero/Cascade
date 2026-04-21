@@ -2,6 +2,7 @@
   "name": "cascade",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "dev": "op run --env-file=.env -- next dev --turbopack",
     "build": "next build",
