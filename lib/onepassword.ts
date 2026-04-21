@@ -156,3 +156,132 @@ export async function populateEnvLocal(
 
   return { populated: lines.length, missing };
 }
+
+// ---------------------------------------------------------------------------
+// Request 10.2 — 1Password as runtime secret source
+// ---------------------------------------------------------------------------
+
+const CASCADE_VAULT = "Cascade";
+const CASCADE_RUNTIME_ITEM = "Cascade Runtime";
+
+/**
+ * Create the "Cascade" vault if it does not already exist. No-op if present.
+ * Called once during installer bootstrap.
+ */
+export function ensureCascadeVault(): void {
+  const listOutput = execFileSync(
+    "op",
+    ["vault", "list", "--format", "json"],
+    { stdio: "pipe", timeout: 10000 }
+  ).toString();
+
+  try {
+    const vaults = JSON.parse(listOutput) as Array<{ name: string }>;
+    if (vaults.some((v) => v.name === CASCADE_VAULT)) return;
+  } catch {
+    // fall through and attempt create
+  }
+
+  execFileSync("op", ["vault", "create", CASCADE_VAULT], {
+    stdio: "pipe",
+    timeout: 10000,
+  });
+}
+
+/**
+ * Create or update the "Cascade Runtime" item in the Cascade vault with the
+ * given secret key/value pairs. Field type is password (masked in UI).
+ */
+export function bootstrapCascadeRuntimeItem(
+  secrets: Record<string, string>
+): void {
+  let existingId: string | null = null;
+  try {
+    const output = execFileSync(
+      "op",
+      [
+        "item",
+        "get",
+        CASCADE_RUNTIME_ITEM,
+        "--vault",
+        CASCADE_VAULT,
+        "--format",
+        "json",
+      ],
+      { stdio: "pipe", timeout: 10000 }
+    ).toString();
+    const item = JSON.parse(output) as { id: string };
+    existingId = item.id;
+  } catch {
+    existingId = null;
+  }
+
+  const fieldArgs = Object.entries(secrets).map(
+    ([key, val]) => `${key}[password]=${val}`
+  );
+
+  if (existingId) {
+    execFileSync(
+      "op",
+      ["item", "edit", existingId, "--vault", CASCADE_VAULT, ...fieldArgs],
+      { stdio: "pipe", timeout: 10000 }
+    );
+  } else {
+    execFileSync(
+      "op",
+      [
+        "item",
+        "create",
+        "--category=API Credential",
+        `--title=${CASCADE_RUNTIME_ITEM}`,
+        `--vault=${CASCADE_VAULT}`,
+        ...fieldArgs,
+      ],
+      { stdio: "pipe", timeout: 10000 }
+    );
+  }
+}
+
+/**
+ * Resolve a single op:// reference to its underlying value via `op read`.
+ * Throws with a descriptive error if the reference is malformed or cannot be resolved.
+ */
+export function resolveOpRef(ref: string): string {
+  if (!ref.startsWith("op://")) {
+    throw new Error(`${ref} is not a valid op:// reference`);
+  }
+  try {
+    const output = execFileSync("op", ["read", ref], {
+      stdio: "pipe",
+      timeout: 10000,
+    }).toString();
+    return output.trim();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`op read failed for ${ref}: ${msg}`);
+  }
+}
+
+/**
+ * Startup guard: confirm the op CLI is installed and user is signed in.
+ * Throws with actionable install / signin instructions on failure.
+ */
+export function assertOpReady(): void {
+  try {
+    execSync("op account list", { stdio: "pipe", timeout: 5000 });
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException;
+    if (e.code === "ENOENT") {
+      throw new Error(
+        "1Password not ready: install the 1Password CLI from https://developer.1password.com/docs/cli/get-started/"
+      );
+    }
+    const msg = e.message || "";
+    if (/not currently signed in|not signed in|sign in|signin/i.test(msg)) {
+      throw new Error(
+        "1Password not ready: you are not signed in. Run `op signin` or enable Desktop app integration."
+      );
+    }
+    throw new Error(`1Password not ready: ${msg}`);
+  }
+}
