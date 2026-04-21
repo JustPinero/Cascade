@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { PrismaClient } from "@/app/generated/prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { execSync } from "child_process";
+import { pushTestSchema } from "@/lib/__test-utils__/prisma-push";
 import fs from "fs";
 import path from "path";
 
@@ -20,10 +21,7 @@ beforeAll(() => {
   prisma = new PrismaClient({ adapter });
 
   // Push schema
-  execSync(`DATABASE_URL="${TEST_DB_URL}" pnpm exec prisma db push`, {
-    cwd: path.resolve(__dirname, ".."),
-    stdio: "pipe",
-  });
+  pushTestSchema(TEST_DB_URL);
 
   // Run seed
   execSync("npx tsx prisma/seed.ts", {

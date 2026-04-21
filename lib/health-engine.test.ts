@@ -50,7 +50,7 @@ async function createProject(
 
   // Initialize git
   if (opts.git) {
-    execSync("git init && git add -A && git commit -m init", {
+    execSync("git init && git add -A && git -c user.name=Cascade -c user.email=test@local.dev commit -m init", {
       cwd: dir,
       stdio: "pipe",
     });

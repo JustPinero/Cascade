@@ -5,6 +5,32 @@ import { PrismaClient } from "@/app/generated/prisma/client";
 import { createGitHubRepo } from "./github";
 import { isValidGithubUrl } from "./validators";
 
+function detectGitAuthor(): { name: string; email: string } {
+  let name = "Cascade User";
+  let email = "user@cascade.local";
+  try {
+    const n = execSync("git config --global user.name", {
+      stdio: ["pipe", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+    if (n) name = n;
+  } catch {
+    // no global name
+  }
+  try {
+    const e = execSync("git config --global user.email", {
+      stdio: ["pipe", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+    if (e) email = e;
+  } catch {
+    // no global email
+  }
+  return { name, email };
+}
+
 export interface LaunchConfig {
   name: string;
   slug: string;
@@ -54,13 +80,24 @@ export async function launchProject(
       "utf-8"
     );
 
-    // 3. Initialize git
+    // 3. Initialize git. Use the user's global author if set; fall back to a
+    //    Cascade placeholder on fresh installs so the commit succeeds.
     execSync("git init", { cwd: projectPath, stdio: "pipe" });
     execSync("git add -A", { cwd: projectPath, stdio: "pipe" });
-    execSync('git commit -m "Initial commit: project kickoff"', {
-      cwd: projectPath,
-      stdio: "pipe",
-    });
+    const author = detectGitAuthor();
+    execFileSync(
+      "git",
+      [
+        "-c",
+        `user.name=${author.name}`,
+        "-c",
+        `user.email=${author.email}`,
+        "commit",
+        "-m",
+        "Initial commit: project kickoff",
+      ],
+      { cwd: projectPath, stdio: "pipe" }
+    );
 
     // 4. Optionally create GitHub repo
     let githubUrl: string | null = null;

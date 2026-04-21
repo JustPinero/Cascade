@@ -41,8 +41,8 @@ async function gatherArtifacts(
   try {
     await fs.access(path.join(projectPath, ".git"));
     const log = execSync(
-      `git log --oneline --no-merges -100 --format="%s" 2>/dev/null`,
-      { cwd: projectPath, stdio: "pipe" }
+      `git log --oneline --no-merges -100 --format="%s"`,
+      { cwd: projectPath, stdio: ["pipe", "pipe", "ignore"] }
     ).toString();
     // Filter to interesting commits
     const interesting = log

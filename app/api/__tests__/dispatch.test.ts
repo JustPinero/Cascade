@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
+import path from "path";
 import { isValidSlug, isInsideProjectsDir } from "@/lib/validators";
+
+const base = path.resolve(
+  path.sep === "\\"
+    ? "C:/Users/justinpinero/Desktop/projects"
+    : "/Users/justinpinero/Desktop/projects"
+);
+const inside = path.join(base, "ratracer");
+const outside = path.resolve(path.sep === "\\" ? "C:/etc/passwd" : "/etc/passwd");
+const traversal = path.join(base, "..", "..", "..", "etc", "passwd");
 
 describe("Dispatch API validation", () => {
   it("validates dispatch modes", () => {
@@ -20,9 +30,9 @@ describe("Dispatch API validation", () => {
   });
 
   it("validates project path before dispatch", () => {
-    expect(isInsideProjectsDir("/Users/justinpinero/Desktop/projects/ratracer", "/Users/justinpinero/Desktop/projects")).toBe(true);
-    expect(isInsideProjectsDir("/etc/passwd", "/Users/justinpinero/Desktop/projects")).toBe(false);
-    expect(isInsideProjectsDir("/Users/justinpinero/Desktop/projects/../../../etc/passwd", "/Users/justinpinero/Desktop/projects")).toBe(false);
+    expect(isInsideProjectsDir(inside, base)).toBe(true);
+    expect(isInsideProjectsDir(outside, base)).toBe(false);
+    expect(isInsideProjectsDir(traversal, base)).toBe(false);
   });
 
   it("dispatch-all only accepts continue and audit modes", () => {

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { PrismaClient } from "@/app/generated/prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { execSync } from "child_process";
+import { pushTestSchema } from "@/lib/__test-utils__/prisma-push";
 import path from "path";
 import fs from "fs";
 
@@ -20,10 +21,7 @@ beforeAll(async () => {
   prisma = new PrismaClient({ adapter });
 
   // Push schema to test database
-  execSync(`DATABASE_URL="${TEST_DB_URL}" pnpm exec prisma db push`, {
-    cwd: path.resolve(__dirname, ".."),
-    stdio: "pipe",
-  });
+  pushTestSchema(TEST_DB_URL);
 });
 
 afterAll(async () => {
@@ -204,13 +202,20 @@ describe("ActivityEvent model", () => {
 });
 
 describe("seed script", () => {
-  it.skipIf(!!process.env.CI)("runs without errors", () => {
-    expect(() => {
-      execSync("npx tsx prisma/seed.ts", {
-        cwd: path.resolve(__dirname, ".."),
-        stdio: "pipe",
-        env: { ...process.env, DATABASE_URL: TEST_DB_URL },
-      });
-    }).not.toThrow();
-  });
+  const templatesPresent = fs.existsSync(
+    path.resolve(__dirname, "../templates")
+  );
+
+  it.skipIf(!!process.env.CI || !templatesPresent)(
+    "runs without errors",
+    () => {
+      expect(() => {
+        execSync("npx tsx prisma/seed.ts", {
+          cwd: path.resolve(__dirname, ".."),
+          stdio: "pipe",
+          env: { ...process.env, DATABASE_URL: TEST_DB_URL },
+        });
+      }).not.toThrow();
+    }
+  );
 });

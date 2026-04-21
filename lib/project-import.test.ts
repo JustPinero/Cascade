@@ -3,6 +3,7 @@ import { PrismaClient } from "@/app/generated/prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { importProjects } from "./project-import";
 import { execSync } from "child_process";
+import { pushTestSchema } from "@/lib/__test-utils__/prisma-push";
 import fs from "fs/promises";
 import path from "path";
 
@@ -22,10 +23,7 @@ beforeAll(async () => {
   // Set up test database
   const adapter = new PrismaBetterSqlite3({ url: TEST_DB_URL });
   prisma = new PrismaClient({ adapter });
-  execSync(`DATABASE_URL="${TEST_DB_URL}" pnpm exec prisma db push`, {
-    cwd: path.resolve(__dirname, ".."),
-    stdio: "pipe",
-  });
+  pushTestSchema(TEST_DB_URL);
 
   // Create test project directories
   await fs.mkdir(TEST_PROJECTS_DIR, { recursive: true });
@@ -36,7 +34,7 @@ beforeAll(async () => {
   await fs.mkdir(path.join(projA, "audits"), { recursive: true });
   await fs.mkdir(path.join(projA, "requests"), { recursive: true });
   await fs.writeFile(path.join(projA, "CLAUDE.md"), "# Alpha");
-  execSync("git init && git add -A && git commit --allow-empty -m init", {
+  execSync("git init && git add -A && git -c user.name=Cascade -c user.email=test@local.dev commit --allow-empty -m init", {
     cwd: projA,
     stdio: "pipe",
   });

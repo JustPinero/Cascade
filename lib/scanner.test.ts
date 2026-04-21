@@ -17,7 +17,7 @@ beforeAll(async () => {
   await fs.mkdir(path.join(projA, "requests"), { recursive: true });
   await fs.writeFile(path.join(projA, "CLAUDE.md"), "# Project Alpha");
   execSync("git init", { cwd: projA, stdio: "pipe" });
-  execSync("git add -A && git commit --allow-empty -m 'init'", {
+  execSync("git add -A && git -c user.name=Cascade -c user.email=test@local.dev commit --allow-empty -m init", {
     cwd: projA,
     stdio: "pipe",
   });
