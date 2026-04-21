@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseCIConclusion, type CIStatus } from "./ci-status";
+import { parseCIConclusion } from "./ci-status";
 
 describe("ci-status", () => {
   describe("parseCIConclusion", () => {

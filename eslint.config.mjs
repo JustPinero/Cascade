@@ -13,6 +13,14 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    rules: {
+      // Cascade is a local/self-hosted dashboard, not a public SEO site.
+      // Overseer portraits are user-configurable (localStorage URLs / data URIs)
+      // and can't reliably be fed to next/image, so <img> is the correct tag.
+      "@next/next/no-img-element": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

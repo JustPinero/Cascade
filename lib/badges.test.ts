@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateBadges, VALID_BADGES, type Badge } from "./badges";
+import { validateBadges, VALID_BADGES } from "./badges";
 
 describe("badges", () => {
   describe("validateBadges", () => {

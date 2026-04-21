@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { checkDeployHealth, type DeployHealthResult } from "./deploy-health";
+import { checkDeployHealth } from "./deploy-health";
 
 describe("checkDeployHealth", () => {
   it("returns healthy for 200 response", async () => {
