@@ -1,5 +1,10 @@
 # Cascade
 
+[![npm version](https://img.shields.io/npm/v/@justpinero/create-cascade?label=create-cascade&color=0366d6)](https://www.npmjs.com/package/@justpinero/create-cascade)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
+[![Tests](https://img.shields.io/badge/tests-420+-brightgreen)](#)
+
 A nerve center for orchestrating multi-project Claude Code workflows. The **Overseer** — your customizable AI fleet dispatcher — manages your projects, learns from every session, and tells you when it needs you.
 
 ---
@@ -7,10 +12,12 @@ A nerve center for orchestrating multi-project Claude Code workflows. The **Over
 ## Install
 
 ```bash
-npx create-cascade
+npx @justpinero/create-cascade
 ```
 
 That's it. The installer detects your OS, checks prerequisites, clones the repo, bootstraps 1Password for secrets, wires Claude Code's Stop hooks, initializes the database, smoke-tests the API, and prints the URL. Run it inside WSL2 on Windows, or any shell on macOS/Linux.
+
+Package on npm: [`@justpinero/create-cascade`](https://www.npmjs.com/package/@justpinero/create-cascade) · source: [`JustPinero/create-cascade`](https://github.com/JustPinero/create-cascade)
 
 If you want to understand exactly what it does, or install manually, read on.
 
