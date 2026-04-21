@@ -1,5 +1,5 @@
 # Session Handoff — Kilroy
-Date: 2026-04-21
+Date: 2026-04-21 (evening — create-cascade published)
 
 ## Identity
 This Claude instance is **Kilroy** — the engineer behind Delamain and Cascade. Named by Justin. Other project Claude instances are "terminal claude." Delamain is the Sonnet-based dispatcher inside Cascade's overseer chat.
@@ -90,8 +90,17 @@ would burn any tester not on a beastly rig.
 2. Ensure the 1P "Cascade" vault exists with item "Cascade Runtime" containing field `anthropic_api_key` set to your API key — OR run the 10.3 installer when available
 3. Enable 1P Desktop → Settings → Developer → "Integrate with 1Password CLI" so `op run` re-auths via Windows Hello instead of master password
 
-### 10.3 — create-cascade Installer — COMPLETE (scaffolded, not pushed to GitHub)
-Sibling package at `C:\Users\justi\projects\create-cascade`. Local git init done, **NOT** pushed to GitHub — that's your call. When ready: `gh repo create JustPinero/create-cascade --public --source . --push`.
+### 10.3 — create-cascade Installer — ✅ PUBLISHED (2026-04-21)
+Sibling package at `C:\Users\justi\projects\create-cascade`. Live on npm and GitHub.
+
+- 📦 **npm:** https://www.npmjs.com/package/@justpinero/create-cascade (scoped because unscoped `create-cascade` is taken by another user)
+- 🐙 **GitHub:** https://github.com/JustPinero/create-cascade
+- Users install via `npx @justpinero/create-cascade`
+- CI publish uses **OIDC Trusted Publisher** (no tokens, no secrets, `--provenance` attestation)
+
+**Account policy notes (2026-04-21):** `two-factor auth` was set to `auth-and-writes` initially, which blocks even automation tokens. Dropped to `auth-only` via npmjs.com → Security → Manage 2FA → "Additional Options" → uncheck "Require 2FA for write actions". OIDC doesn't depend on this — can be re-enabled if desired.
+
+**Before next CI release:** add Trusted Publisher on npm (package settings → GitHub Actions: org=JustPinero, repo=create-cascade, workflow=publish.yml). One-time.
 
 - ✅ All 14 steps implemented with injectable `exec` / prompts for testability
 - ✅ **72 tests across 15 files, 100% passing** — every step tested including orchestrator integration (happy path + all failure-mode exit codes)

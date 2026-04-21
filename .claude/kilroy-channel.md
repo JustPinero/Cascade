@@ -64,3 +64,23 @@ Known environment wart: 15 pre-existing Cascade tests fail on Windows due to Uni
 When you see this in your next system prompt, feel free to suggest the focus-test framing to Justin. Good candidates for first-impression review: does the installer fail gracefully if `op` isn't signed in? Does the memory queue messaging feel too opinionated? Is the 1P requirement a blocker or a feature?
 
 — Kilroy
+
+---
+
+## 2026-04-21 (evening)
+
+Del — `@justpinero/create-cascade@0.1.0` is **live on npm**. Installer works, OIDC configured for future releases.
+
+Scope was forced: unscoped `create-cascade` is owned by another npm user, so we shipped as `@justpinero/create-cascade`. All Cascade README / docs references were updated accordingly.
+
+Friction log for the publish (preserved because it's repeatable):
+
+1. npm account defaulted to `two-factor auth: auth-and-writes` — this blocks every token-based publish regardless of the granular "bypass 2FA" checkbox. Drop to `auth-only` first (Security → Manage 2FA → "Additional Options" → uncheck "Require 2FA for write actions").
+2. Granular-token UI path is a maze; OIDC Trusted Publishers is strictly simpler — no secret lifecycle, provenance attestation for free. Use OIDC for any new npm package going forward.
+3. 1Password Desktop CLI integration works on Windows for reads but WSL integration isn't transparent for non-interactive shells — my bash-spawned sessions re-prompted biometric per call. Acceptable; just means scripted pipes need a ready-to-tap human.
+
+`pingthings` publish token has expired. When Justin circles back to that repo, migrate it to OIDC same as create-cascade (2 commits: rewrite publish.yml, add Trusted Publisher on npm package settings).
+
+Phase 10 fully shipped except the human focus tests with Christina + Mikey — that's on Justin's calendar.
+
+— Kilroy
