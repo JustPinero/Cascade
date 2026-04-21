@@ -1,106 +1,142 @@
 # Cascade
 
-A nerve center for orchestrating multi-project Claude Code workflows. The Overseer — your customizable AI fleet dispatcher — manages your projects, learns from every session, and tells you when it needs you.
+A nerve center for orchestrating multi-project Claude Code workflows. The **Overseer** — your customizable AI fleet dispatcher — manages your projects, learns from every session, and tells you when it needs you.
+
+---
+
+## Install
+
+```bash
+npx create-cascade
+```
+
+That's it. The installer detects your OS, checks prerequisites, clones the repo, bootstraps 1Password for secrets, wires Claude Code's Stop hooks, initializes the database, smoke-tests the API, and prints the URL. Run it inside WSL2 on Windows, or any shell on macOS/Linux.
+
+If you want to understand exactly what it does, or install manually, read on.
 
 ---
 
 ## What It Does
 
 - **Fleet Dashboard** — monitor health, progress, and status across all your projects at a glance
-- **the Overseer AI Dispatcher** — tell the Overseer what you want done today and he creates dispatch plans, launches Claude sessions, and tracks outcomes
-- **Closed Feedback Loop** — sessions report back automatically via Stop hooks (Claude Code events that fire when a session ends). Cascade knows when sessions end, what happened, and what went wrong
-- **Knowledge Base** — 100+ lessons harvested from project history. the Overseer uses these to advise other projects
-- **Morning Briefing** — auto-generated summary of what happened overnight, what's blocked, and what to prioritize
+- **The Overseer AI Dispatcher** — tell the Overseer what you want done; he creates dispatch plans, launches Claude sessions, tracks outcomes
+- **Closed Feedback Loop** — sessions report back automatically via Stop hooks. Cascade knows when sessions end, what happened, what went wrong
+- **Memory-Safe Concurrency** — subagent spawns go through a queue sized to your host RAM (1 slot on <16GB, 2 on 16–32GB, 4 on ≥48GB). No more terminal deaths on laptops
+- **1Password-Backed Secrets** — your Anthropic API key lives in 1Password. `.env` holds `op://` references; plaintext never touches disk
+- **Knowledge Base** — lessons harvested from project history. The Overseer uses these to advise other projects
+- **Morning Briefing** — auto-generated summary of what happened overnight, what's blocked, what to prioritize
 - **Conversation Memory** — the Overseer remembers yesterday's sprint plan and references it today
-- **Semi-Auto Dispatch** — routine "continue" operations execute automatically without approval
-- **Human Tasks** — things only you can do (upload assets, get API keys) tracked in a checklist. Claude sessions auto-create them with `[HUMAN TODO]` tags
+- **Semi-Auto Dispatch** — routine "continue" operations execute without approval
+- **Human Tasks** — things only you can do (upload assets, get API keys) tracked in a checklist. Claude sessions auto-create them via `[HUMAN TODO]` tags
 - **Voice Input** — talk to the Overseer with your voice via browser SpeechRecognition
 - **Desktop Notifications** — get notified when sessions end or blockers are detected
 - **Retroactive Harvest** — extract lessons from project git history, even projects started before Cascade existed
-- **Dispatch Outcome Tracking** — the Overseer learns which recommendations actually work
-- **Engineering Methodology** — projects are bootstrapped via a 1,200-line kickoff template (v3.5) that generates CLAUDE.md, TDD-enforced request files, audit skills, deployment landmine references from 100+ real lessons, and a progressive CI pipeline — all from a single paste into Claude Code
+- **Engineering Methodology** — projects bootstrapped via a kickoff template that generates CLAUDE.md, TDD-enforced request files, audit skills, and deployment references
 
 ---
 
-## Setup Guide
+## Prerequisites
 
-### Prerequisites
+You need these installed yourself. `create-cascade` checks for them and prints install commands if missing.
 
-**All platforms:**
-1. **Node.js 20+**
-2. **pnpm** — `npm install -g pnpm`
-3. **Git**
-4. **Anthropic API Key** — get from [console.anthropic.com](https://console.anthropic.com/settings/keys)
-5. **Claude Code CLI** (recommended) — `npm install -g @anthropic-ai/claude-code`
-6. **tmux** (recommended for multi-project dispatch)
+| Tool | Why | Minimum |
+|------|-----|---------|
+| Node.js | Runtime | 22+ |
+| pnpm | Package manager | any recent |
+| Claude Code CLI | Subagent runtime | any |
+| tmux | Multi-pane dispatch | any |
+| 1Password CLI (`op`) | Secrets source | 2.x |
+| 1Password account | Any plan (Individual/Family/Business) | — |
 
-**macOS:**
+### macOS
 ```bash
-brew install node pnpm git tmux
+brew install node@22 tmux
+corepack enable pnpm
+npm install -g @anthropic-ai/claude-code
+brew install --cask 1password-cli
 ```
 
-**Windows (via WSL2):**
-```bash
-# 1. Install WSL2 (run in PowerShell as Admin)
+### Windows (WSL2 required)
+Install WSL2 first from PowerShell:
+```powershell
 wsl --install
+```
+Then inside your WSL shell:
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash
+sudo apt-get install -y nodejs tmux
+corepack enable pnpm
+npm install -g @anthropic-ai/claude-code
+# 1Password CLI: https://developer.1password.com/docs/cli/get-started/
+```
+Also install **1Password Desktop for Windows**, then enable *Settings → Developer → "Integrate with 1Password CLI"* so `op` re-auths via Windows Hello.
 
-# 2. Open Ubuntu from Start Menu, then inside WSL2:
-sudo apt update && sudo apt install -y git tmux curl
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash
-source ~/.bashrc && nvm install 20
-npm install -g pnpm @anthropic-ai/claude-code
-
-# 3. Access Cascade at http://localhost:3000 from your Windows browser
+### Linux
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash
+sudo apt-get install -y nodejs tmux
+corepack enable pnpm
+npm install -g @anthropic-ai/claude-code
+# 1Password CLI: https://developer.1password.com/docs/cli/get-started/
 ```
 
-**Linux:**
-```bash
-sudo apt install -y git tmux curl  # Ubuntu/Debian
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash
-source ~/.bashrc && nvm install 20
-npm install -g pnpm @anthropic-ai/claude-code
-```
+---
 
-### Installation
+## 1Password is Required — Why
+
+Cascade uses 1Password as a runtime secret source. `.env` contains `op://` references (no plaintext secrets on disk) and `pnpm dev` wraps with `op run --env-file=.env --` so the Next.js process receives resolved values at startup.
+
+Trade-offs of this choice:
+- ✅ No secret in git, no secret in plaintext files, one-click revoke in 1P UI
+- ✅ Same key works on every machine via 1P sync — no cross-machine drift
+- ⚠️ You need a 1P account (any plan). No plaintext fallback
+- ⚠️ If `op signin` expires mid-run, Cascade keeps working (env already resolved into process memory); only a restart requires fresh auth
+
+---
+
+## Manual Install (if you'd rather not use `create-cascade`)
 
 ```bash
-git clone https://github.com/JustPinero/Cascade.git
-cd Cascade
+gh repo clone JustPinero/Cascade ~/Code/cascade
+cd ~/Code/cascade
 pnpm install
 
-# Create environment file
-cp .env.example .env.local
-# Edit .env.local — set ANTHROPIC_API_KEY and PROJECTS_DIR
+# 1Password: create vault and item
+op vault create Cascade
+op item create \
+  --category="API Credential" \
+  --title="Cascade Runtime" \
+  --vault=Cascade \
+  "anthropic_api_key[password]=sk-ant-YOUR-KEY"
 
-# Initialize database
+# Environment
+cp .env.example .env
+# .env already contains op:// references; just adjust PROJECTS_DIR
+
+# Claude Code Stop hooks
+pnpm exec tsx scripts/install-hooks.ts
+
+# Database
 pnpm exec prisma generate
 pnpm exec prisma db push
 pnpm db:seed
 
-# Start Cascade
-bash scripts/start.sh
+# Start
+pnpm dev
 ```
 
 Open **http://localhost:3000**.
 
-### First Use
+---
 
-1. Click **Scan Projects** to import your projects
-2. Click **the Overseer** in the sidebar to talk to the AI dispatcher
-3. Tell the Overseer what you want done — he'll create a dispatch plan
+## First Use
 
-### Making Projects Dispatch-Ready
+1. Click **Scan Projects** to import projects from your `PROJECTS_DIR`
+2. Click **The Overseer** in the sidebar to talk to the AI dispatcher
+3. Tell him what you want done — he creates a dispatch plan
+4. Approve and dispatch — Cascade opens a tmux grid with one Claude session per project (gated by the memory-safe queue)
 
-Projects need: `CLAUDE.md` + `.git` + `package.json` (or equivalent). Optional: `.claude/handoff.md`, `requests/` directory, `audits/debt.md`.
-
-### Installing Session Hooks
-
-Run once to install Stop hooks on all projects (enables the feedback loop):
-
-```bash
-npx tsx scripts/install-hooks.ts        # install
-npx tsx scripts/install-hooks.ts --dry-run  # preview first
-```
+Projects need `CLAUDE.md` + `.git` + `package.json` (or `Cargo.toml` / `pyproject.toml`) to be dispatch-ready. The Overseer will tell you what's missing.
 
 ---
 
@@ -109,26 +145,28 @@ npx tsx scripts/install-hooks.ts --dry-run  # preview first
 | Page | Purpose |
 |------|---------|
 | **Dashboard** | Project tiles with health, progress, activity feed, morning briefing |
-| **the Overseer** | Full-screen AI chat — sprint planning, dispatch, fleet management |
+| **The Overseer** | Full-screen AI chat — sprint planning, dispatch, fleet management |
 | **My Tasks** | Human-only tasks checklist (assets, credentials, manual testing) |
 | **Roadmap** | Bird's-eye table of all projects with progress bars |
 | **Playbook** | Rules that shape every dispatched Claude session |
 | **Knowledge Base** | Lessons harvested from all projects, searchable |
 | **Templates** | Kickoff templates for the project creation wizard |
 | **Reports** | Per-project and cross-project reports (Markdown + PDF) |
-| **Settings** | Theme, notifications, sounds, auto-dispatch, CLI auth status |
+| **Settings** | Theme, notifications, sounds, auto-dispatch, concurrency override |
 
 ---
 
 ## Key Concepts
 
-**The Overseer** — Claude Sonnet instance running inside Cascade. Your AI fleet dispatcher (customizable name and portrait via Settings). Plans sprints, recommends dispatches, tracks outcomes. Has conversation memory and learns from results.
+**The Overseer** — Claude Sonnet instance running inside Cascade. Customizable name and portrait. Plans sprints, recommends dispatches, tracks outcomes. Has conversation memory.
 
-**Engineer Channel** — Optional feature for power users. If you have a dedicated Claude Code instance for building and maintaining Cascade itself, you can set up a shared communication channel between it and the Overseer.
+**Stop Hooks** — Claude Code hooks installed on every project. When a session ends, the hook pings Cascade's webhook. Cascade auto-scans, releases the dispatch queue slot, fires desktop notifications, and harvests lessons.
 
-**Stop Hooks** — Claude Code hooks installed on every project. When a session ends, the hook copies the handoff to a session log and pings Cascade's webhook. Cascade auto-scans that project and fires desktop notifications.
+**Dispatch Queue** — process-wide concurrency gate. Every subagent spawn goes through `lib/dispatch-queue.ts`. Default cap auto-detects from host RAM; override via `CASCADE_MAX_CONCURRENT_SUBAGENTS` in `.env`.
 
-**Backburner** — Project status for intentionally parked projects. Suppressed from sprint planning and health warnings.
+**Engineer Channel** — optional. If you run a dedicated Claude Code instance for building Cascade itself, set up a shared channel via `.claude/kilroy-channel.md`. The Overseer reads it on load.
+
+**Backburner** — project status for intentionally parked projects. Suppressed from sprint planning.
 
 ---
 
@@ -136,36 +174,64 @@ npx tsx scripts/install-hooks.ts --dry-run  # preview first
 
 | Command | Description |
 |---------|-------------|
-| `bash scripts/start.sh` | Start Cascade |
-| `bash scripts/restart.sh` | Kill and restart |
-| `pnpm dev` | Dev server (Turbopack) |
+| `pnpm dev` | Start dev server (wrapped with `op run`) |
 | `pnpm build` | Production build |
-| `pnpm test` | Run 360+ tests (Vitest) |
+| `pnpm start` | Start production server (wrapped with `op run`) |
+| `pnpm test` | Run test suite (Vitest) |
 | `pnpm lint` | ESLint |
-| `scripts/validate.sh` | Full CI validation (lint + types + test + build) |
-| `npx tsx scripts/install-hooks.ts` | Install Stop hooks on all projects |
+| `scripts/validate.sh` | Full CI validation (env + lint + types + test + build) |
+| `pnpm exec tsx scripts/install-hooks.ts` | Install Stop hooks on all projects |
 
 ---
 
 ## Stack
 
 - **Frontend:** Next.js 16 (App Router), TypeScript strict, Tailwind CSS 4
-- **Database:** SQLite via Prisma 7 (local file)
+- **Database:** SQLite via Prisma 7 (local file at `./dev.db`)
 - **AI:** Anthropic Claude API (Sonnet for chat, Haiku for briefing/harvest)
-- **Testing:** Vitest (360+ tests) + Playwright E2E
-- **Dispatch:** tmux + Claude Code CLI
-- **Audio:** Web Audio API (synthesized tones)
+- **Testing:** Vitest + Playwright E2E
+- **Dispatch:** tmux + Claude Code CLI, queued via `lib/dispatch-queue.ts`
+- **Secrets:** 1Password CLI, `op run` wrapper
 
 ---
 
 ## Troubleshooting
 
-**"ANTHROPIC_API_KEY not configured"** — edit `.env.local` with your key from console.anthropic.com
+Full reference: [`docs/troubleshooting.md`](docs/troubleshooting.md). Highlights below.
 
-**"credit balance too low"** — add credits at console.anthropic.com → Plans & Billing. Cascade uses ~$3-5/month.
+**"1Password not ready" on startup** — either `op` isn't installed or your session expired. Run `op signin`, or enable 1P Desktop → Developer → "Integrate with 1Password CLI" for biometric re-auth.
 
-**No projects found** — check `PROJECTS_DIR` in `.env.local` points to your projects folder
+**"op read failed for op://..."** — the referenced vault or item doesn't exist. Run `op item get "Cascade Runtime" --vault Cascade` to confirm; recreate with the manual-install flow above if needed.
 
-**Projects show "not dispatch-ready"** — add a `CLAUDE.md` file to the project root
+**WSL2 terminals die under load** — your commit limit is too low. On Windows, raise the page file to 32–64GB (admin PowerShell):
+```powershell
+$cs = Get-CimInstance Win32_ComputerSystem
+Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile=$false}
+$pf = Get-CimInstance Win32_PageFileSetting -Filter "Name='C:\\pagefile.sys'"
+Set-CimInstance -InputObject $pf -Property @{InitialSize=32768; MaximumSize=65536}
+```
+Also write `%UserProfile%\.wslconfig`:
+```ini
+[wsl2]
+memory=16GB
+swap=16GB
+autoMemoryReclaim=gradual
+sparseVhd=true
+```
+Reboot.
 
-**Database empty after restart** — the SQLite file is at `./dev.db` (project root, not `prisma/`)
+**"credit balance too low"** — add credits at console.anthropic.com → Plans & Billing. Cascade uses ~$3-5/month in normal use.
+
+**No projects found** — check `PROJECTS_DIR` in `.env` points to your projects folder.
+
+**Projects show "not dispatch-ready"** — add a `CLAUDE.md` file to the project root, initialize git, ensure a `package.json` / `Cargo.toml` / `pyproject.toml` exists.
+
+**SQLite database empty after restart** — the file lives at `./dev.db` (project root, not `prisma/`). Check `DATABASE_URL=file:./dev.db` in `.env`.
+
+**Terminal crashes across the board** — could be Windows host running out of committed memory. See "WSL2 terminals die under load" above; the fix is the same.
+
+---
+
+## License
+
+MIT
