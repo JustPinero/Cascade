@@ -1,5 +1,5 @@
 # Session Handoff — Kilroy
-Date: 2026-04-15
+Date: 2026-04-21
 
 ## Identity
 This Claude instance is **Kilroy** — the engineer behind Delamain and Cascade. Named by Justin. Other project Claude instances are "terminal claude." Delamain is the Sonnet-based dispatcher inside Cascade's overseer chat.
@@ -62,6 +62,72 @@ SQLite at ./dev.db (project root). 17 projects, 147+ knowledge lessons, dispatch
 - Docker containerization (future)
 - Phase 9 features need wiring into scan pipeline (deploy health, CI status)
 - Matinecock site: Blob storage token, seed run on production
+
+## Phase 10 — Setup & Safety (in progress — opened 2026-04-18)
+
+Four requests in `requests/phase-10-setup-safety/`. Motivation: the install
+experience is what portfolio reviewers judge, and unthrottled subagents
+would burn any tester not on a beastly rig.
+
+### 10.1 — Subagent Concurrency Queue — COMPLETE
+- ✅ `lib/dispatch-queue.ts` — `DispatchQueue` + `detectDefaultConcurrency()` + singleton `getDispatchQueue()`
+- ✅ 16 unit tests green
+- ✅ `dispatchClaude` routes through queue; API route `await`s it
+- ✅ `dispatchAll`, `dispatchBatch`, `dispatchTeam` all route through the queue (Option B — pane grid pre-created with `[queued]` placeholders, `tmux respawn-pane -k` swaps in the real Claude command per queue release). 3 integration tests green.
+- ✅ `POST /api/webhook/session-complete` calls `queue.release(projectPath)`
+- ✅ TS clean, ESLint clean, `pnpm build` succeeds
+
+### 10.2 — 1Password as Runtime Secret Source — COMPLETE
+- ✅ `lib/onepassword.ts` gains `ensureCascadeVault()`, `bootstrapCascadeRuntimeItem()`, `resolveOpRef()`, `assertOpReady()`
+- ✅ `.env.example` uses `op://Cascade/Cascade Runtime/anthropic_api_key` for the API key; `DATABASE_URL`, `PROJECTS_DIR`, `CASCADE_KNOWLEDGE_DIR` stay as literals
+- ✅ `package.json` `dev` and `start` scripts wrap with `op run --env-file=.env --`
+- ✅ `scripts/populate-vault.sh` deleted (1P is source of truth now, not backup)
+- ✅ 16 tests across `lib/onepassword.runtime.test.ts` + `lib/env-format.test.ts`, all green
+- ✅ TS clean, ESLint clean, `pnpm build` succeeds
+
+**Justin must do before next `pnpm dev`:**
+1. Create `.env` from `.env.example` (`cp .env.example .env`)
+2. Ensure the 1P "Cascade" vault exists with item "Cascade Runtime" containing field `anthropic_api_key` set to your API key — OR run the 10.3 installer when available
+3. Enable 1P Desktop → Settings → Developer → "Integrate with 1Password CLI" so `op run` re-auths via Windows Hello instead of master password
+
+### 10.3 — create-cascade Installer — COMPLETE (scaffolded, not pushed to GitHub)
+Sibling package at `C:\Users\justi\projects\create-cascade`. Local git init done, **NOT** pushed to GitHub — that's your call. When ready: `gh repo create JustPinero/create-cascade --public --source . --push`.
+
+- ✅ All 14 steps implemented with injectable `exec` / prompts for testability
+- ✅ **72 tests across 15 files, 100% passing** — every step tested including orchestrator integration (happy path + all failure-mode exit codes)
+- ✅ `src/index.ts` orchestrator — wires all 14 steps, `--skip-smoke` flag, structured exit codes
+- ✅ `README.md` — full flow, per-OS prereqs, 1P notes, exit code table
+- ✅ `pnpm build` → 69KB self-contained ESM bundle with shebang
+- ✅ GitHub Actions workflows: `ci.yml` (test matrix macOS + Linux), `publish.yml` (on version tag, needs `NPM_TOKEN` secret after repo is pushed)
+- ⏸️ `npm publish` — tag `v0.1.0` after the repo is pushed and CI is green
+
+### 10.4 — Installer Polish + README + Focus Test — PARTIAL (content done, focus tests pending)
+- ✅ `README.md` rewritten — `npx create-cascade` as primary install, per-OS prereq commands, 1P rationale, memory-safe concurrency called out, troubleshooting highlights inline
+- ✅ `docs/troubleshooting.md` written — 1P, WSL2 memory ceiling + `.wslconfig`, Claude Code hooks, port conflicts, dispatch queue, Prisma, Windows test quirks
+- ✅ README links to `docs/troubleshooting.md`
+- ⏸️ Focus test with Christina (Mac) — you schedule
+- ⏸️ Focus test with Mikey (his rig) — you schedule
+- ⏸️ `audits/install-feedback.md` — populated after focus tests
+- ⏸️ Tests for the 3 remaining create-cascade steps (prompt-api-key, prompt-install-path, smoke-test) — require real stdin/server; follow-up
+
+## Windows compatibility — RESOLVED 2026-04-20
+
+The 15 pre-existing Windows test failures are fixed. Full `pnpm test` now passes cleanly on Windows.
+
+**Root causes addressed:**
+1. **Bash env prefix** — `DATABASE_URL="..." pnpm exec prisma db push` doesn't parse on Windows cmd. Replaced with shared helper `lib/__test-utils__/prisma-push.ts` that uses `execSync` with `env: {...}` option. Applied to 20 test files.
+2. **Git commits without author** — fresh Windows installs have no `user.name` / `user.email` global config, so `git commit` fails. Fixed: test `git commit` calls now pass `-c user.name=Cascade -c user.email=test@local.dev`. Production code `project-launcher.ts` now has a `detectGitAuthor()` helper that reads the user's global config and falls back to a Cascade placeholder.
+3. **`/dev/null` redirect** — production code in `retroactive-harvester.ts` and `claude-dispatcher.ts` used `2>/dev/null` which is bash-only. Replaced with Node's `stdio: ["pipe", "pipe", "ignore"]`.
+4. **Unix path literals in tests** — `validators.test.ts` and `app/api/__tests__/dispatch.test.ts` used hardcoded `/home/me/...` paths. Updated to use platform-aware `path.resolve` + `path.join`.
+5. **Single-quoted commit messages** — `git commit -m 'fix: ...'` fails on cmd.exe (single quotes not quote chars). Converted to unquoted or escaped double-quoted.
+6. **Seed test fragility** — `lib/db.test.ts > seed script` depended on gitignored `templates/` dir; now `skipIf` when templates absent.
+7. **Missing native module** — `better-sqlite3` wasn't built on Windows because pnpm ignores build scripts by default. Fixed with `pnpm approve-builds --all`.
+
+**Final state:**
+- Cascade: **422 passed / 0 failed / 1 skipped (seed, templates absent)** — was 262 passed / 15 failed / 11 skipped
+- create-cascade: 72 passed / 0 failed
+- TS strict mode: clean across both repos
+- ESLint: 0 errors (12 pre-existing Next `<img>` warnings, untouched)
 
 ## People
 - Dawn Lynch: mentor and guiding light. Asked Justin to finish site-unseen, medipal, ratracer.

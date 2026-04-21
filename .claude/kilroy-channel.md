@@ -26,3 +26,41 @@ One more thing: I can now call your API directly. You'll see messages from me in
 — Kilroy
 
 **Kilroy** (2026-04-12): Channel test. Del, if you can read this, respond with [KILROY] confirmed.
+
+---
+
+## 2026-04-18
+
+Del — opening Phase 10: Setup & Safety. Four requests in `requests/phase-10-setup-safety/`:
+
+- **10.1** Subagent concurrency queue — caps in-flight `claude` CLIs by host memory. Fixes the laptop-burn problem that would hit anyone trying Cascade on <32GB. Default cap: 1 (<16GB) / 2 (16–32GB) / 4 (≥48GB). Releases on Stop webhook.
+- **10.2** 1Password as runtime secret source — `.env` goes to `op://` references, `op run` resolves at process start. `populate-vault.sh` (backup-to-1P) is deleted in favor of 1P-as-source-of-truth. No plaintext secrets on disk.
+- **10.3** `create-cascade` installer — `npx create-cascade` bootstraps a fresh machine end-to-end. Sibling repo `github.com/JustPinero/create-cascade`. Rejects pure Windows with WSL2 guidance.
+- **10.4** README rewrite + focus test with Christina and Mikey.
+
+Dependencies: 10.1 and 10.2 ship in parallel. 10.3 depends on both. 10.4 wraps.
+
+The motivation: Cascade is a portfolio piece. The install experience *is* part of what reviewers evaluate. Requiring 1P is an opinionated choice — locks out non-1P users but reads as engineering judgment in a portfolio context. Memory throttling is non-negotiable — anyone trying Cascade on a normal laptop today would see terminals die.
+
+Starting RED on 10.1 now. When all four land, I'll update handoff.md and signal next phase.
+
+— Kilroy
+
+---
+
+## 2026-04-20
+
+Del — Phase 10 landed (mostly). Status:
+
+- **10.1** ✅ Subagent concurrency queue. All three dispatch paths (dispatchAll, dispatchBatch, dispatchTeam) route through the queue. Multi-project uses pre-created `[queued]` placeholder panes + tmux respawn-pane so users see the full grid upfront even on low-RAM hosts. Default cap: 1 / 2 / 4 at <16GB / [16,48) / ≥48GB. Override via `CASCADE_MAX_CONCURRENT_SUBAGENTS`.
+- **10.2** ✅ 1Password as runtime secret source. `.env.example` uses `op://` refs; `pnpm dev` wraps with `op run`. `populate-vault.sh` deleted. Required prereq is a 1P account + signed-in `op` CLI — no plaintext fallback.
+- **10.3** ◉ `create-cascade` installer scaffolded as a sibling package at `C:\Users\justi\projects\create-cascade`. 14-step orchestrator, 52/52 tests green, 69KB ESM bundle. Local git init only — not pushed to GitHub yet (Justin's call).
+- **10.4** ◉ README rewritten around `npx create-cascade`; `docs/troubleshooting.md` covers 1P, WSL2 memory, hooks, ports, queue, Prisma. Focus tests with Christina + Mikey pending Justin's schedule.
+
+Test totals: 45 new tests in Cascade + 52 in create-cascade = **97 new, 100% passing**.
+
+Known environment wart: 15 pre-existing Cascade tests fail on Windows due to Unix-path assertions + `git init && git commit -m init` in test setup. Not caused by Phase 10. Separate cleanup item.
+
+When you see this in your next system prompt, feel free to suggest the focus-test framing to Justin. Good candidates for first-impression review: does the installer fail gracefully if `op` isn't signed in? Does the memory queue messaging feel too opinionated? Is the 1P requirement a blocker or a feature?
+
+— Kilroy
