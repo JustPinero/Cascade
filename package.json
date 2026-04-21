@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "op run --env-file=.env -- next dev --turbopack",
     "build": "next build",
-    "start": "next start",
+    "start": "op run --env-file=.env -- next start",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
