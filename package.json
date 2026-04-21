@@ -19,6 +19,9 @@
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3", "esbuild", "sharp"]
+  },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.6.0",
     "@prisma/client": "^7.6.0",
