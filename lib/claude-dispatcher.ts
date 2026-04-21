@@ -7,6 +7,7 @@ import { PrismaClient } from "@/app/generated/prisma/client";
 import { isInsideProjectsDir } from "./validators";
 import { readIfExists } from "./file-utils";
 import { detectPlatform } from "./platform";
+import { getDispatchQueue } from "./dispatch-queue";
 
 export type DispatchMode = "continue" | "audit" | "investigate" | "custom";
 
@@ -180,8 +181,8 @@ const PANES_PER_WINDOW = 6; // 3x2 grid
  */
 function killTmuxSession(): void {
   try {
-    execSync(`tmux kill-session -t ${TMUX_SESSION} 2>/dev/null`, {
-      stdio: "pipe",
+    execSync(`tmux kill-session -t ${TMUX_SESSION}`, {
+      stdio: ["pipe", "pipe", "ignore"],
     });
   } catch {
     // Session didn't exist
@@ -268,10 +269,10 @@ function attachTmuxSession(sessionName: string): void {
  * Launch Claude Code in a single terminal for one project.
  * Used for single-project dispatch from the project detail page.
  */
-export function dispatchClaude(
+export async function dispatchClaude(
   projectPath: string,
   prompt: string
-): { success: boolean; error: string | null } {
+): Promise<{ success: boolean; error: string | null }> {
   if (!isInsideProjectsDir(projectPath)) {
     return { success: false, error: "Invalid project path" };
   }
@@ -283,7 +284,11 @@ export function dispatchClaude(
     const escapedPath = projectPath.replace(/'/g, "'\\''");
     const cmd = `cd '${escapedPath}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
 
-    launchInTerminal(cmd);
+    const queue = getDispatchQueue();
+    await queue.enqueue({
+      id: projectPath,
+      dispatch: () => launchInTerminal(cmd),
+    });
     return { success: true, error: null };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -332,37 +337,99 @@ function configureTmuxSession(): void {
 }
 
 /**
- * Add a pane to the current tmux window.
- *
- * Grid layout logic:
- *   1 pane  → full screen
- *   2 panes → split horizontal (top/bottom)
- *   3 panes → 2 top, 1 bottom
- *   4 panes → 2x2 grid
- *   5 panes → 3 top, 2 bottom
- *   6 panes → 3x2 grid
- *
- * tmux's "tiled" layout handles this automatically when we
- * split and re-tile after each addition.
+ * Build the shell command to run Claude Code for a single project.
+ * Writes the prompt to a temp file and returns a cd + claude invocation
+ * that cleans up after itself.
  */
-function addPaneToWindow(
-  windowTarget: string,
-  cmd: string,
-  projectName: string
-): void {
-  const wrapped = wrapCommand(cmd);
-  // Split the current pane. -t targets the window.
-  execSync(
-    `tmux split-window -t ${windowTarget} '${escapeForTmux(wrapped)}'`,
-    { stdio: "pipe" }
+function buildProjectCmd(projectPath: string, prompt: string, index: number): string {
+  const tmpFile = path.join(
+    os.tmpdir(),
+    `cascade-prompt-${Date.now()}-${index}.txt`
   );
-  // Re-tile all panes in the window for even grid distribution
-  execSync(`tmux select-layout -t ${windowTarget} tiled`, {
-    stdio: "pipe",
-  });
-  // Label the new pane (always the last/active one after split)
+  fsSync.writeFileSync(tmpFile, prompt, "utf-8");
+  const escapedPath = projectPath.replace(/'/g, "'\\''");
+  return `cd '${escapedPath}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
+}
+
+/**
+ * Placeholder shell command for pre-created tmux panes.
+ * Shows a "queued" message and waits at an interactive bash prompt so
+ * tmux can later respawn-pane into the real Claude command.
+ */
+function queuedPlaceholderCmd(projectName: string): string {
+  const safe = projectName.replace(/'/g, "");
+  return `echo '[queued: ${safe}] waiting for concurrency slot'; exec bash -i`;
+}
+
+/**
+ * Create a tmux session pre-populated with one placeholder pane per job.
+ * Returns the tmux pane targets in order so callers can respawn-pane
+ * into the real command when the queue releases each slot.
+ */
+function createPaneGrid(jobNames: string[]): string[] {
+  const targets: string[] = [];
+  let paneCount = 0;
+  let windowCount = 0;
+
+  for (let i = 0; i < jobNames.length; i++) {
+    const name = jobNames[i];
+    const placeholder = queuedPlaceholderCmd(name);
+
+    if (i === 0) {
+      execSync(
+        `tmux new-session -d -s ${TMUX_SESSION} -n "projects-1" '${escapeForTmux(placeholder)}'`,
+        { stdio: "pipe" }
+      );
+      try {
+        configureTmuxSession();
+      } catch {
+        // Styling is non-fatal
+      }
+      windowCount = 1;
+      paneCount = 1;
+      targets.push(`${TMUX_SESSION}:projects-1.0`);
+    } else if (paneCount >= PANES_PER_WINDOW) {
+      windowCount++;
+      execSync(
+        `tmux new-window -t ${TMUX_SESSION} -n "projects-${windowCount}" '${escapeForTmux(placeholder)}'`,
+        { stdio: "pipe" }
+      );
+      paneCount = 1;
+      targets.push(`${TMUX_SESSION}:projects-${windowCount}.0`);
+    } else {
+      const windowTarget = `${TMUX_SESSION}:projects-${windowCount}`;
+      execSync(
+        `tmux split-window -t ${windowTarget} '${escapeForTmux(placeholder)}'`,
+        { stdio: "pipe" }
+      );
+      execSync(`tmux select-layout -t ${windowTarget} tiled`, {
+        stdio: "pipe",
+      });
+      targets.push(`${windowTarget}.${paneCount}`);
+      paneCount++;
+    }
+
+    try {
+      execSync(
+        `tmux select-pane -t ${targets[i]} -T "${name}"`,
+        { stdio: "pipe" }
+      );
+    } catch {
+      // Label failure is non-fatal
+    }
+  }
+
+  return targets;
+}
+
+/**
+ * Replace a pane's placeholder command with the real Claude invocation.
+ * tmux respawn-pane -k kills the current placeholder and execs the new command in place.
+ */
+function launchInPane(target: string, cmd: string): void {
+  const wrapped = wrapCommand(cmd);
   execSync(
-    `tmux select-pane -t ${windowTarget} -T "${projectName}"`,
+    `tmux respawn-pane -k -t ${target} '${escapeForTmux(wrapped)}'`,
     { stdio: "pipe" }
   );
 }
@@ -379,27 +446,18 @@ export async function dispatchAll(
     return { launched: 0, results: [] };
   }
 
-  // Kill any existing session
   killTmuxSession();
 
   const results: DispatchResult[] = [];
-  let paneCount = 0;
-  let windowCount = 0;
-  let launchIndex = 0;
-
-  // First pass: collect all dispatch-ready projects with their commands
-  interface DispatchJob {
+  interface ReadyJob {
     project: typeof projects[0];
     cmd: string;
     prompt: string;
-    tmpFile: string;
   }
-
-  const jobs: DispatchJob[] = [];
+  const readyJobs: ReadyJob[] = [];
 
   for (let i = 0; i < projects.length; i++) {
     const project = projects[i];
-
     const readiness = await checkDispatchReadiness(project.path);
     if (!readiness.ready) {
       results.push({
@@ -416,109 +474,48 @@ export async function dispatchAll(
     }
 
     const prompt = await generatePrompt(project.path, mode);
-    const tmpFile = path.join(
-      os.tmpdir(),
-      `cascade-prompt-${Date.now()}-${i}.txt`
-    );
-    fsSync.writeFileSync(tmpFile, prompt, "utf-8");
-    const escapedPath = project.path.replace(/'/g, "'\\''");
-    const cmd = `cd '${escapedPath}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
-
-    jobs.push({ project, cmd, prompt, tmpFile });
+    const cmd = buildProjectCmd(project.path, prompt, i);
+    readyJobs.push({ project, cmd, prompt });
   }
 
-  if (jobs.length === 0) {
+  if (readyJobs.length === 0) {
     return { launched: 0, results };
   }
 
-  // Second pass: create tmux session and add panes
-  for (const job of jobs) {
-    const { project, cmd, prompt } = job;
-    const windowTarget = `${TMUX_SESSION}:projects-${windowCount || 1}`;
+  const paneTargets = createPaneGrid(readyJobs.map((j) => j.project.name));
+  const queue = getDispatchQueue();
 
-    try {
-      if (launchIndex === 0) {
-        // Create the tmux session with the first project
-        const wrapped = wrapCommand(cmd);
-        execSync(
-          `tmux new-session -d -s ${TMUX_SESSION} -n "projects-1" '${escapeForTmux(wrapped)}'`,
-          { stdio: "pipe" }
-        );
+  for (let i = 0; i < readyJobs.length; i++) {
+    const { project, cmd, prompt } = readyJobs[i];
+    const target = paneTargets[i];
 
-        // Configure pane border styling
-        try {
-          configureTmuxSession();
-        } catch {
-          // Non-fatal — styling is nice-to-have
-        }
+    await queue.enqueue({
+      id: project.path,
+      dispatch: async () => {
+        launchInPane(target, cmd);
+        await prisma.activityEvent.create({
+          data: {
+            projectId: project.id,
+            eventType: "session-launched",
+            summary: `Dispatched: ${mode} mode`,
+            details: JSON.stringify({ mode, promptLength: prompt.length }),
+          },
+        });
+      },
+    });
 
-        // Label the first pane
-        execSync(
-          `tmux select-pane -t ${TMUX_SESSION} -T "${project.name}"`,
-          { stdio: "pipe" }
-        );
-        windowCount = 1;
-        paneCount = 1;
-      } else if (paneCount >= PANES_PER_WINDOW) {
-        // Start a new tmux window for the next group of 6
-        windowCount++;
-        const wrapped = wrapCommand(cmd);
-        execSync(
-          `tmux new-window -t ${TMUX_SESSION} -n "projects-${windowCount}" '${escapeForTmux(wrapped)}'`,
-          { stdio: "pipe" }
-        );
-        execSync(
-          `tmux select-pane -t ${TMUX_SESSION}:projects-${windowCount} -T "${project.name}"`,
-          { stdio: "pipe" }
-        );
-        paneCount = 1;
-      } else {
-        // Add a pane to the current window — tmux tiled layout handles the grid
-        addPaneToWindow(windowTarget, cmd, project.name);
-        paneCount++;
-      }
-
-      // Log the dispatch event
-      await prisma.activityEvent.create({
-        data: {
-          projectId: project.id,
-          eventType: "session-launched",
-          summary: `Dispatched: ${mode} mode`,
-          details: JSON.stringify({ mode, promptLength: prompt.length }),
-        },
-      });
-
-      launchIndex++;
-
-      results.push({
-        success: true,
-        projectName: project.name,
-        projectSlug: project.slug,
-        mode,
-        prompt: prompt.slice(0, 300),
-        ready: true,
-        readyIssues: [],
-        error: null,
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      results.push({
-        success: false,
-        projectName: project.name,
-        projectSlug: project.slug,
-        mode,
-        prompt: prompt.slice(0, 300),
-        ready: true,
-        readyIssues: [],
-        error: message,
-      });
-    }
-
-    // Small delay between pane launches to avoid race conditions
-    await new Promise((r) => setTimeout(r, 500));
+    results.push({
+      success: true,
+      projectName: project.name,
+      projectSlug: project.slug,
+      mode,
+      prompt: prompt.slice(0, 300),
+      ready: true,
+      readyIssues: [],
+      error: null,
+    });
   }
 
-  // Select the first window and first pane so the user starts there
   try {
     execSync(
       `tmux select-window -t ${TMUX_SESSION}:projects-1 && tmux select-pane -t ${TMUX_SESSION}:projects-1.0`,
@@ -528,7 +525,6 @@ export async function dispatchAll(
     // Non-fatal
   }
 
-  // Attach terminal to the tmux session
   attachTmuxSession(TMUX_SESSION);
 
   return {
@@ -556,13 +552,16 @@ export async function dispatchBatch(
     return { launched: 0, results: [] };
   }
 
-  // Kill any existing session
   killTmuxSession();
 
   const results: DispatchResult[] = [];
-  let paneCount = 0;
-  let windowCount = 0;
-  let launchIndex = 0;
+  interface ReadyBatchJob {
+    project: { id: number; name: string; slug: string; path: string };
+    cmd: string;
+    prompt: string;
+    mode: DispatchMode;
+  }
+  const readyJobs: ReadyBatchJob[] = [];
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
@@ -600,96 +599,49 @@ export async function dispatchBatch(
       continue;
     }
 
-    const prompt = await generatePrompt(
-      project.path,
-      item.mode,
-      item.prompt
-    );
-    const tmpFile = path.join(
-      os.tmpdir(),
-      `cascade-prompt-${Date.now()}-${i}.txt`
-    );
-    fsSync.writeFileSync(tmpFile, prompt, "utf-8");
-    const escapedPath = project.path.replace(/'/g, "'\\''");
-    const cmd = `cd '${escapedPath}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
-    const windowTarget = `${TMUX_SESSION}:projects-${windowCount || 1}`;
-
-    try {
-      if (launchIndex === 0) {
-        const wrapped = wrapCommand(cmd);
-        execSync(
-          `tmux new-session -d -s ${TMUX_SESSION} -n "projects-1" '${escapeForTmux(wrapped)}'`,
-          { stdio: "pipe" }
-        );
-        try {
-          configureTmuxSession();
-        } catch {
-          // Non-fatal
-        }
-        execSync(
-          `tmux select-pane -t ${TMUX_SESSION} -T "${project.name}"`,
-          { stdio: "pipe" }
-        );
-        windowCount = 1;
-        paneCount = 1;
-      } else if (paneCount >= PANES_PER_WINDOW) {
-        windowCount++;
-        const wrapped = wrapCommand(cmd);
-        execSync(
-          `tmux new-window -t ${TMUX_SESSION} -n "projects-${windowCount}" '${escapeForTmux(wrapped)}'`,
-          { stdio: "pipe" }
-        );
-        execSync(
-          `tmux select-pane -t ${TMUX_SESSION}:projects-${windowCount} -T "${project.name}"`,
-          { stdio: "pipe" }
-        );
-        paneCount = 1;
-      } else {
-        addPaneToWindow(windowTarget, cmd, project.name);
-        paneCount++;
-      }
-
-      await prisma.activityEvent.create({
-        data: {
-          projectId: project.id,
-          eventType: "session-launched",
-          summary: `Dispatched: ${item.mode} mode`,
-          details: JSON.stringify({
-            mode: item.mode,
-            promptLength: prompt.length,
-          }),
-        },
-      });
-
-      launchIndex++;
-      results.push({
-        success: true,
-        projectName: project.name,
-        projectSlug: project.slug,
-        mode: item.mode,
-        prompt: prompt.slice(0, 300),
-        ready: true,
-        readyIssues: [],
-        error: null,
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      results.push({
-        success: false,
-        projectName: project.name,
-        projectSlug: project.slug,
-        mode: item.mode,
-        prompt: prompt.slice(0, 300),
-        ready: true,
-        readyIssues: [],
-        error: message,
-      });
-    }
-
-    await new Promise((r) => setTimeout(r, 500));
+    const prompt = await generatePrompt(project.path, item.mode, item.prompt);
+    const cmd = buildProjectCmd(project.path, prompt, i);
+    readyJobs.push({ project, cmd, prompt, mode: item.mode });
   }
 
-  // Select first window/pane
+  if (readyJobs.length === 0) {
+    return { launched: 0, results };
+  }
+
+  const paneTargets = createPaneGrid(readyJobs.map((j) => j.project.name));
+  const queue = getDispatchQueue();
+
+  for (let i = 0; i < readyJobs.length; i++) {
+    const { project, cmd, prompt, mode } = readyJobs[i];
+    const target = paneTargets[i];
+
+    await queue.enqueue({
+      id: project.path,
+      dispatch: async () => {
+        launchInPane(target, cmd);
+        await prisma.activityEvent.create({
+          data: {
+            projectId: project.id,
+            eventType: "session-launched",
+            summary: `Dispatched: ${mode} mode`,
+            details: JSON.stringify({ mode, promptLength: prompt.length }),
+          },
+        });
+      },
+    });
+
+    results.push({
+      success: true,
+      projectName: project.name,
+      projectSlug: project.slug,
+      mode,
+      prompt: prompt.slice(0, 300),
+      ready: true,
+      readyIssues: [],
+      error: null,
+    });
+  }
+
   try {
     execSync(
       `tmux select-window -t ${TMUX_SESSION}:projects-1 && tmux select-pane -t ${TMUX_SESSION}:projects-1.0`,
@@ -699,7 +651,6 @@ export async function dispatchBatch(
     // Non-fatal
   }
 
-  // Attach terminal to the tmux session
   attachTmuxSession(TMUX_SESSION);
 
   return {
@@ -795,7 +746,18 @@ Begin by spawning the team.`;
   try {
     const cmd = `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude --teammate-mode tmux "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
 
-    launchInTerminal(cmd, true);
+    // The lead agent holds exactly one queue slot regardless of team size.
+    // Slot id is synthetic since team dispatch does not bind to a single project path.
+    // First project's path gives a usable release key when its Stop hook fires; if no
+    // projects found we fall back to a timestamp id.
+    const firstFound = items.find((it) => it.slug);
+    const leadId = firstFound ? `team:${firstFound.slug}` : `team:${Date.now()}`;
+
+    const queue = getDispatchQueue();
+    await queue.enqueue({
+      id: leadId,
+      dispatch: () => launchInTerminal(cmd, true),
+    });
 
     return { success: true, error: null };
   } catch (err) {
