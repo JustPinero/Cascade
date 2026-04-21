@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import path from "path";
 import {
   isValidSlug,
   isValidGithubUrl,
@@ -6,6 +7,12 @@ import {
   sanitizeForShell,
   isWithinLength,
 } from "./validators";
+
+// Build platform-appropriate paths so assertions hold on both POSIX and Windows.
+const projectsBase = path.resolve(path.sep === "\\" ? "C:/home/me/projects" : "/home/me/projects");
+const insidePath = path.join(projectsBase, "app");
+const traversalPath = path.join(projectsBase, "..", "..", "..", "etc", "passwd");
+const outsidePath = path.resolve(path.sep === "\\" ? "C:/tmp/evil" : "/tmp/evil");
 
 describe("validators", () => {
   describe("isValidSlug", () => {
@@ -48,15 +55,15 @@ describe("validators", () => {
 
   describe("isInsideProjectsDir", () => {
     it("accepts paths inside base", () => {
-      expect(isInsideProjectsDir("/home/me/projects/app", "/home/me/projects")).toBe(true);
+      expect(isInsideProjectsDir(insidePath, projectsBase)).toBe(true);
     });
 
     it("rejects path traversal", () => {
-      expect(isInsideProjectsDir("/home/me/projects/../../../etc/passwd", "/home/me/projects")).toBe(false);
+      expect(isInsideProjectsDir(traversalPath, projectsBase)).toBe(false);
     });
 
     it("rejects paths outside base", () => {
-      expect(isInsideProjectsDir("/tmp/evil", "/home/me/projects")).toBe(false);
+      expect(isInsideProjectsDir(outsidePath, projectsBase)).toBe(false);
     });
   });
 

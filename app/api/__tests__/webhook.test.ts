@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { PrismaClient } from "@/app/generated/prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { execSync } from "child_process";
+import { pushTestSchema } from "@/lib/__test-utils__/prisma-push";
 import fs from "fs";
 import fsp from "fs/promises";
 import path from "path";
@@ -25,10 +26,7 @@ beforeAll(async () => {
 
   const adapter = new PrismaBetterSqlite3({ url: TEST_DB_URL });
   prisma = new PrismaClient({ adapter });
-  execSync(`DATABASE_URL="${TEST_DB_URL}" pnpm exec prisma db push`, {
-    cwd: path.resolve(__dirname, "../../.."),
-    stdio: "pipe",
-  });
+  pushTestSchema(TEST_DB_URL);
 
   // Create a test project directory with git
   const projDir = path.join(TEST_DIR, "Test-Project");
@@ -39,7 +37,7 @@ beforeAll(async () => {
     path.join(projDir, "audits", "debt.md"),
     "# Debt\n\n## Open\n\n## Resolved\n"
   );
-  execSync("git init && git add -A && git commit -m init", {
+  execSync("git init && git add -A && git -c user.name=Cascade -c user.email=test@local.dev commit -m init", {
     cwd: projDir,
     stdio: "pipe",
   });
@@ -115,7 +113,7 @@ describe("session-complete webhook logic", () => {
       path.join(projDir, ".claude", "handoff.md"),
       "# Handoff\n\nAll good. Tests passing.\n"
     );
-    execSync("git add -A && git commit -m 'clean handoff'", {
+    execSync("git add -A && git -c user.name=Cascade -c user.email=test@local.dev commit -m \"clean handoff\"", {
       cwd: projDir,
       stdio: "pipe",
     });

@@ -57,13 +57,13 @@ describe("retroactive-harvester module", () => {
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(path.join(dir, "README.md"), "# Test");
 
-    execSync("git init && git add -A && git commit -m 'init'", {
+    execSync("git init && git add -A && git -c user.name=Cascade -c user.email=test@local.dev commit -m init", {
       cwd: dir,
       stdio: "pipe",
     });
     // Add a fix commit
     await fs.writeFile(path.join(dir, "fix.txt"), "fixed");
-    execSync("git add -A && git commit -m 'fix: resolved auth bug'", {
+    execSync("git add -A && git -c user.name=Cascade -c user.email=test@local.dev commit -m \"fix: resolved auth bug\"", {
       cwd: dir,
       stdio: "pipe",
     });
@@ -104,7 +104,7 @@ describe("retroactive-harvester module", () => {
       "# Debt\n\n## Open\n\n## Resolved\n- Fixed CORS issue\n- Resolved auth token bug\n"
     );
 
-    execSync("git init && git add -A && git commit -m 'fix: initial setup'", {
+    execSync("git init && git add -A && git -c user.name=Cascade -c user.email=test@local.dev commit -m \"fix: initial setup\"", {
       cwd: dir,
       stdio: "pipe",
     });

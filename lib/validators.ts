@@ -36,7 +36,9 @@ export function isInsideProjectsDir(
   targetPath: string,
   baseDir?: string
 ): boolean {
-  const base = baseDir || resolveProjectsDir();
+  // Normalize both sides through path.resolve so POSIX-style literals
+  // compare correctly on Windows (where path.sep is "\\").
+  const base = path.resolve(baseDir || resolveProjectsDir());
   // Resolve symlinks to prevent traversal via symlink
   let resolved: string;
   try {
