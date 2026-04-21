@@ -4,6 +4,7 @@ import { importSingleProject } from "@/lib/project-import";
 import { toSlug } from "@/lib/scanner";
 import { getSessionLogs } from "@/lib/session-reader";
 import { detectEscalations } from "@/lib/escalation-detector";
+import { getDispatchQueue } from "@/lib/dispatch-queue";
 import path from "path";
 
 /**
@@ -25,6 +26,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    getDispatchQueue().release(projectPath);
 
     // Resolve the project slug from the path
     const projectName = path.basename(projectPath);

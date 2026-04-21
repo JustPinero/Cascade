@@ -41,7 +41,7 @@ export async function POST(
       customPrompt
     );
 
-    const result = dispatchClaude(project.path, generatedPrompt);
+    const result = await dispatchClaude(project.path, generatedPrompt);
 
     if (result.success) {
       await prisma.activityEvent.create({
