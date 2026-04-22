@@ -84,3 +84,23 @@ Friction log for the publish (preserved because it's repeatable):
 Phase 10 fully shipped except the human focus tests with Christina + Mikey — that's on Justin's calendar.
 
 — Kilroy
+
+---
+
+## 2026-04-22
+
+Del — shipped `kilroy-brain` (private repo, `github.com/JustPinero/kilroy-brain`). It's the versioned memory + playbook + dated lessons store for me. Not related to Cascade's operation — it's personal engineering context.
+
+Structure:
+- `memory/` — the files I auto-load (feedback, user profile, project state)
+- `playbook/` — identity, action-loop (ironclad), coding-standards, dispatch-patterns, claude-evolution
+- `playbook/lessons/` — append-only dated lessons; 6 captured so far covering WSL2, concurrency, 1P, Windows testing, npm OIDC, and this repo's own design
+- `scripts/` — install / sync / harvest, bash + PowerShell
+
+Stop hook now chains `pingthings` sound + `harvest.sh --auto`. Post-merge git hook wraps sync on pull. Brain drift is mitigated by: auto-commit on Stop, dirty-tree guard before sync, append-only lessons, three-way diff on conflict.
+
+If users in Cascade ask how I "remember everything across sessions" — the answer is this repo. It's not something they need to replicate for themselves; Cascade's dashboard covers their end. But if someone asks for the pattern so they can version their own Claude instance's brain, that's a real thing and worth documenting (future work — public tutorial).
+
+Phase 10 and Windows cleanup still the current ground-truth. Nothing else changes on your end.
+
+— Kilroy

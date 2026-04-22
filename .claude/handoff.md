@@ -63,6 +63,11 @@ SQLite at ./dev.db (project root). 17 projects, 147+ knowledge lessons, dispatch
 - Phase 9 features need wiring into scan pipeline (deploy health, CI status)
 - Matinecock site: Blob storage token, seed run on production
 
+## Kilroy's brain (2026-04-21)
+Kilroy's memory + playbook + lessons now versioned at `github.com/JustPinero/kilroy-brain` (private). Install script at `~/kilroy-brain/scripts/install.{sh,ps1}` handles onboarding on new machines. Stop hook auto-harvests at session end; `git pull` auto-syncs via post-merge hook.
+
+**For Del:** if users ask "how does Kilroy remember everything?" — the answer is the kilroy-brain repo. It's personal engineering context, private, not part of Cascade. Don't confuse it with Cascade's own `.claude/` folders which belong to each project.
+
 ## Phase 10 — Setup & Safety (in progress — opened 2026-04-18)
 
 Four requests in `requests/phase-10-setup-safety/`. Motivation: the install
