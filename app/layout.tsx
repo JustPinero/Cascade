@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import { Sidebar } from "./components/sidebar";
 import { ThemeProvider } from "./components/theme-provider";
+import { OrphanBannerServer } from "./components/orphan-banner-server";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -42,6 +43,7 @@ export default function RootLayout({
         <ThemeProvider>
           <Sidebar />
           <main className="flex-1 min-h-full overflow-auto lg:ml-0 p-6 pt-14 lg:pt-6">
+            <OrphanBannerServer />
             {children}
           </main>
         </ThemeProvider>
