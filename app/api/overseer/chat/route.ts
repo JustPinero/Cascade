@@ -5,6 +5,59 @@ import path from "path";
 import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limiter";
 import { getSessionLogs } from "@/lib/session-reader";
 import { validateMessages } from "@/lib/chat-validation";
+import {
+  isFeatureCheckCommand,
+  runFeatureCheck,
+  renderFeatureCheckReport,
+} from "@/lib/anthropic-feature-check";
+
+/**
+ * Build an SSE-formatted ReadableStream that emits a single static
+ * Markdown payload as one assistant message. Matches the Anthropic
+ * streaming envelope so the existing chat client UX (which expects
+ * SSE) renders this without any client changes.
+ */
+function sseFromText(text: string): ReadableStream<Uint8Array> {
+  const enc = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      const events = [
+        `event: message_start\ndata: ${JSON.stringify({
+          type: "message_start",
+          message: {
+            id: "msg-feature-check",
+            type: "message",
+            role: "assistant",
+            content: [],
+            model: "cascade-feature-check",
+            stop_reason: null,
+            stop_sequence: null,
+            usage: { input_tokens: 0, output_tokens: 0 },
+          },
+        })}\n\n`,
+        `event: content_block_start\ndata: ${JSON.stringify({
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "text", text: "" },
+        })}\n\n`,
+        `event: content_block_delta\ndata: ${JSON.stringify({
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text },
+        })}\n\n`,
+        `event: content_block_stop\ndata: ${JSON.stringify({
+          type: "content_block_stop",
+          index: 0,
+        })}\n\n`,
+        `event: message_stop\ndata: ${JSON.stringify({
+          type: "message_stop",
+        })}\n\n`,
+      ];
+      for (const ev of events) controller.enqueue(enc.encode(ev));
+      controller.close();
+    },
+  });
+}
 
 function formatTimeAgo(date: Date): string {
   const diffMs = Date.now() - new Date(date).getTime();
@@ -325,6 +378,29 @@ export async function POST(request: NextRequest) {
         { error: validation.error },
         { status: 400 }
       );
+    }
+
+    // Phase 11.1 — slash command interception. Runs BEFORE the
+    // Claude call so the existing chat path is untouched.
+    const lastUserMessage = validation.messages
+      .filter((m) => m.role === "user")
+      .at(-1);
+    const lastUserText =
+      typeof lastUserMessage?.content === "string"
+        ? lastUserMessage.content
+        : "";
+    if (isFeatureCheckCommand(lastUserText)) {
+      const report = await runFeatureCheck(prisma, {
+        cascadeRoot: process.cwd(),
+      });
+      const rendered = renderFeatureCheckReport(report);
+      return new Response(sseFromText(rendered), {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      });
     }
 
     const systemPrompt = await buildOverseerSystemPrompt();

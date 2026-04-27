@@ -5,6 +5,7 @@ import { toSlug } from "@/lib/scanner";
 import { getSessionLogs } from "@/lib/session-reader";
 import { detectEscalations } from "@/lib/escalation-detector";
 import { getDispatchQueue } from "@/lib/dispatch-queue";
+import { auditProjectFeatureUsage } from "@/lib/anthropic-feature-check";
 import path from "path";
 
 /**
@@ -131,6 +132,23 @@ export async function POST(request: NextRequest) {
             dispatchedAt: lastDispatch.createdAt,
           },
         });
+      }
+
+      // Phase 11.1 — refresh per-project feature usage ledger.
+      // Best-effort: a failure here MUST NOT fail the webhook.
+      try {
+        await auditProjectFeatureUsage(prisma, project.id);
+      } catch (auditError) {
+        console.error(
+          JSON.stringify({
+            event: "feature_audit_failed",
+            projectId: project.id,
+            error:
+              auditError instanceof Error
+                ? auditError.message
+                : String(auditError),
+          }),
+        );
       }
     }
 

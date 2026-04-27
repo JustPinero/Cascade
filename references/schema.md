@@ -157,3 +157,48 @@ Conditional alerts triggered by project state changes.
 | createdBy | String | "overseer" | overseer or user |
 | createdAt | DateTime | now() | — |
 | triggeredAt | DateTime? | null | — |
+
+## UpstreamFeature (phase 11.1)
+Vendor-agnostic catalog of upstream AI capabilities Cascade tracks.
+Seeded from `knowledge/anthropic-features.md`; new entries can land via
+the harvester (low-confidence) or the slash-command web-fetch path
+(after human review).
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| id | Int | autoincrement | Primary key |
+| vendor | String | "anthropic" | Defaults to anthropic; future "openai" / etc. |
+| name | String | — | Unique per `(vendor, name)` |
+| category | String | — | hook \| skill \| slash-command \| mcp-server \| sub-agent \| agent-team \| settings-flag \| sdk-feature \| api-feature \| memory \| other |
+| description | String | — | 2-3 sentences |
+| integrationRecipe | String | — | Concrete integration steps |
+| source | String | "manual" | "manual" \| URL \| "harvester" |
+| addedBy | String | "manual" | "manual" \| "harvester" \| "fetch" |
+| confidence | Int | 100 | 0-100; harvester defaults low, curated entries 100 |
+| detector | String? | null | Function name in `lib/anthropic-feature-detectors.ts` |
+| discoveredAt | DateTime | now() | — |
+| updatedAt | DateTime | updatedAt | — |
+
+## ProjectFeatureUsage (phase 11.1)
+Per-project ledger: which features are detected as in use. Derived
+from the audit pass on every project filesystem; never hand-maintained.
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| id | Int | autoincrement | Primary key |
+| projectId | Int | — | FK to Project |
+| featureId | Int | — | FK to UpstreamFeature |
+| signal | String | — | Free-form: where the detector matched |
+| detectedAt | DateTime | now() | — |
+
+Unique constraint: `(projectId, featureId)`. Indexed on both FKs.
+
+## CascadeConfig (phase 11.1)
+Single-row configuration table for Cascade-wide state. Always upserted
+on `id = 1`.
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| id | Int | 1 | Single-row enforced |
+| lastSeenClaudeCodeVersion | String? | null | Tracked by `lib/version-watcher.ts` |
+| updatedAt | DateTime | updatedAt | — |
