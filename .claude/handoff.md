@@ -1,11 +1,26 @@
 # Session Handoff — Kilroy
-Date: 2026-04-21 (evening — create-cascade published)
+Date: 2026-04-26 (evening — Windows post-migration repair)
 
 ## Identity
 This Claude instance is **Kilroy** — the engineer behind Delamain and Cascade. Named by Justin. Other project Claude instances are "terminal claude." Delamain is the Sonnet-based dispatcher inside Cascade's overseer chat.
 
 ## Current State
-Cascade is PUBLIC at github.com/JustPinero/Cascade. 389+ tests across 63 files. CI green. All phases 1-9 complete. Preparing for Windows PC migration.
+Cascade is PUBLIC at github.com/JustPinero/Cascade. 389+ tests across 63 files. CI green. All phases 1-9 complete. Phase 10 in progress.
+
+**Active branch:** `phase-10/10.5-migration-repair`
+**Active request:** `requests/phase-10-setup-safety/10.5-migration-repair.md`
+
+## Why this exists (post-migration discovery, 2026-04-26)
+After the Mac→Windows migration on 2026-04-15, every Project row in `dev.db` was pointing at `/Users/justinpinero/Desktop/Projects/...`. 21 rows, all dead. The 1Password integration's `isInsideProjectsDir` check correctly rejected stale paths with 403, surfacing the issue. Manual repair done for `teamistry` (cloned + DB path corrected). Existing `POST /api/projects/scan` then repaired buckets A + B (4 paths updated, `create-cascade` created). 16 orphaned rows remain (bucket C) — projects in DB with no on-disk copy. Request 10.5 builds the engine, CLI, API, and wizard to handle these and prevent recurrence on future migrations.
+
+## Three buckets (see request 10.5)
+- **A.** On disk + in DB → existing scan handles it (DONE)
+- **B.** On disk + not in DB → existing scan creates it (DONE)
+- **C.** In DB + no on-disk copy anywhere → 10.5 adds clone/archive/delete/skip flow (TODO)
+
+## Action loop for next Claude
+Prime → Plan → RED → GREEN → Validate against `requests/phase-10-setup-safety/10.5-migration-repair.md`.
+Tests first. Don't extend the general PATCH allowlist — add a dedicated `/api/projects/repair` endpoint with stricter validation.
 
 ## What Was Built (summary across all sessions)
 
