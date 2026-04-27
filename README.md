@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@justpinero/create-cascade?label=create-cascade&color=0366d6)](https://www.npmjs.com/package/@justpinero/create-cascade)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
-[![Tests](https://img.shields.io/badge/tests-420+-brightgreen)](#)
+[![Tests](https://img.shields.io/badge/tests-428+-brightgreen)](#)
 
 A nerve center for orchestrating multi-project Claude Code workflows. The **Overseer** — your customizable AI fleet dispatcher — manages your projects, learns from every session, and tells you when it needs you.
 
@@ -171,7 +171,7 @@ Projects need `CLAUDE.md` + `.git` + `package.json` (or `Cargo.toml` / `pyprojec
 
 **Dispatch Queue** — process-wide concurrency gate. Every subagent spawn goes through `lib/dispatch-queue.ts`. Default cap auto-detects from host RAM; override via `CASCADE_MAX_CONCURRENT_SUBAGENTS` in `.env`.
 
-**Engineer Channel** — optional. If you run a dedicated Claude Code instance for building Cascade itself, set up a shared channel via `.claude/kilroy-channel.md`. The Overseer reads it on load.
+**Engineer Brain** — optional. A separate Claude Code instance dedicated to building Cascade itself, distinct from the per-project Claude sessions you dispatch into your other repos. Worth giving its own identity because it has a bird's-eye view across all your projects and is the Claude you talk to when working on Cascade's internals or your dispatch service. Justin named his **Kilroy**; pick whatever fits your setup — the goal is just to signal "this Claude has cross-project context, treat it differently." The engineer brain communicates with the Overseer through `.claude/kilroy-channel.md` (gitignored — you create the file locally; the filename references Justin's brain name but you can keep it as-is or edit the path in `app/api/overseer/chat/route.ts` if you'd rather rename). The Overseer reads the channel on load.
 
 **Backburner** — project status for intentionally parked projects. Suppressed from sprint planning.
 
