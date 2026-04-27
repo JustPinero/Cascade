@@ -45,6 +45,7 @@ model Project {
   activityEvents   ActivityEvent[]
   humanTasks       HumanTask[]
   dispatchOutcomes DispatchOutcome[]
+  featureUsages    ProjectFeatureUsage[]
   kickoffTemplate  KickoffTemplate?  @relation(fields: [kickoffTemplateId], references: [id])
 }
 
@@ -149,4 +150,50 @@ model Reminder {
   createdBy      String   @default("delamain") // delamain or user
   createdAt      DateTime @default(now())
   triggeredAt    DateTime?
+}
+
+// Phase 11.1 — Anthropic Feature Update Check
+// Vendor-agnostic catalog of upstream AI capabilities Cascade tracks.
+// Defaults to "anthropic" but the schema allows future vendors.
+model UpstreamFeature {
+  id                 Int                    @id @default(autoincrement())
+  vendor             String                 @default("anthropic")
+  name               String
+  category           String // hook | skill | slash-command | mcp-server | sub-agent | agent-team | settings-flag | sdk-feature | api-feature | memory | other
+  description        String
+  integrationRecipe  String
+  source             String                 @default("manual") // "manual" | URL | "harvester"
+  addedBy            String                 @default("manual") // "manual" | "harvester" | "fetch"
+  confidence         Int                    @default(100) // 0-100
+  detector           String? // function name in lib/anthropic-feature-detectors.ts (null if no detector yet)
+  discoveredAt       DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  usages             ProjectFeatureUsage[]
+
+  @@unique([vendor, name])
+}
+
+// Per-project ledger: which features are detected as in use.
+// Derived from filesystem audit; never hand-maintained.
+model ProjectFeatureUsage {
+  id          Int      @id @default(autoincrement())
+  projectId   Int
+  featureId   Int
+  signal      String // free-form: where the detector matched (e.g. ".claude/settings.json hooks.Stop")
+  detectedAt  DateTime @default(now())
+
+  project Project         @relation(fields: [projectId], references: [id])
+  feature UpstreamFeature @relation(fields: [featureId], references: [id])
+
+  @@unique([projectId, featureId])
+  @@index([projectId])
+  @@index([featureId])
+}
+
+// Single-row config table for Cascade-wide state.
+// First use: track lastSeenClaudeCodeVersion for the version watcher.
+model CascadeConfig {
+  id                         Int       @id @default(1) // single-row enforced by always upserting id=1
+  lastSeenClaudeCodeVersion  String?
+  updatedAt                  DateTime  @updatedAt
 }

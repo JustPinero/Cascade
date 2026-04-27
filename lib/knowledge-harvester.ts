@@ -56,6 +56,44 @@ function extractTaggedLessons(
 }
 
 /**
+ * Extract `[ANTHROPIC]`-tagged feature candidates from session/handoff text.
+ * Phase 11.1 — companion to `[LESSON]`. Returns a list of low-confidence
+ * upstream-feature candidates that the audit can surface for human review.
+ *
+ * Format: `[ANTHROPIC] Feature name: free-form explanation.`
+ * Same as the LESSON tag — the regex shape is reused with a different keyword.
+ */
+export interface AnthropicTagCandidate {
+  name: string;
+  context: string;
+  sourceFile: string;
+}
+
+export function extractAnthropicTags(
+  content: string,
+  sourceFile: string = "",
+): AnthropicTagCandidate[] {
+  const out: AnthropicTagCandidate[] = [];
+  const regex = /\[ANTHROPIC\]\s*(.+?)(?:\n|$)([\s\S]*?)(?=\[ANTHROPIC\]|\[LESSON\]|##|$)/gi;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(content)) !== null) {
+    const titleLine = match[1].trim();
+    const body = match[2].trim();
+    if (!titleLine) continue;
+    const colonIdx = titleLine.indexOf(":");
+    const name =
+      colonIdx > 0 ? titleLine.slice(0, colonIdx).trim() : titleLine;
+    const headContext =
+      colonIdx > 0 ? titleLine.slice(colonIdx + 1).trim() : "";
+    const fullContext = [headContext, body].filter(Boolean).join("\n").trim();
+    if (name) {
+      out.push({ name, context: fullContext || name, sourceFile });
+    }
+  }
+  return out;
+}
+
+/**
  * Extract lessons from course correction reports.
  * Looks for structured findings in correction-*.md files.
  */

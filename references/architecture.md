@@ -58,3 +58,4 @@ Stop hook pipeline:
 7. **Platform-aware dispatch** — detectPlatform() selects osascript (macOS) or tmux-direct (Linux/WSL2) launch method
 8. **Overseer is customizable** — Name, portrait, personality stored in localStorage; defaults to "Overseer"
 9. **Personal data never committed** — Playbook, lessons, sessions, channel, database all gitignored
+10. **Upstream-feature awareness (phase 11.1)** — Cascade keeps a catalog of Claude / Claude Code features (`UpstreamFeature`) and a per-project ledger of which features each project uses (`ProjectFeatureUsage`). The `/anthropic-feature-update-check` slash command in the Overseer chat refreshes both. Catalog seed: `knowledge/anthropic-features.md`. Detectors: `lib/anthropic-feature-detectors.ts`. Audit + discovery: `lib/anthropic-feature-check.ts`. Stop-hook webhook re-audits the affected project after every session. The `[ANTHROPIC]` tag in handoffs is parallel to `[LESSON]` for harvesting candidates from sessions.

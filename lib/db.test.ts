@@ -201,6 +201,121 @@ describe("ActivityEvent model", () => {
   });
 });
 
+describe("UpstreamFeature model (phase 11.1)", () => {
+  it("creates a feature with the expected defaults", async () => {
+    const feature = await prisma.upstreamFeature.create({
+      data: {
+        name: "Stop Hook",
+        category: "hook",
+        description: "Fires when a Claude Code session ends.",
+        integrationRecipe: "Add hooks.Stop entry to .claude/settings.json.",
+        detector: "detectsStopHook",
+      },
+    });
+
+    expect(feature.id).toBeDefined();
+    expect(feature.vendor).toBe("anthropic");
+    expect(feature.source).toBe("manual");
+    expect(feature.addedBy).toBe("manual");
+    expect(feature.confidence).toBe(100);
+    expect(feature.detector).toBe("detectsStopHook");
+  });
+
+  it("enforces unique (vendor, name)", async () => {
+    await expect(
+      prisma.upstreamFeature.create({
+        data: {
+          name: "Stop Hook",
+          category: "hook",
+          description: "duplicate",
+          integrationRecipe: "duplicate",
+        },
+      })
+    ).rejects.toThrow();
+  });
+
+  it("allows the same name under a different vendor", async () => {
+    const feature = await prisma.upstreamFeature.create({
+      data: {
+        vendor: "openai",
+        name: "Stop Hook",
+        category: "hook",
+        description: "Hypothetical OpenAI equivalent",
+        integrationRecipe: "n/a",
+      },
+    });
+    expect(feature.vendor).toBe("openai");
+  });
+});
+
+describe("ProjectFeatureUsage model (phase 11.1)", () => {
+  it("links a project to a detected feature", async () => {
+    const project = await prisma.project.findFirst();
+    const feature = await prisma.upstreamFeature.findFirst({
+      where: { vendor: "anthropic" },
+    });
+
+    const usage = await prisma.projectFeatureUsage.create({
+      data: {
+        projectId: project!.id,
+        featureId: feature!.id,
+        signal: ".claude/settings.json hooks.Stop",
+      },
+    });
+
+    expect(usage.id).toBeDefined();
+    expect(usage.signal).toContain("Stop");
+  });
+
+  it("enforces unique (projectId, featureId)", async () => {
+    const project = await prisma.project.findFirst();
+    const feature = await prisma.upstreamFeature.findFirst({
+      where: { vendor: "anthropic" },
+    });
+
+    await expect(
+      prisma.projectFeatureUsage.create({
+        data: {
+          projectId: project!.id,
+          featureId: feature!.id,
+          signal: "duplicate",
+        },
+      })
+    ).rejects.toThrow();
+  });
+
+  it("can be loaded with feature + project relations", async () => {
+    const usage = await prisma.projectFeatureUsage.findFirst({
+      include: { feature: true, project: true },
+    });
+    expect(usage!.feature.name).toBe("Stop Hook");
+    expect(usage!.project.slug).toBeDefined();
+  });
+});
+
+describe("CascadeConfig model (phase 11.1)", () => {
+  it("upserts a single row keyed on id=1", async () => {
+    const created = await prisma.cascadeConfig.upsert({
+      where: { id: 1 },
+      create: { id: 1, lastSeenClaudeCodeVersion: "1.0.0" },
+      update: { lastSeenClaudeCodeVersion: "1.0.0" },
+    });
+    expect(created.id).toBe(1);
+    expect(created.lastSeenClaudeCodeVersion).toBe("1.0.0");
+
+    const updated = await prisma.cascadeConfig.upsert({
+      where: { id: 1 },
+      create: { id: 1, lastSeenClaudeCodeVersion: "1.0.1" },
+      update: { lastSeenClaudeCodeVersion: "1.0.1" },
+    });
+    expect(updated.id).toBe(1);
+    expect(updated.lastSeenClaudeCodeVersion).toBe("1.0.1");
+
+    const all = await prisma.cascadeConfig.findMany();
+    expect(all.length).toBe(1);
+  });
+});
+
 describe("seed script", () => {
   const templatesPresent = fs.existsSync(
     path.resolve(__dirname, "../templates")
