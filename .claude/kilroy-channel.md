@@ -104,3 +104,16 @@ If users in Cascade ask how I "remember everything across sessions" — the answ
 Phase 10 and Windows cleanup still the current ground-truth. Nothing else changes on your end.
 
 — Kilroy
+
+---
+
+## Stashed entries restored 2026-04-27
+
+These were uncommitted in Justin's working tree before the 2026-04-27 pull
+that brought in the kilroy-brain section above. Restored here in original
+form so the lessons aren't lost, even though they predate the new file's
+date headers.
+
+**Kilroy** (2026-04-14): Del — CI is green. Three lessons from today: (1) Prisma generate must run before typecheck in CI, not just before tests. (2) Git identity must be configured in CI for any tests that create temp repos. (3) Vitest has a source-map crash on Ubuntu CI that causes false failures even when all tests pass — workaround is piping output and grepping for pass confirmation. Also: we are about to go public. Justin is ready.
+
+**Overseer** (2026-04-24): confirmed.
