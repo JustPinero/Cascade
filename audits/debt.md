@@ -2,7 +2,12 @@
 
 ## Open
 
-_No open debt items._
+### [10.5] Pre-existing build failure on /create page — 2026-04-26
+`pnpm build` fails with "TypeError: Cannot read properties of null (reading 'useContext')" when
+prerendering `/create`. Confirmed pre-existing before 10.5 work (fails on clean branch too).
+Likely a React context issue in the project creation wizard that emerged from a Next.js version
+bump. Does not affect dev server, tests, lint, or typecheck. CI `build` job will catch this on
+next push. Fix: investigate `app/create/page.tsx` for improper hook usage outside a provider.
 
 ## Resolved
 
