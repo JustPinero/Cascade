@@ -118,12 +118,36 @@ model DispatchOutcome {
   project Project @relation(fields: [projectId], references: [id])
 }
 
+// Phase 12A.1 — ChatSession owns conversation state.
+// workingMemory is the structured session-scoped JSON document that
+// the Overseer reads and writes via tools (replaces the prior
+// "stuff-everything-in-the-system-prompt" pattern).
+model ChatSession {
+  id            String        @id @default(cuid())
+  startedAt     DateTime      @default(now())
+  closedAt      DateTime?
+  activeFlow    String?       // "inventory_walk" | "dispatch_planning" | "incident_triage" | null
+  workingMemory String        @default("{}") // JSON string
+
+  messages      ChatMessage[]
+
+  @@index([startedAt])
+  @@index([closedAt])
+}
+
 model ChatMessage {
-  id          Int      @id @default(autoincrement())
+  id          Int          @id @default(autoincrement())
   role        String // user | assistant
   content     String
   sessionDate String // YYYY-MM-DD, groups conversations by day
-  createdAt   DateTime @default(now())
+  sessionId   String?      // Phase 12A.1 — links to ChatSession; optional during transition
+  toolCalls   String?      // Phase 12A.1 — JSON string of structured tool invocations
+  createdAt   DateTime     @default(now())
+
+  session     ChatSession? @relation(fields: [sessionId], references: [id])
+
+  @@index([sessionId])
+  @@index([sessionDate])
 }
 
 model HumanTask {
