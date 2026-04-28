@@ -16,6 +16,23 @@ import {
   proposeForAll,
   renderProposalReport,
 } from "@/lib/anthropic-feature-proposer";
+import {
+  runToolUseLoop,
+  defaultAnthropicCaller,
+  type ToolContext,
+} from "@/lib/overseer-tools";
+import { buildDefaultRegistry } from "@/lib/overseer-tools-registry-default";
+
+/**
+ * Phase 12A.3 — system prompt for the tool-use path. Kept short and
+ * stable so it caches cleanly. Project state is fetched on demand
+ * via tools, never embedded in the prompt.
+ */
+const TOOL_PATH_SYSTEM_PROMPT = `You are the Overseer (also called Delamain) — the AI project manager inside Cascade. Calm, precise, efficient, like a vehicle dispatcher running a fleet.
+
+When the developer asks about a project, call the query_project tool to read its current state. Do not invent project information from memory — if you need a fact you don't have, use a tool. If a tool returns found: false, tell the developer plainly that the project isn't in the registry.
+
+Speak in first person. Be concise — this is a standup, not a meeting. After answering, stop talking and let the developer drive.`;
 
 /**
  * Build an SSE-formatted ReadableStream that emits a single static
@@ -384,6 +401,42 @@ export async function POST(request: NextRequest) {
         { error: validation.error },
         { status: 400 }
       );
+    }
+
+    // Phase 12A.3 — opt-in tool-use path. Bypasses the legacy
+    // SP-injection flow when the request explicitly asks for it.
+    // Default behavior is unchanged.
+    if (body.useTools === true) {
+      const registry = buildDefaultRegistry();
+      const ctx: ToolContext = { prisma };
+      const systemPrompt = TOOL_PATH_SYSTEM_PROMPT;
+
+      const result = await runToolUseLoop({
+        caller: defaultAnthropicCaller(apiKey),
+        model: "claude-sonnet-4-6",
+        systemPrompt,
+        messages: validation.messages.map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: typeof m.content === "string" ? m.content : "",
+        })),
+        registry,
+        ctx,
+        maxIterations: 8,
+      });
+
+      const final =
+        result.finalText ||
+        (result.truncated
+          ? "I hit my tool-use iteration limit before reaching a final answer. Try narrowing the question."
+          : "");
+
+      return new Response(sseFromText(final), {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      });
     }
 
     // Phase 11.1 — slash command interception. Runs BEFORE the
