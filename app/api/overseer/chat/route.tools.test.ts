@@ -122,7 +122,7 @@ function textResponse(text: string) {
   };
 }
 
-describe("POST /api/overseer/chat — tool-use path (useTools: true)", () => {
+describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () => {
   it("runs query_project and returns final text via SSE", async () => {
     mockCaller
       .mockResolvedValueOnce(
@@ -150,7 +150,7 @@ describe("POST /api/overseer/chat — tool-use path (useTools: true)", () => {
     expect(mockCaller).toHaveBeenCalledTimes(2);
   });
 
-  it("forwards a tool-using system prompt that mentions tools", async () => {
+  it("forwards a tool-using system prompt that mentions tools and advertises the full registry", async () => {
     mockCaller.mockResolvedValueOnce(textResponse("ok"));
 
     const { POST } = await import("@/app/api/overseer/chat/route");
@@ -163,29 +163,36 @@ describe("POST /api/overseer/chat — tool-use path (useTools: true)", () => {
 
     expect(mockCaller).toHaveBeenCalledTimes(1);
     const params = mockCaller.mock.calls[0][0];
-    expect(params.system.length).toBeLessThanOrEqual(1500);
     expect(params.system.toLowerCase()).toContain("tool");
-    // query_project must be advertised to the model
-    const toolNames = params.tools.map((t: { name: string }) => t.name);
-    expect(toolNames).toContain("query_project");
+
+    // After 12B the registry advertises 8 read tools. Assert the key
+    // ones are present so the model has the full read surface.
+    const toolNames: string[] = params.tools.map((t: { name: string }) => t.name);
+    for (const name of [
+      "query_project",
+      "query_projects",
+      "get_recent_activity",
+      "get_session_logs",
+      "get_dispatch_outcomes",
+      "get_yesterday_summary",
+      "get_engineer_messages",
+      "get_playbook",
+    ]) {
+      expect(toolNames).toContain(name);
+    }
   });
 
-  it("does NOT run the tool-use loop when useTools is unset", async () => {
+  it("DOES run the tool-use loop when useTools is unset (default after 12B.3)", async () => {
+    mockCaller.mockResolvedValueOnce(textResponse("ok"));
+
     const { POST } = await import("@/app/api/overseer/chat/route");
-    // We don't mock global fetch — the legacy path will try to call it.
-    // We don't care if that fails; we just need to assert that the
-    // tool-path mock caller was NEVER called.
-    try {
-      await POST(
-        makeRequest({
-          messages: [{ role: "user", content: "Plain chat." }],
-        })
-      );
-    } catch {
-      // Legacy path may fail in test env — fine; we're asserting the
-      // tool path didn't run.
-    }
-    expect(mockCaller).not.toHaveBeenCalled();
+    await POST(
+      makeRequest({
+        messages: [{ role: "user", content: "Plain chat." }],
+      })
+    );
+
+    expect(mockCaller).toHaveBeenCalledTimes(1);
   });
 
   it("does NOT run the tool-use loop when useTools is false", async () => {

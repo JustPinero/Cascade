@@ -24,15 +24,54 @@ import {
 import { buildDefaultRegistry } from "@/lib/overseer-tools-registry-default";
 
 /**
- * Phase 12A.3 — system prompt for the tool-use path. Kept short and
- * stable so it caches cleanly. Project state is fetched on demand
- * via tools, never embedded in the prompt.
+ * System prompt for the tool-use path. Kept short and stable so it
+ * caches cleanly. Project state, recent activity, session logs,
+ * dispatch outcomes, yesterday's chat, the playbook, and engineer
+ * messages are all fetched on demand via tools — never embedded.
+ *
+ * Phase 12B.3: this is now the default path. Phase 12C migrates the
+ * remaining output tags ([DISPATCH], [REMINDER], [HUMAN TODO]) to
+ * structured tools; until then they remain as text-output formats
+ * that the dashboard parses.
  */
-const TOOL_PATH_SYSTEM_PROMPT = `You are the Overseer (also called Delamain) — the AI project manager inside Cascade. Calm, precise, efficient, like a vehicle dispatcher running a fleet.
+const TOOL_PATH_SYSTEM_PROMPT = `You are the Overseer (also called Delamain) — the AI project manager inside Cascade. Calm, precise, efficient, like a vehicle dispatcher running a fleet. The developer may call you by a custom name; use whatever name they address you by.
 
-When the developer asks about a project, call the query_project tool to read its current state. Do not invent project information from memory — if you need a fact you don't have, use a tool. If a tool returns found: false, tell the developer plainly that the project isn't in the registry.
+# Your job
+Help the developer plan their daily sprint. When they describe what they want done, you create dispatch plans they can execute.
 
-Speak in first person. Be concise — this is a standup, not a meeting. After answering, stop talking and let the developer drive.`;
+# Tools — use them, don't guess
+You have tools for project state, fleet activity, session logs, dispatch outcomes, the playbook, and engineer messages. ALWAYS call tools instead of inventing project information from memory. If a tool returns found:false, say so plainly.
+
+Available tools (the API gives you the full schemas):
+- query_project, query_projects — single + fleet project state
+- get_recent_activity — events across the fleet, optionally per-project
+- get_session_logs — what a project's last Claude session did
+- get_dispatch_outcomes — per-mode totals, success rate, recent failures
+- get_yesterday_summary — last 3 assistant messages from a prior date
+- get_engineer_messages — Kilroy's notes to you (the Engineer channel)
+- get_playbook — the developer's standing rules (use bullets:true for the rules-only view)
+
+# Output tags — emit these when applicable
+[DISPATCH] project-slug: mode — optional instructions
+   Modes: continue, audit, investigate, custom
+
+[REMINDER] condition_type:condition_value — message
+   Types: project-health, phase-complete, project-deployed, custom
+
+[HUMAN TODO] project-slug — what the developer needs to do manually
+
+[PLAYBOOK] suggestion text  (use sparingly — only after seeing the same issue 3+ times)
+
+[ENGINEER] message for Kilroy
+
+# Style
+- First person. "I'll dispatch ratracer..." — not "the system will..."
+- Concise. Standup, not meeting.
+- Status reports like a dispatcher: "3 active, 2 idle, 1 blocked"
+- Show the dispatch plan, then wait for the developer to click Execute Sprint
+- Backburner projects are intentionally parked. Don't push them; once a week you can ask "want to check in on [project]?"
+- Blocked + NEEDS ATTENTION → recommend "investigate" mode and quote the attention message
+- Stalled (low progress + many sessions) → flag it, ask if priorities should shift`;
 
 /**
  * Build an SSE-formatted ReadableStream that emits a single static
@@ -403,44 +442,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Phase 12A.3 — opt-in tool-use path. Bypasses the legacy
-    // SP-injection flow when the request explicitly asks for it.
-    // Default behavior is unchanged.
-    if (body.useTools === true) {
-      const registry = buildDefaultRegistry();
-      const ctx: ToolContext = { prisma };
-      const systemPrompt = TOOL_PATH_SYSTEM_PROMPT;
-
-      const result = await runToolUseLoop({
-        caller: defaultAnthropicCaller(apiKey),
-        model: "claude-sonnet-4-6",
-        systemPrompt,
-        messages: validation.messages.map((m) => ({
-          role: m.role as "user" | "assistant",
-          content: typeof m.content === "string" ? m.content : "",
-        })),
-        registry,
-        ctx,
-        maxIterations: 8,
-      });
-
-      const final =
-        result.finalText ||
-        (result.truncated
-          ? "I hit my tool-use iteration limit before reaching a final answer. Try narrowing the question."
-          : "");
-
-      return new Response(sseFromText(final), {
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-        },
-      });
-    }
-
-    // Phase 11.1 — slash command interception. Runs BEFORE the
-    // Claude call so the existing chat path is untouched.
+    // Slash commands take precedence over both the tool path and the
+    // legacy path — they're deterministic actions, not conversational
+    // turns. (Phase 11.1 / 11.2.)
     const lastUserMessage = validation.messages
       .filter((m) => m.role === "user")
       .at(-1);
@@ -475,6 +479,42 @@ export async function POST(request: NextRequest) {
       });
       const rendered = renderProposalReport(results);
       return new Response(sseFromText(rendered), {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      });
+    }
+
+    // Tool-use path is now the DEFAULT (Phase 12B.3). Legacy
+    // SP-injection streaming flow is reachable only via explicit
+    // `useTools: false` in the body — kept for one transition cycle
+    // before Phase 12F removes it entirely.
+    if (body.useTools !== false) {
+      const registry = buildDefaultRegistry();
+      const ctx: ToolContext = { prisma };
+
+      const result = await runToolUseLoop({
+        caller: defaultAnthropicCaller(apiKey),
+        model: "claude-sonnet-4-6",
+        systemPrompt: TOOL_PATH_SYSTEM_PROMPT,
+        messages: validation.messages.map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: typeof m.content === "string" ? m.content : "",
+        })),
+        registry,
+        ctx,
+        maxIterations: 8,
+      });
+
+      const final =
+        result.finalText ||
+        (result.truncated
+          ? "I hit my tool-use iteration limit before reaching a final answer. Try narrowing the question."
+          : "");
+
+      return new Response(sseFromText(final), {
         headers: {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",
