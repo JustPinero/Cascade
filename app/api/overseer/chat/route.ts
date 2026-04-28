@@ -10,6 +10,12 @@ import {
   runFeatureCheck,
   renderFeatureCheckReport,
 } from "@/lib/anthropic-feature-check";
+import {
+  isFeatureProposeCommand,
+  parseFeatureProposeArgs,
+  proposeForAll,
+  renderProposalReport,
+} from "@/lib/anthropic-feature-proposer";
 
 /**
  * Build an SSE-formatted ReadableStream that emits a single static
@@ -394,6 +400,27 @@ export async function POST(request: NextRequest) {
         cascadeRoot: process.cwd(),
       });
       const rendered = renderFeatureCheckReport(report);
+      return new Response(sseFromText(rendered), {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      });
+    }
+
+    // Phase 11.2 — proposer slash command.
+    // /anthropic-feature-propose [<slug>...]
+    // Generates per-project Claude-drafted integration diffs for
+    // every detected feature gap. Cap is 5 features per project per
+    // call (cost control); slugs filter the audit to specific
+    // projects.
+    if (isFeatureProposeCommand(lastUserText)) {
+      const { projectSlugs } = parseFeatureProposeArgs(lastUserText);
+      const results = await proposeForAll(prisma, {
+        projectSlugs: projectSlugs.length > 0 ? projectSlugs : undefined,
+      });
+      const rendered = renderProposalReport(results);
       return new Response(sseFromText(rendered), {
         headers: {
           "Content-Type": "text/event-stream",
