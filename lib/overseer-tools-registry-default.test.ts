@@ -2,16 +2,24 @@ import { describe, it, expect } from "vitest";
 import { buildDefaultRegistry } from "@/lib/overseer-tools-registry-default";
 
 describe("buildDefaultRegistry", () => {
-  it("returns a registry with query_project registered", () => {
+  it("registers all expected tools", () => {
     const reg = buildDefaultRegistry();
-    expect(reg.has("query_project")).toBe(true);
+    const expected = [
+      "query_project",
+      "query_projects",
+      "get_recent_activity",
+      "get_session_logs",
+      "get_dispatch_outcomes",
+    ];
+    for (const name of expected) {
+      expect(reg.has(name)).toBe(true);
+    }
   });
 
   it("builds a fresh registry each call (no shared mutable state)", () => {
     const a = buildDefaultRegistry();
     const b = buildDefaultRegistry();
     expect(a).not.toBe(b);
-    // both have the same tool, but they are independent registries
     expect(a.list().length).toBe(b.list().length);
   });
 
@@ -21,5 +29,12 @@ describe("buildDefaultRegistry", () => {
     const queryDef = defs.find((d) => d.name === "query_project");
     expect(queryDef).toBeDefined();
     expect(queryDef?.input_schema).toBeDefined();
+  });
+
+  it("every registered tool has a non-empty description", () => {
+    const reg = buildDefaultRegistry();
+    for (const tool of reg.list()) {
+      expect(tool.description.length).toBeGreaterThan(20);
+    }
   });
 });
