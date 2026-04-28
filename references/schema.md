@@ -132,16 +132,38 @@ Tracks what the Overseer recommended vs what actually happened.
 
 **Relations:** project
 
+## ChatSession
+Phase 12A.1. First-class container for conversation state. The
+`workingMemory` JSON document is the canonical session-scoped store
+that the Overseer reads and writes via tools (replaces the prior
+"stuff-everything-in-the-system-prompt" pattern).
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| id | String | cuid() | Primary key |
+| startedAt | DateTime | now() | UTC midnight for backfilled rows; real timestamp for newly created rows |
+| closedAt | DateTime? | null | Set when the session ends; writes to a closed session throw |
+| activeFlow | String? | null | "inventory_walk", "dispatch_planning", "incident_triage", or null |
+| workingMemory | String | "{}" | JSON document; deep-merged via `mergeWorkingMemory` |
+
+**Relations:** messages (1:N → ChatMessage)
+**Indexes:** startedAt, closedAt
+
 ## ChatMessage
-Overseer conversation history, grouped by date.
+Overseer conversation history, grouped by date and (going forward) by ChatSession.
 
 | Field | Type | Default | Notes |
 |-------|------|---------|-------|
 | id | Int | autoincrement | Primary key |
 | role | String | — | user, assistant |
 | content | String | — | Message content |
-| sessionDate | String | — | YYYY-MM-DD grouping key |
+| sessionDate | String | — | YYYY-MM-DD grouping key (legacy, kept for backfill compatibility) |
+| sessionId | String? | null | Phase 12A.1 — links to ChatSession; backfill via scripts/backfill-chat-sessions.ts |
+| toolCalls | String? | null | Phase 12A.1 — JSON string of structured tool invocations on assistant turns |
 | createdAt | DateTime | now() | — |
+
+**Relations:** session (N:1 → ChatSession, optional during transition)
+**Indexes:** sessionId, sessionDate
 
 ## Reminder
 Conditional alerts triggered by project state changes.

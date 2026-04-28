@@ -1,15 +1,127 @@
 # Session Handoff — Kilroy
-Date: 2026-04-27 (afternoon — phase 11.1 done, awaiting your review)
+Date: 2026-04-28 (Phase 12A done locally on `phase-12-overseer-tools` branch)
 
 ## Identity
 This Claude instance is **Kilroy** — the engineer behind Delamain and Cascade. Other Claude instances dispatched into managed projects are "terminal claude." Delamain is the Sonnet-based dispatcher inside Cascade's Overseer chat.
 
 ## Current State
-Phase 11.1 implementation is done locally. **Justin asked to review before push** — nothing has been committed or pushed yet.
+Phase 12A (Overseer tool-use migration foundation) is complete on
+branch `phase-12-overseer-tools`. Three commits, ready for review.
 
-- `validate.sh` passes end-to-end: env, lint, typecheck, **511/511 tests** (was 428 — added 83), build.
-- Working tree is dirty with the phase 11.1 changes; ready for review.
-- The Cascade dev server still running on PID 13187 was started before the schema change. After review, the user will likely want to restart so the new Prisma client and slash command load.
+- **613 tests passing** (was 548 at branch start — added 65 across 5 new files).
+- Lint + tsc + full vitest suite all green.
+- Existing Overseer chat behavior is **unchanged** — the new tool path
+  is opt-in only (request body `useTools: true`).
+- `prisma/dev.db` has been pushed with the new schema. If the dev
+  server is running, restart it so the regenerated Prisma client loads.
+
+## Background — what we're solving
+
+Delamain was losing conversational context mid-session during sprint /
+inventory flows. Diagnosis (grounded in code): the system prompt is
+~6K tokens of dense per-turn DB-derived state that competes with
+conversation history for attention. Confirmed answers from the user
+land only in raw conversation prose — there's no structured place for
+them to live, and the next turn's SP overrides them with stale DB
+values.
+
+Decision (the architectural fix, not a quick patch): migrate the
+Overseer from prompt-injection-everything + parse-tags-from-prose to
+a tool-using agent backed by structured session state. Phase 12A
+ships the foundation; Phases B/C/D/E/F follow.
+
+## What Was Built — Phase 12A: Overseer tool-use foundation
+
+### 12A.1 — ChatSession schema (`feat(phase-12.1)`)
+- `ChatSession` Prisma model with `workingMemory` JSON column,
+  `activeFlow`, `closedAt`, indexed on `startedAt` and `closedAt`.
+- `ChatMessage` extended with optional `sessionId` (FK) and
+  `toolCalls`. Both optional during the transition cycle so existing
+  reads keep working.
+- `lib/chat-session.ts`: `getOrCreateSession`, `readWorkingMemory`,
+  `mergeWorkingMemory` (deep-merge; throws on closed sessions),
+  `setActiveFlow`, `closeSession` (idempotent), exported `deepMerge`.
+- `scripts/backfill-chat-sessions.ts`: idempotent, `--dry-run` flag.
+  Run manually post-merge to backfill `sessionId` on existing rows.
+
+### 12A.2 — Tool framework (`feat(phase-12.2)`)
+- `Tool<TInput, TOutput>` interface, `ToolContext`, Anthropic message
+  types, `AnthropicCaller`. No SDK dependency.
+- `ToolRegistry`: register (throws on duplicate), get/has/list,
+  `toAnthropicTools`, `execute` (handler errors caught + wrapped).
+- `runToolUseLoop`: pure async loop, parameterized on the caller.
+  Preserves the assistant tool_use message in the log (Anthropic API
+  requires it). Tool errors → `tool_result` with `is_error: true`.
+  Bails at `maxIterations` (default 8) with `truncated: true`.
+  Defensive array-slice on each caller invocation.
+- `defaultAnthropicCaller(apiKey)`: thin fetch wrapper, matching the
+  existing direct-fetch pattern in the codebase.
+
+### 12A.3 — query_project tool + opt-in route path (`feat(phase-12.3)`)
+- `queryProjectTool`: read-only, JSON schema requires `slug`. Returns
+  found-true/found-false; surfaces parsed `progressBreakdown` from
+  `progressDetails` JSON, `needsAttention` from `healthDetails`,
+  truncates `projectContext` (200) and `completionCriteria` (150),
+  tolerates malformed JSON without throwing.
+- `buildDefaultRegistry()`: fresh `ToolRegistry` with `query_project`
+  registered. Future tools register here.
+- `app/api/overseer/chat/route.ts`: new branch when
+  `body.useTools === true` runs the tool-use loop with
+  `defaultAnthropicCaller`, returns final text via `sseFromText`.
+  Existing flow runs unchanged when the flag is off/unset.
+- New short, stable `TOOL_PATH_SYSTEM_PROMPT` (≤1500 chars) that
+  instructs the model to call tools rather than invent project state.
+
+## What's NOT in 12A (ships in subsequent requests)
+
+- **More tools**: `query_projects`, `get_recent_activity`,
+  `get_session_logs`, `get_dispatch_outcomes`, etc. (Phase B)
+- **Write tools**: `update_session_memory`, `propose_dispatch`,
+  `commit_dispatches`, `create_reminder`, `create_human_todo`,
+  `dispatch_project`, `update_project` (Phase C)
+- **Flow tracking**: `set_active_flow` + flow-specific guidance
+  (Phase D)
+- **History compression** with summary fallback (Phase E)
+- **Decommission tag parsing** (Phase F)
+- **Streaming the terminal text** in the tool path (currently one SSE
+  chunk; acceptable for opt-in mode)
+- **Default flip**: `useTools` is currently opt-in. After more tools
+  ship and the regression suite proves equivalence, flip the default
+  (Phase B exit criterion).
+
+## Files changed (this branch)
+
+- `prisma/schema.prisma` (new ChatSession model, extended ChatMessage)
+- `lib/chat-session.ts` + tests + schema test
+- `lib/overseer-tools.ts` + 2 test files
+- `lib/overseer-tools-query-project.ts` + test
+- `lib/overseer-tools-registry-default.ts` + test
+- `app/api/overseer/chat/route.ts` (added tool-path branch)
+- `app/api/overseer/chat/route.tools.test.ts` (new)
+- `scripts/backfill-chat-sessions.ts` + test
+- `requests/phase-12-overseer-tools/12A.{1,2,3}-*.md`
+- `references/schema.md`, `references/api-contracts.md`
+
+## Operational notes
+
+- Restart `pnpm dev` if it was running before the schema push, so the
+  new Prisma client and route changes load.
+- Run `pnpm exec tsx scripts/backfill-chat-sessions.ts` (optionally
+  with `--dry-run` first) to populate `sessionId` on existing
+  `ChatMessage` rows.
+- Manual test path: POST to `/api/overseer/chat` with
+  `{messages: [{role:"user", content:"how is cascade?"}], useTools: true}`.
+  Expect a single SSE response containing the model's tool-mediated
+  answer.
+
+## Next request
+
+12B.1 — second batch of read tools (`query_projects`,
+`get_recent_activity`, `get_session_logs`). Same pattern as
+`query_project`, replacing more of the SP-injected sections with
+on-demand tool calls. Exit criterion for Phase B: SP token count
+drops from ~6K to ~1K and an inventory-walk integration test passes
+with no repeated questions and no lost confirmed values.
 
 ## What Was Built — Phase 11.1: Anthropic Feature Update Check (catalog + ledger + slash command)
 
