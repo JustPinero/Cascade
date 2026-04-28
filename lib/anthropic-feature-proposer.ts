@@ -191,7 +191,14 @@ export async function generateProposal(
 export interface ProposeProjectResult {
   projectName: string;
   projectPath: string;
-  proposals: { feature: FeatureGap; markdown: string; error?: string }[];
+  proposals: {
+    feature: FeatureGap;
+    markdown: string;
+    /** Phase 11.3 — DB id of the persisted proposal row.
+     * `null` when persistence was disabled or the write failed. */
+    proposalId?: number | null;
+    error?: string;
+  }[];
 }
 
 async function readIfExists(filePath: string): Promise<string> {
@@ -209,6 +216,9 @@ export async function proposeForProject(
     deps?: GenerateProposalDeps;
     /** Cap how many proposals we generate per project per call (cost control). */
     maxFeatures?: number;
+    /** Phase 11.3 — persist successful proposals as FeatureProposal rows.
+     * Default true. Pass false in tests when you don't want to write. */
+    persist?: boolean;
   } = {},
 ): Promise<ProposeProjectResult> {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
@@ -217,6 +227,7 @@ export async function proposeForProject(
   const gaps = await findGapsForProject(prisma, projectId);
   const cap = options.maxFeatures ?? 5;
   const targets = gaps.slice(0, cap);
+  const persist = options.persist !== false;
 
   // Load project context once.
   const claudeMdPath = path.join(project.path, "CLAUDE.md");
@@ -240,11 +251,49 @@ export async function proposeForProject(
         },
         options.deps,
       );
-      proposals.push({ feature: gap, markdown });
+
+      // Persist as a FeatureProposal row (best-effort; a DB write failure
+      // doesn't lose the rendered proposal in the chat response).
+      // Contract: `proposalId` is omitted when persist is disabled,
+      //           set to a number on successful persist,
+      //           set to null when persist was attempted but failed.
+      const entry: ProposeProjectResult["proposals"][number] = {
+        feature: gap,
+        markdown,
+      };
+      if (persist) {
+        try {
+          const row = await prisma.featureProposal.create({
+            data: {
+              projectId,
+              featureId: gap.featureId,
+              diff: markdown,
+              status: "proposed",
+            },
+          });
+          entry.proposalId = row.id;
+        } catch (persistError) {
+          entry.proposalId = null;
+          console.warn(
+            JSON.stringify({
+              event: "proposal_persist_failed",
+              projectId,
+              featureId: gap.featureId,
+              error:
+                persistError instanceof Error
+                  ? persistError.message
+                  : String(persistError),
+            }),
+          );
+        }
+      }
+
+      proposals.push(entry);
     } catch (error) {
       proposals.push({
         feature: gap,
         markdown: "",
+        proposalId: null,
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -309,12 +358,18 @@ export function renderProposalReport(results: ProposeProjectResult[]): string {
     lines.push(`Path: \`${project.projectPath}\`\n`);
     for (const p of project.proposals) {
       totalProposals++;
-      lines.push(`### Feature: ${p.feature.featureName} _(${p.feature.category})_\n`);
+      const idSuffix = typeof p.proposalId === "number" ? ` _(proposal #${p.proposalId})_` : "";
+      lines.push(`### Feature: ${p.feature.featureName} _(${p.feature.category})_${idSuffix}\n`);
       if (p.error) {
         lines.push(`> Proposal generation failed: ${p.error}\n`);
         continue;
       }
       lines.push(p.markdown.trim() + "\n");
+      if (typeof p.proposalId === "number") {
+        lines.push(
+          `_Mark this proposal: PATCH /api/feature-proposals/${p.proposalId} { status: "accepted" | "rejected" | "applied" }._\n`,
+        );
+      }
     }
   }
 
