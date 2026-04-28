@@ -76,8 +76,14 @@ export async function backfillChatSessions(
 // CLI entrypoint
 if (require.main === module) {
   // Dynamic import so the test file can import this module without
-  // executing the CLI side-effect.
+  // executing the CLI side-effect. dotenv is loaded BEFORE @/lib/db
+  // so the runtime PrismaClient picks up DATABASE_URL from
+  // .env.local (canonical ./dev.db) instead of the db.ts fallback
+  // (./prisma/dev.db, which is a leftover stale copy).
   (async () => {
+    const dotenv = await import("dotenv");
+    dotenv.config({ path: ".env.local" });
+    dotenv.config(); // fallback to .env
     const { prisma } = await import("@/lib/db");
     const dryRun = process.argv.includes("--dry-run");
     const result = await backfillChatSessions(prisma, { dryRun });
