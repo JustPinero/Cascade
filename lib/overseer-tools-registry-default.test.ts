@@ -10,6 +10,9 @@ describe("buildDefaultRegistry", () => {
       "get_recent_activity",
       "get_session_logs",
       "get_dispatch_outcomes",
+      "get_yesterday_summary",
+      "get_engineer_messages",
+      "get_playbook",
     ];
     for (const name of expected) {
       expect(reg.has(name)).toBe(true);

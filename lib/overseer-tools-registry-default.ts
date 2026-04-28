@@ -4,6 +4,9 @@ import { queryProjectsTool } from "@/lib/overseer-tools-query-projects";
 import { recentActivityTool } from "@/lib/overseer-tools-recent-activity";
 import { sessionLogsTool } from "@/lib/overseer-tools-session-logs";
 import { dispatchOutcomesTool } from "@/lib/overseer-tools-dispatch-outcomes";
+import { yesterdaySummaryTool } from "@/lib/overseer-tools-yesterday-summary";
+import { engineerMessagesTool } from "@/lib/overseer-tools-engineer-messages";
+import { playbookTool } from "@/lib/overseer-tools-playbook";
 
 /**
  * Default tool registry for the Overseer chat path.
@@ -20,5 +23,9 @@ export function buildDefaultRegistry(): ToolRegistry {
   reg.register(recentActivityTool);
   reg.register(sessionLogsTool);
   reg.register(dispatchOutcomesTool);
+  // 12B.2 — memo-style read tools (replace remaining SP blocks)
+  reg.register(yesterdaySummaryTool);
+  reg.register(engineerMessagesTool);
+  reg.register(playbookTool);
   return reg;
 }
