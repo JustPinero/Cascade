@@ -1,0 +1,205 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// -- Mock the Anthropic caller factory so runToolUseLoop drives a
+// canned response sequence instead of hitting the real API.
+const mockCaller = vi.fn();
+vi.mock("@/lib/overseer-tools", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/overseer-tools")>(
+      "@/lib/overseer-tools"
+    );
+  return {
+    ...actual,
+    defaultAnthropicCaller: vi.fn(() => mockCaller),
+  };
+});
+
+// -- Prisma mock with a single project.
+const mockProject = {
+  id: 1,
+  name: "Cascade",
+  slug: "cascade",
+  path: "/tmp/cascade",
+  status: "building",
+  health: "healthy",
+  currentPhase: "phase-12-overseer-tools",
+  progressScore: 60,
+  progressDetails: "{}",
+  healthDetails: "{}",
+  businessStage: "internal",
+  projectContext: null,
+  completionCriteria: null,
+  currentRequest: null,
+  lastSessionEndedAt: null,
+};
+
+vi.mock("@/lib/db", () => ({
+  prisma: {
+    project: {
+      findUnique: vi.fn(async ({ where }: { where: { slug: string } }) =>
+        where.slug === "cascade" ? mockProject : null
+      ),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    activityEvent: { findMany: vi.fn().mockResolvedValue([]) },
+    chatMessage: { findMany: vi.fn().mockResolvedValue([]) },
+    dispatchOutcome: { findMany: vi.fn().mockResolvedValue([]) },
+  },
+}));
+
+vi.mock("@/lib/rate-limiter", () => ({
+  checkRateLimit: vi.fn().mockReturnValue(null),
+  getRateLimitKey: vi.fn().mockReturnValue("k"),
+}));
+
+vi.mock("@/lib/chat-validation", () => ({
+  validateMessages: vi.fn((messages: unknown) => ({
+    valid: true,
+    messages: messages as { role: string; content: string }[],
+  })),
+}));
+
+vi.mock("@/lib/anthropic-feature-check", () => ({
+  isFeatureCheckCommand: vi.fn().mockReturnValue(false),
+  runFeatureCheck: vi.fn(),
+  renderFeatureCheckReport: vi.fn(),
+}));
+
+vi.mock("@/lib/anthropic-feature-proposer", () => ({
+  isFeatureProposeCommand: vi.fn().mockReturnValue(false),
+  parseFeatureProposeArgs: vi.fn(),
+  proposeForAll: vi.fn(),
+  renderProposalReport: vi.fn(),
+}));
+
+vi.mock("@/lib/session-reader", () => ({
+  getSessionLogs: vi.fn().mockResolvedValue([]),
+}));
+
+import { NextRequest } from "next/server";
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  process.env.ANTHROPIC_API_KEY = "sk-test";
+});
+
+function makeRequest(body: Record<string, unknown>): NextRequest {
+  return new NextRequest("http://localhost:3000/api/overseer/chat", {
+    method: "POST",
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function toolUseResponse(blocks: Array<{ id: string; name: string; input: Record<string, unknown> }>) {
+  return {
+    id: "msg-test",
+    type: "message",
+    role: "assistant",
+    content: blocks.map((b) => ({
+      type: "tool_use" as const,
+      id: b.id,
+      name: b.name,
+      input: b.input,
+    })),
+    model: "claude-sonnet-4-6",
+    stop_reason: "tool_use",
+    stop_sequence: null,
+    usage: { input_tokens: 0, output_tokens: 0 },
+  };
+}
+
+function textResponse(text: string) {
+  return {
+    id: "msg-test",
+    type: "message",
+    role: "assistant",
+    content: [{ type: "text" as const, text }],
+    model: "claude-sonnet-4-6",
+    stop_reason: "end_turn",
+    stop_sequence: null,
+    usage: { input_tokens: 0, output_tokens: 0 },
+  };
+}
+
+describe("POST /api/overseer/chat — tool-use path (useTools: true)", () => {
+  it("runs query_project and returns final text via SSE", async () => {
+    mockCaller
+      .mockResolvedValueOnce(
+        toolUseResponse([
+          { id: "t1", name: "query_project", input: { slug: "cascade" } },
+        ])
+      )
+      .mockResolvedValueOnce(textResponse("Cascade is healthy at phase-12."));
+
+    const { POST } = await import("@/app/api/overseer/chat/route");
+    const res = await POST(
+      makeRequest({
+        messages: [{ role: "user", content: "How is cascade?" }],
+        useTools: true,
+      })
+    );
+
+    expect(res.headers.get("Content-Type")).toBe("text/event-stream");
+    const body = await res.text();
+    expect(body).toContain("Cascade is healthy at phase-12.");
+    expect(body).toContain("event: message_start");
+    expect(body).toContain("event: content_block_delta");
+    expect(body).toContain("event: message_stop");
+
+    expect(mockCaller).toHaveBeenCalledTimes(2);
+  });
+
+  it("forwards a tool-using system prompt that mentions tools", async () => {
+    mockCaller.mockResolvedValueOnce(textResponse("ok"));
+
+    const { POST } = await import("@/app/api/overseer/chat/route");
+    await POST(
+      makeRequest({
+        messages: [{ role: "user", content: "hi" }],
+        useTools: true,
+      })
+    );
+
+    expect(mockCaller).toHaveBeenCalledTimes(1);
+    const params = mockCaller.mock.calls[0][0];
+    expect(params.system.length).toBeLessThanOrEqual(1500);
+    expect(params.system.toLowerCase()).toContain("tool");
+    // query_project must be advertised to the model
+    const toolNames = params.tools.map((t: { name: string }) => t.name);
+    expect(toolNames).toContain("query_project");
+  });
+
+  it("does NOT run the tool-use loop when useTools is unset", async () => {
+    const { POST } = await import("@/app/api/overseer/chat/route");
+    // We don't mock global fetch — the legacy path will try to call it.
+    // We don't care if that fails; we just need to assert that the
+    // tool-path mock caller was NEVER called.
+    try {
+      await POST(
+        makeRequest({
+          messages: [{ role: "user", content: "Plain chat." }],
+        })
+      );
+    } catch {
+      // Legacy path may fail in test env — fine; we're asserting the
+      // tool path didn't run.
+    }
+    expect(mockCaller).not.toHaveBeenCalled();
+  });
+
+  it("does NOT run the tool-use loop when useTools is false", async () => {
+    const { POST } = await import("@/app/api/overseer/chat/route");
+    try {
+      await POST(
+        makeRequest({
+          messages: [{ role: "user", content: "Plain chat." }],
+          useTools: false,
+        })
+      );
+    } catch {
+      // Legacy path may fail — irrelevant
+    }
+    expect(mockCaller).not.toHaveBeenCalled();
+  });
+});
