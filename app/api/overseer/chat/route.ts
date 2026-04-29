@@ -220,49 +220,64 @@ export async function POST(request: NextRequest) {
     const session = await getOrCreateSession(prisma, today);
     const ctx: ToolContext = { prisma, sessionId: session.id };
 
-    // History compression safety net (Phase 12E). Once the
-    // conversation gets long, replace older turns with a cached
-    // summary. workingMemory remains the canonical store for
-    // confirmed facts; this just keeps raw message count under
-    // control on multi-hour sessions.
-    const inputMessages = validation.messages.map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: typeof m.content === "string" ? m.content : "",
-    }));
-    const messages = await compressMessagesForSession(
-      prisma,
-      session.id,
-      inputMessages,
-      {
-        threshold: 25,
-        keepRecent: 10,
-        summarizer: defaultSummarizer(apiKey),
-      }
-    );
+    // Phase 13.2 — abort discipline. 60s ceiling for the whole
+    // request. Signal threads through compressor → summarizer and
+    // through runToolUseLoop → caller, so a hung Anthropic call
+    // can't pin the request indefinitely.
+    const abort = new AbortController();
+    const timeoutHandle = setTimeout(() => abort.abort(), 60_000);
 
-    const result = await runToolUseLoop({
-      caller: defaultAnthropicCaller(apiKey),
-      model: "claude-sonnet-4-6",
-      systemPrompt: TOOL_PATH_SYSTEM_PROMPT,
-      messages,
-      registry,
-      ctx,
-      maxIterations: 8,
-    });
+    try {
+      // History compression safety net (Phase 12E). Once the
+      // conversation gets long, replace older turns with a cached
+      // summary. workingMemory remains the canonical store for
+      // confirmed facts; this just keeps raw message count under
+      // control on multi-hour sessions.
+      const inputMessages = validation.messages.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: typeof m.content === "string" ? m.content : "",
+      }));
+      const messages = await compressMessagesForSession(
+        prisma,
+        session.id,
+        inputMessages,
+        {
+          threshold: 25,
+          keepRecent: 10,
+          summarizer: defaultSummarizer(apiKey),
+          signal: abort.signal,
+        }
+      );
 
-    const final =
-      result.finalText ||
-      (result.truncated
-        ? "I hit my tool-use iteration limit before reaching a final answer. Try narrowing the question."
-        : "");
+      const result = await runToolUseLoop({
+        caller: defaultAnthropicCaller(apiKey),
+        model: "claude-sonnet-4-6",
+        systemPrompt: TOOL_PATH_SYSTEM_PROMPT,
+        messages,
+        registry,
+        ctx,
+        maxIterations: 8,
+        signal: abort.signal,
+      });
 
-    return new Response(sseFromText(final), {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      },
-    });
+      const final =
+        result.finalText ||
+        (result.truncated
+          ? "I hit my tool-use iteration limit before reaching a final answer. Try narrowing the question."
+          : "");
+
+      return new Response(sseFromText(final), {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      });
+    } finally {
+      // Always release the timeout — whether the request finished,
+      // failed, or aborted itself.
+      clearTimeout(timeoutHandle);
+    }
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown error";
