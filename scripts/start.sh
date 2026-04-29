@@ -14,5 +14,10 @@ pnpm exec prisma db push 2>/dev/null
 # Best-effort — never blocks startup.
 pnpm exec tsx scripts/run-version-watcher.ts 2>/dev/null || true
 
+# Phase 15 — close ChatSessions older than 30 days. Keeps the
+# `closedAt = null` invariant meaningful instead of accumulating open
+# rows forever. Best-effort — never blocks startup.
+pnpm exec tsx scripts/run-stale-session-cleanup.ts 2>/dev/null || true
+
 echo "Starting dev server at http://localhost:3000"
 pnpm dev

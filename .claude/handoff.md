@@ -1,4 +1,31 @@
 # Session Handoff — Kilroy
+Date: 2026-04-29 — Phase 15 complete (all 9 findings from third review)
+
+Closed every item from the third senior code review, including a
+walked-back overpromise from Phase 14 (the compressor "$transaction
+race fix" that was a no-op). Test count: 705 → 709. validate.sh green.
+
+Highlights:
+- Compressor cache write reverted to plain update; honest comment
+  documents that last-writer-wins is acceptable for a cache.
+- Dashboard now sends `sessionDate` in every chat POST so the TZ
+  fix from 14.1 is actually live (was server-only before).
+- `isValidSessionDate` rejects malformed-but-regex-matching dates.
+- `closeStaleSessions` wired into `scripts/start.sh` — closes
+  sessions older than 30 days on every dev startup.
+- Real dispatch-tag contract via shared `DISPATCH_TAG_EXAMPLE` const.
+  SP literal interpolates it; test imports it from the route. Drift
+  fails the test.
+- Route-level write-tool test exercises `update_session_memory` end
+  to end (catches `ctx.sessionId` plumbing regressions).
+- Summarizer fallback emits `ActivityEvent` so silent degradations
+  are observable.
+- `get_session_state` policy documented as read-through on closed
+  sessions; covered by test.
+
+---
+
+# Session Handoff — Kilroy (Phase 14 archive)
 Date: 2026-04-29 — Phase 14 complete (bug fixes from second review)
 
 Phase 14 closed every 🟥 and 🟧 finding from the second senior code

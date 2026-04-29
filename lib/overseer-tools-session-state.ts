@@ -9,6 +9,15 @@ interface SessionStateOutput {
   workingMemory: Record<string, unknown>;
 }
 
+/**
+ * get_session_state is read-only and INTENTIONALLY succeeds even when
+ * the session has been closed (Phase 15). The write tools
+ * (update_session_memory, set_active_flow) reject closed sessions via
+ * `assertOpen` because writing to a closed session is a contract
+ * violation. Reading is always safe — historical archeology of a
+ * closed session is a legitimate use case (e.g. a follow-up
+ * conversation that wants to inspect what was decided yesterday).
+ */
 export const sessionStateTool: Tool<SessionStateInput, SessionStateOutput> = {
   name: "get_session_state",
   description:
@@ -29,6 +38,7 @@ export const sessionStateTool: Tool<SessionStateInput, SessionStateOutput> = {
     if (!session) {
       throw new Error(`ChatSession ${ctx.sessionId} not found`);
     }
+    // Note: we do NOT check session.closedAt here. See module docstring above.
     const workingMemory = await readWorkingMemory(ctx.prisma, ctx.sessionId);
     return {
       sessionId: ctx.sessionId,

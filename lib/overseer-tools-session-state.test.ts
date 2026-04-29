@@ -54,6 +54,23 @@ describe("sessionStateTool", () => {
     expect(out.activeFlow).toBeNull();
   });
 
+  it("succeeds on a closed session — read-only, archeology is a legitimate use case (Phase 15)", async () => {
+    const session = await prisma.chatSession.create({
+      data: {
+        closedAt: new Date(),
+        activeFlow: "inventory_walk",
+        workingMemory: JSON.stringify({ covered: { x: 1 } }),
+      },
+    });
+    const out = await sessionStateTool.handler(
+      {},
+      { prisma, sessionId: session.id }
+    );
+    expect(out.sessionId).toBe(session.id);
+    expect(out.activeFlow).toBe("inventory_walk");
+    expect(out.workingMemory).toEqual({ covered: { x: 1 } });
+  });
+
   it("returns tool error when ctx.sessionId is missing", async () => {
     const reg = new ToolRegistry();
     reg.register(sessionStateTool);
