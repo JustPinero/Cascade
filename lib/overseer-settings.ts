@@ -15,7 +15,9 @@ const STORAGE_KEY = "cascade-overseer";
 const DEFAULTS: OverseerSettings = {
   name: "Overseer",
   portraitIdle: "/delamain.jpg",
-  portraitTalking: null,
+  // Public asset already on disk — gives the dual-face flip out of
+  // the box. localStorage overrides via the Overseer settings panel.
+  portraitTalking: "/delamain-talking.jpg",
   personality: null,
 };
 

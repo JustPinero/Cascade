@@ -316,10 +316,22 @@ function AutomationPanel() {
 
 function OverseerPanel() {
   const [name, setName] = useState(() => getOverseerSettings().name);
+  const [portraitIdle, setPortraitIdle] = useState(
+    () => getOverseerSettings().portraitIdle
+  );
+  const [portraitTalking, setPortraitTalking] = useState(
+    () => getOverseerSettings().portraitTalking ?? ""
+  );
   const [saved, setSaved] = useState(false);
 
   function handleSave() {
-    setOverseerSettings({ name: name.trim() || "Overseer" });
+    const trimmedTalking = portraitTalking.trim();
+    setOverseerSettings({
+      name: name.trim() || "Overseer",
+      portraitIdle: portraitIdle.trim() || "/delamain.jpg",
+      // Empty string clears it (single-face mode); non-empty stores it.
+      portraitTalking: trimmedTalking ? trimmedTalking : null,
+    });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -334,25 +346,82 @@ function OverseerPanel() {
           <label className="text-sm font-mono text-text-bright block mb-2">
             Name
           </label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSave()}
-              placeholder="Overseer"
-              className="flex-1 px-3 py-1.5 text-sm font-mono bg-space-900 border border-space-600 text-text-bright placeholder:text-space-500 focus:border-cyan focus:outline-none"
-            />
-            <button
-              onClick={handleSave}
-              className="px-3 py-1.5 text-xs font-mono border border-cyan text-cyan hover:bg-cyan/10 transition-colors"
-            >
-              {saved ? "Saved" : "Save"}
-            </button>
-          </div>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSave()}
+            placeholder="Overseer"
+            className="w-full px-3 py-1.5 text-sm font-mono bg-space-900 border border-space-600 text-text-bright placeholder:text-space-500 focus:border-cyan focus:outline-none"
+          />
           <p className="text-[10px] font-mono text-space-500 mt-1">
             Your AI dispatcher&apos;s name. Appears in chat, sidebar, and briefings.
           </p>
+        </div>
+
+        <div className="p-3 border border-space-600 bg-space-800">
+          <label className="text-sm font-mono text-text-bright block mb-2">
+            Idle Portrait
+          </label>
+          <div className="flex gap-3 items-start">
+            <div className="w-16 h-16 rounded border border-space-600 overflow-hidden bg-space-900 shrink-0">
+              {portraitIdle.trim() ? (
+                <img
+                  src={portraitIdle}
+                  alt="idle preview"
+                  className="w-full h-full object-cover"
+                />
+              ) : null}
+            </div>
+            <input
+              type="text"
+              value={portraitIdle}
+              onChange={(e) => setPortraitIdle(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSave()}
+              placeholder="/delamain.jpg"
+              className="flex-1 px-3 py-1.5 text-sm font-mono bg-space-900 border border-space-600 text-text-bright placeholder:text-space-500 focus:border-cyan focus:outline-none"
+            />
+          </div>
+          <p className="text-[10px] font-mono text-space-500 mt-1">
+            Path or URL of the portrait shown when the Overseer is silent.
+          </p>
+        </div>
+
+        <div className="p-3 border border-space-600 bg-space-800">
+          <label className="text-sm font-mono text-text-bright block mb-2">
+            Talking Portrait
+          </label>
+          <div className="flex gap-3 items-start">
+            <div className="w-16 h-16 rounded border border-space-600 overflow-hidden bg-space-900 shrink-0">
+              {portraitTalking.trim() ? (
+                <img
+                  src={portraitTalking}
+                  alt="talking preview"
+                  className="w-full h-full object-cover"
+                />
+              ) : null}
+            </div>
+            <input
+              type="text"
+              value={portraitTalking}
+              onChange={(e) => setPortraitTalking(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSave()}
+              placeholder="/delamain-talking.jpg (leave empty for single-face mode)"
+              className="flex-1 px-3 py-1.5 text-sm font-mono bg-space-900 border border-space-600 text-text-bright placeholder:text-space-500 focus:border-cyan focus:outline-none"
+            />
+          </div>
+          <p className="text-[10px] font-mono text-space-500 mt-1">
+            Shown while the Overseer is generating a response. Leave empty to use the idle portrait for both states.
+          </p>
+        </div>
+
+        <div className="flex justify-end">
+          <button
+            onClick={handleSave}
+            className="px-4 py-1.5 text-xs font-mono border border-cyan text-cyan hover:bg-cyan/10 transition-colors"
+          >
+            {saved ? "Saved" : "Save Identity"}
+          </button>
         </div>
       </div>
     </div>
