@@ -22,6 +22,7 @@ import {
   type ToolContext,
 } from "@/lib/overseer-tools";
 import { buildDefaultRegistry } from "@/lib/overseer-tools-registry-default";
+import { getOrCreateSession } from "@/lib/chat-session";
 
 /**
  * System prompt for the tool-use path. Kept short and stable so it
@@ -493,7 +494,13 @@ export async function POST(request: NextRequest) {
     // before Phase 12F removes it entirely.
     if (body.useTools !== false) {
       const registry = buildDefaultRegistry();
-      const ctx: ToolContext = { prisma };
+
+      // Phase 12C.1 — bind every tool-path request to today's
+      // ChatSession so working-memory tools can read/write
+      // session-scoped state.
+      const today = new Date().toISOString().split("T")[0];
+      const session = await getOrCreateSession(prisma, today);
+      const ctx: ToolContext = { prisma, sessionId: session.id };
 
       const result = await runToolUseLoop({
         caller: defaultAnthropicCaller(apiKey),

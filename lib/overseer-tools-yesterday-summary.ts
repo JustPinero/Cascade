@@ -45,7 +45,9 @@ export const yesterdaySummaryTool: Tool<
 
     const rows = await ctx.prisma.chatMessage.findMany({
       where: { sessionDate: date, role: "assistant" },
-      orderBy: { createdAt: "desc" },
+      // Secondary id-desc sort makes results deterministic when
+      // multiple messages share a createdAt timestamp.
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 3,
     });
 
