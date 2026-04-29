@@ -5,6 +5,7 @@ import { sendNotification } from "@/lib/notify";
 import { playStartSound, playEndSound } from "@/lib/sounds";
 import { getOverseerSettings } from "@/lib/overseer-settings";
 import { extractDispatchActions } from "@/lib/dispatch-tag-parser";
+import { localToday } from "@/lib/local-today";
 
 // SpeechRecognition types for browser API
 interface SpeechRecognitionEvent {
@@ -40,26 +41,22 @@ interface ParsedAction {
   prompt: string;
 }
 
-/**
- * Phase 15 — produce the user's LOCAL date as YYYY-MM-DD. The
- * server uses this for ChatSession binding so a 9pm-Eastern chat
- * doesn't roll into a new session at midnight UTC.
- *
- * `Intl` produces a stable YYYY-MM-DD with the en-CA locale across
- * browsers and avoids the toLocaleDateString quirks that include
- * extra punctuation.
- */
-function localToday(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
+// localToday() lives in lib/local-today.ts (Phase 17) so it has unit
+// tests against DST transitions and timezone offsets.
 
 interface OverseerChatProps {
   onDispatch: (results: unknown[]) => void;
   fullPage?: boolean;
+}
+
+// Phase 17 — minimum viable wire-up of the session-state endpoint.
+// Renders activeFlow + workingMemory.proposedDispatches as a small
+// read-only panel below the chat. Doesn't change the existing
+// [DISPATCH] tag-parsing flow — just exposes the structured state so
+// the developer can see what the model has recorded.
+interface SessionMemoryState {
+  activeFlow: string | null;
+  workingMemory: Record<string, unknown>;
 }
 
 export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps) {
@@ -72,10 +69,41 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
   const [dispatching, setDispatching] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [listening, setListening] = useState(false);
+  const [sessionMemory, setSessionMemory] = useState<SessionMemoryState | null>(
+    null
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const historyLoaded = useRef(false);
+
+  // Phase 17 — refresh session-state. Called on mount and after each
+  // chat round-trip so the panel reflects whatever the model just
+  // wrote via update_session_memory / propose_dispatch.
+  const refreshSessionMemory = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/overseer/session-state?sessionDate=${localToday()}`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) return;
+      const body = await res.json();
+      if (body.exists) {
+        setSessionMemory({
+          activeFlow: body.activeFlow,
+          workingMemory: body.workingMemory ?? {},
+        });
+      } else {
+        setSessionMemory({ activeFlow: null, workingMemory: {} });
+      }
+    } catch {
+      // Best-effort — never break the chat over a session-state fetch.
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshSessionMemory();
+  }, [refreshSessionMemory]);
 
   // Load today's conversation history on mount
   useEffect(() => {
@@ -315,6 +343,9 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
     } finally {
       setStreaming(false);
       playEndSound();
+      // Phase 17 — refresh the session-memory panel after each turn
+      // so update_session_memory / propose_dispatch results show up.
+      refreshSessionMemory();
     }
   }
 
@@ -612,6 +643,48 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
         >
           Send
         </button>
+      </div>
+
+      {/* Phase 17 — Session Memory panel. Read-only window into
+          ChatSession.workingMemory + activeFlow. Doesn't affect
+          dispatch flow; coexists with the existing [DISPATCH]
+          tag-parsed buttons. */}
+      {sessionMemory && hasSessionMemory(sessionMemory) ? (
+        <SessionMemoryPanel state={sessionMemory} />
+      ) : null}
+    </div>
+  );
+}
+
+function hasSessionMemory(state: SessionMemoryState): boolean {
+  return (
+    state.activeFlow !== null ||
+    Object.keys(state.workingMemory).length > 0
+  );
+}
+
+function SessionMemoryPanel({ state }: { state: SessionMemoryState }) {
+  const proposed = state.workingMemory.proposedDispatches;
+  const proposedList = Array.isArray(proposed) ? proposed : [];
+  const otherKeys = Object.keys(state.workingMemory).filter(
+    (k) => k !== "proposedDispatches"
+  );
+  return (
+    <div className="border-t border-space-600 bg-space-900/50 px-4 py-2 text-xs font-mono text-space-300">
+      <div className="flex items-center gap-3">
+        <span className="text-cyan/80">session memory</span>
+        {state.activeFlow ? (
+          <span className="text-amber/80">flow: {state.activeFlow}</span>
+        ) : null}
+        {proposedList.length > 0 ? (
+          <span className="text-emerald/80">
+            {proposedList.length} proposed dispatch
+            {proposedList.length === 1 ? "" : "es"}
+          </span>
+        ) : null}
+        {otherKeys.length > 0 ? (
+          <span className="text-space-400">keys: {otherKeys.join(", ")}</span>
+        ) : null}
       </div>
     </div>
   );

@@ -103,4 +103,19 @@ describe("appendToWorkingMemoryList — concurrent appends", () => {
       appendToWorkingMemoryList(prisma, session.id, "things", { x: 1 })
     ).rejects.toThrow(/closed/i);
   });
+
+  it("rejects appends that would exceed the workingMemory size cap (Phase 17)", async () => {
+    const session = await prisma.chatSession.create({ data: {} });
+    // 300KB single item — blows the 256KB cap on serialize.
+    const huge = { payload: "x".repeat(300 * 1024) };
+    await expect(
+      appendToWorkingMemoryList(prisma, session.id, "things", huge)
+    ).rejects.toThrow(/workingMemory size cap exceeded/);
+
+    // The session was never updated.
+    const reloaded = await prisma.chatSession.findUnique({
+      where: { id: session.id },
+    });
+    expect(reloaded?.workingMemory).toBe("{}");
+  });
 });
