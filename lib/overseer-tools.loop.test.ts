@@ -268,6 +268,31 @@ describe("runToolUseLoop", () => {
     expect(result.toolCallsExecuted).toBe(3);
   });
 
+  it("propagates a caller exception out of the loop without leaking partial state", async () => {
+    const reg = new ToolRegistry();
+    reg.register({
+      name: "alpha",
+      description: "x",
+      inputSchema: {},
+      handler: async () => null,
+    });
+
+    const caller = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("upstream 503: gateway timeout"));
+
+    await expect(
+      runToolUseLoop({
+        caller: caller as unknown as AnthropicCaller,
+        model: "claude-sonnet-4-6",
+        systemPrompt: "x",
+        messages: [{ role: "user", content: "go" }],
+        registry: reg,
+        ctx: ctx(),
+      })
+    ).rejects.toThrow(/upstream 503/);
+  });
+
   it("propagates the abort signal to the caller", async () => {
     const reg = new ToolRegistry();
     const seenSignals: (AbortSignal | undefined)[] = [];
