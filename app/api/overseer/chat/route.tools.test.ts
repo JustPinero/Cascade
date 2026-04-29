@@ -196,7 +196,7 @@ describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () =
     }
   });
 
-  it("DOES run the tool-use loop when useTools is unset (default after 12B.3)", async () => {
+  it("runs the tool-use loop on every conversational request (Phase 12F: tool-only)", async () => {
     mockCaller.mockResolvedValueOnce(textResponse("ok"));
 
     const { POST } = await import("@/app/api/overseer/chat/route");
@@ -209,18 +209,18 @@ describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () =
     expect(mockCaller).toHaveBeenCalledTimes(1);
   });
 
-  it("does NOT run the tool-use loop when useTools is false", async () => {
+  it("ignores `useTools: false` after Phase 12F — the legacy path no longer exists", async () => {
+    mockCaller.mockResolvedValueOnce(textResponse("ok"));
+
     const { POST } = await import("@/app/api/overseer/chat/route");
-    try {
-      await POST(
-        makeRequest({
-          messages: [{ role: "user", content: "Plain chat." }],
-          useTools: false,
-        })
-      );
-    } catch {
-      // Legacy path may fail — irrelevant
-    }
-    expect(mockCaller).not.toHaveBeenCalled();
+    await POST(
+      makeRequest({
+        messages: [{ role: "user", content: "Plain chat." }],
+        useTools: false,
+      })
+    );
+
+    // useTools:false used to bypass to legacy. Now it's a no-op flag.
+    expect(mockCaller).toHaveBeenCalledTimes(1);
   });
 });
