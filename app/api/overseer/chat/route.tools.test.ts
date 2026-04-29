@@ -57,6 +57,7 @@ vi.mock("@/lib/db", () => {
       findFirst: vi.fn().mockResolvedValue(mockSession),
       create: vi.fn().mockResolvedValue(mockSession),
       findUnique: vi.fn().mockResolvedValue(mockSession),
+      update: vi.fn().mockResolvedValue(mockSession),
     },
     // Phase 13.1 — getOrCreateSession is wrapped in $transaction.
     // The mock just invokes the callback with the same prisma mock.
@@ -91,6 +92,20 @@ vi.mock("@/lib/anthropic-feature-proposer", () => ({
   proposeForAll: vi.fn(),
   renderProposalReport: vi.fn(),
 }));
+
+// Phase 13.4 — replace the default summarizer with a deterministic
+// stub so we can assert the compressor was invoked end-to-end.
+const summarizerStub = vi.fn().mockResolvedValue("compressed-summary-stub");
+vi.mock("@/lib/chat-history-compressor", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/chat-history-compressor")>(
+      "@/lib/chat-history-compressor"
+    );
+  return {
+    ...actual,
+    defaultSummarizer: vi.fn(() => summarizerStub),
+  };
+});
 
 vi.mock("@/lib/session-reader", () => ({
   getSessionLogs: vi.fn().mockResolvedValue([]),
@@ -213,6 +228,55 @@ describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () =
     );
 
     expect(mockCaller).toHaveBeenCalledTimes(1);
+  });
+
+  it("invokes the compressor when the conversation exceeds the threshold (Phase 13.4)", async () => {
+    summarizerStub.mockClear();
+    summarizerStub.mockResolvedValue("compressed-summary-stub");
+    mockCaller.mockResolvedValueOnce(textResponse("ok"));
+
+    // 30 messages — above the 25-threshold the route uses
+    const messages = Array.from({ length: 30 }, (_, i) => ({
+      role: i % 2 === 0 ? "user" : "assistant",
+      content: `historical message ${i}`,
+    }));
+
+    const { POST } = await import("@/app/api/overseer/chat/route");
+    const res = await POST(
+      makeRequest({ messages, useTools: true })
+    );
+    if (res.status !== 200) {
+      const body = await res.json();
+      throw new Error(`Route returned 500: ${JSON.stringify(body)}`);
+    }
+    expect(res.status).toBe(200);
+
+    expect(summarizerStub).toHaveBeenCalledTimes(1);
+
+    // The caller should have received the compressed view: 1 summary
+    // message + the 10 most recent verbatim = 11.
+    expect(mockCaller).toHaveBeenCalledTimes(1);
+    const params = mockCaller.mock.calls[0][0];
+    expect(params.messages.length).toBe(11);
+    expect(params.messages[0].content).toContain(
+      "Earlier conversation summary"
+    );
+    expect(params.messages[0].content).toContain("compressed-summary-stub");
+  });
+
+  it("does NOT invoke the compressor on a short conversation", async () => {
+    summarizerStub.mockClear();
+    mockCaller.mockResolvedValueOnce(textResponse("ok"));
+
+    const { POST } = await import("@/app/api/overseer/chat/route");
+    await POST(
+      makeRequest({
+        messages: [{ role: "user", content: "hi" }],
+        useTools: true,
+      })
+    );
+
+    expect(summarizerStub).not.toHaveBeenCalled();
   });
 
   it("ignores `useTools: false` after Phase 12F — the legacy path no longer exists", async () => {
