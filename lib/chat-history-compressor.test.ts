@@ -174,6 +174,30 @@ describe("compressMessagesForSession", () => {
     expect(reloaded?.compressedHistory).toBeNull();
   });
 
+  it("records an ActivityEvent on summarizer fallback (Phase 15)", async () => {
+    await prisma.activityEvent.deleteMany({});
+    const session = await prisma.chatSession.create({ data: {} });
+    const summarizer: MessageSummarizer = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Summarizer API error: 503"));
+
+    await compressMessagesForSession(
+      prisma,
+      session.id,
+      makeMessages(30),
+      { threshold: 25, keepRecent: 10, summarizer }
+    );
+
+    const events = await prisma.activityEvent.findMany({
+      where: { eventType: "compressor-fallback" },
+    });
+    expect(events.length).toBe(1);
+    const details = JSON.parse(events[0].details ?? "{}");
+    expect(details.sessionId).toBe(session.id);
+    expect(details.droppedCount).toBe(20); // 30 - 10 recent
+    expect(details.error).toMatch(/503/);
+  });
+
   it("ignores malformed compressedHistory JSON and recomputes", async () => {
     const session = await prisma.chatSession.create({
       data: { compressedHistory: "{not valid" },

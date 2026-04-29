@@ -171,7 +171,6 @@ describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () =
     const res = await POST(
       makeRequest({
         messages: [{ role: "user", content: "How is cascade?" }],
-        useTools: true,
       })
     );
 
@@ -192,7 +191,6 @@ describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () =
     await POST(
       makeRequest({
         messages: [{ role: "user", content: "hi" }],
-        useTools: true,
       })
     );
 
@@ -243,7 +241,7 @@ describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () =
 
     const { POST } = await import("@/app/api/overseer/chat/route");
     const res = await POST(
-      makeRequest({ messages, useTools: true })
+      makeRequest({ messages })
     );
     if (res.status !== 200) {
       const body = await res.json();
@@ -313,6 +311,57 @@ describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () =
     );
   });
 
+  it("end-to-end: model calls update_session_memory through the live route (Phase 15)", async () => {
+    // tool_use → registry runs update_session_memory → tool_result → text
+    mockCaller
+      .mockResolvedValueOnce({
+        id: "msg",
+        type: "message",
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use" as const,
+            id: "tu-1",
+            name: "update_session_memory",
+            input: { patch: { covered: { medipal: { progress: 40 } } } },
+          },
+        ],
+        model: "claude-sonnet-4-6",
+        stop_reason: "tool_use",
+        stop_sequence: null,
+        usage: { input_tokens: 0, output_tokens: 0 },
+      })
+      .mockResolvedValueOnce(textResponse("noted"));
+
+    const { prisma: prismaModule } = await import("@/lib/db");
+    const updateSpy = vi.mocked(prismaModule.chatSession.update);
+    updateSpy.mockClear();
+
+    const { POST } = await import("@/app/api/overseer/chat/route");
+    const res = await POST(
+      makeRequest({ messages: [{ role: "user", content: "medipal is at 40%" }] })
+    );
+    expect(res.status).toBe(200);
+
+    // The route bound a session, the registry ran update_session_memory
+    // through the helpers, and the helper called chatSession.update.
+    // That whole chain stays green only if ctx.sessionId plumbing,
+    // assertOpen(), readWorkingMemory(), and mergeWorkingMemory() are
+    // all wired correctly through the actual route handler.
+    expect(updateSpy).toHaveBeenCalled();
+    const updateCall = updateSpy.mock.calls.find((c) => {
+      const data = (c[0] as { data: { workingMemory?: string } }).data;
+      return typeof data.workingMemory === "string" &&
+        data.workingMemory.includes("medipal");
+    });
+    expect(updateCall).toBeDefined();
+    const writtenWM = JSON.parse(
+      (updateCall![0] as { data: { workingMemory: string } }).data
+        .workingMemory
+    );
+    expect(writtenWM.covered.medipal.progress).toBe(40);
+  });
+
   it("returns 500 when ANTHROPIC_API_KEY is missing (Phase 14.7)", async () => {
     delete process.env.ANTHROPIC_API_KEY;
 
@@ -371,7 +420,6 @@ describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () =
     await POST(
       makeRequest({
         messages: [{ role: "user", content: "hi" }],
-        useTools: true,
       })
     );
 

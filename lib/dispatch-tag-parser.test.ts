@@ -60,22 +60,23 @@ describe("extractDispatchActions — basic shapes", () => {
   });
 });
 
-describe("contract — SP-documented format parses through the regex (Phase 14.6)", () => {
-  it("the SP example string parses correctly", async () => {
-    // Import the SP directly so the test fails if the format
-    // documented in the SP and the dashboard-side regex drift apart.
-    const { TOOL_PATH_SYSTEM_PROMPT } = await import(
+describe("contract — SP and dashboard regex share one source of truth (Phase 15)", () => {
+  it("the exported DISPATCH_TAG_EXAMPLE is the literal embedded in TOOL_PATH_SYSTEM_PROMPT", async () => {
+    const { TOOL_PATH_SYSTEM_PROMPT, DISPATCH_TAG_EXAMPLE } = await import(
       "@/app/api/overseer/chat/route"
     );
+    // Both sides import the same const. If anyone edits the example
+    // in route.ts, this assertion still holds; if anyone hardcodes
+    // a divergent string in the SP literal, this fails. That's the
+    // contract.
+    expect(TOOL_PATH_SYSTEM_PROMPT).toContain(DISPATCH_TAG_EXAMPLE);
+  });
 
-    // The SP advertises this exact format. If anyone edits it, this
-    // test should keep passing — that's the whole contract.
-    const exampleFromSP = "[DISPATCH] project-slug: mode — optional instructions";
-
-    // The literal "project-slug: mode" is a placeholder, but the
-    // structural shape (brackets, colon, em-dash) needs to parse with
-    // a real mode word. Test with a real mode swapped in.
-    const realInput = exampleFromSP.replace(
+  it("the example, with real values swapped in, parses through extractDispatchActions", async () => {
+    const { DISPATCH_TAG_EXAMPLE } = await import(
+      "@/app/api/overseer/chat/route"
+    );
+    const realInput = DISPATCH_TAG_EXAMPLE.replace(
       "project-slug: mode",
       "cascade: continue"
     );
@@ -86,10 +87,5 @@ describe("contract — SP-documented format parses through the regex (Phase 14.6
       action: "continue",
       prompt: "optional instructions",
     });
-
-    // Sanity: the SP actually contains the [DISPATCH] format string.
-    expect(TOOL_PATH_SYSTEM_PROMPT).toContain(
-      "[DISPATCH] project-slug: mode"
-    );
   });
 });

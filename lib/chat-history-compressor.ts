@@ -103,32 +103,52 @@ export async function compressMessagesForSession(
 
   // Phase 14.2 — summarizer failure must not cascade into a 500.
   // Fall back to raw truncation with a notice; conversation continues.
+  // Phase 15 — also record an ActivityEvent so silent degradations
+  // (Haiku down for hours) are observable in the dashboard activity
+  // feed instead of buried in stderr.
   let summary: string;
   try {
     summary = await opts.summarizer(olderMessages, { signal: opts.signal });
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     if (process.env.NODE_ENV !== "test") {
       console.warn(
-        `[compressor] summarizer failed; falling back to raw truncation: ${
-          err instanceof Error ? err.message : String(err)
-        }`
+        `[compressor] summarizer failed; falling back to raw truncation: ${message}`
       );
+    }
+    try {
+      await prisma.activityEvent.create({
+        data: {
+          eventType: "compressor-fallback",
+          summary: "Summarizer failed; conversation falling back to raw truncation",
+          details: JSON.stringify({
+            sessionId,
+            droppedCount: olderMessages.length,
+            error: message,
+          }),
+        },
+      });
+    } catch {
+      // Telemetry write failures must not themselves fail the chat.
     }
     return [formatTruncationNotice(olderMessages.length), ...recentMessages];
   }
 
-  // Phase 14.4 — wrap the cache update in $transaction so two parallel
-  // requests can't overwrite each other's compressedHistory writes.
-  await prisma.$transaction(async (tx) => {
-    await tx.chatSession.update({
-      where: { id: sessionId },
-      data: {
-        compressedHistory: JSON.stringify({
-          summarizedThroughMessageCount: olderMessages.length,
-          summary,
-        }),
-      },
-    });
+  // The cache write is a single update — atomic on its own. Two
+  // parallel requests that both summarize will both write; the
+  // last writer wins. That's acceptable for a cache: each summary is
+  // valid for its snapshot, and we just spent extra Haiku calls.
+  // Not a correctness bug, only a wasted-work concern. (Phase 15
+  // walked back an earlier overpromise that wrapped this in
+  // $transaction — single updates don't need it.)
+  await prisma.chatSession.update({
+    where: { id: sessionId },
+    data: {
+      compressedHistory: JSON.stringify({
+        summarizedThroughMessageCount: olderMessages.length,
+        summary,
+      }),
+    },
   });
 
   return [formatSummaryAsMessage(summary), ...recentMessages];

@@ -31,13 +31,26 @@ import {
 const DEFAULT_REGISTRY = buildDefaultRegistry();
 
 /**
- * Phase 14.1 — accept body.sessionDate so the dashboard can pass the
- * user's local date for session binding. Strict YYYY-MM-DD; rejects
- * anything else to avoid silently routing to weird dates.
+ * Phase 14.1 / 15 — accept body.sessionDate so the dashboard can pass
+ * the user's local date for session binding. Strict YYYY-MM-DD AND
+ * the value must produce a real Date when parsed (rejects 2026-13-99
+ * and similar). Otherwise weird inputs reach the prisma query and 500.
  */
 function isValidSessionDate(value: unknown): value is string {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  if (typeof value !== "string") return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(d.getTime());
 }
+
+/**
+ * The format string the model is told to emit for dispatches AND the
+ * exact shape the dashboard's regex parses. Both sides import this
+ * const so any drift in either direction surfaces immediately.
+ * (Phase 15 — real contract, replacing the hardcoded test example.)
+ */
+export const DISPATCH_TAG_EXAMPLE =
+  "[DISPATCH] project-slug: mode — optional instructions";
 
 /**
  * Phase 13.3 — produce a useful surface when the loop bails at
@@ -128,7 +141,7 @@ When walking the fleet to confirm state ("how is each project?"), follow this lo
 # Dashboard-bridge output
 After you've called propose_dispatch for each intended dispatch, also emit a [DISPATCH] tag for each in your text response so the dashboard can render Execute Sprint buttons. Format:
 
-[DISPATCH] project-slug: mode — optional instructions
+${DISPATCH_TAG_EXAMPLE}
    Modes: continue, audit, investigate, custom
 
 This is a UI bridge — the canonical record is the propose_dispatch call. Don't emit other text tags ([REMINDER], [HUMAN TODO], [PLAYBOOK], [ENGINEER]) — those flow exclusively through the structured tools now.

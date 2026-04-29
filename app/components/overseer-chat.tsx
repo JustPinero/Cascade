@@ -40,6 +40,23 @@ interface ParsedAction {
   prompt: string;
 }
 
+/**
+ * Phase 15 — produce the user's LOCAL date as YYYY-MM-DD. The
+ * server uses this for ChatSession binding so a 9pm-Eastern chat
+ * doesn't roll into a new session at midnight UTC.
+ *
+ * `Intl` produces a stable YYYY-MM-DD with the en-CA locale across
+ * browsers and avoids the toLocaleDateString quirks that include
+ * extra punctuation.
+ */
+function localToday(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 interface OverseerChatProps {
   onDispatch: (results: unknown[]) => void;
   fullPage?: boolean;
@@ -168,7 +185,14 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
         headers: { "Content-Type": "application/json" },
         // Send only the last 10 messages to avoid bloating context.
         // Del's system prompt already has full project state.
-        body: JSON.stringify({ messages: newMessages.slice(-10) }),
+        // sessionDate (Phase 14.1/15) is the user's local YYYY-MM-DD —
+        // server uses it to bind the right ChatSession instead of
+        // bucketing by server UTC, which would cross-cut sessions at
+        // midnight UTC for non-UTC users.
+        body: JSON.stringify({
+          messages: newMessages.slice(-10),
+          sessionDate: localToday(),
+        }),
       });
 
       if (!res.ok) {
