@@ -43,6 +43,12 @@ function dayBounds(date: string): { start: Date; end: Date } {
  * Find the latest open ChatSession whose startedAt falls on the given
  * UTC date (YYYY-MM-DD). Create one with startedAt at that day's UTC
  * midnight if none exists.
+ *
+ * Wrapped in $transaction (Phase 13.1) to close a TOCTOU race where
+ * two simultaneous requests for the same day with no existing session
+ * would both pass the findFirst check and both create rows. SQLite
+ * acquires a write lock for the duration of the transaction, so only
+ * one writer can run the create branch at a time.
  */
 export async function getOrCreateSession(
   prisma: PrismaClient,
@@ -50,17 +56,19 @@ export async function getOrCreateSession(
 ): Promise<ChatSession> {
   const { start, end } = dayBounds(date);
 
-  const existing = await prisma.chatSession.findFirst({
-    where: {
-      startedAt: { gte: start, lt: end },
-      closedAt: null,
-    },
-    orderBy: { startedAt: "desc" },
-  });
-  if (existing) return existing;
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.chatSession.findFirst({
+      where: {
+        startedAt: { gte: start, lt: end },
+        closedAt: null,
+      },
+      orderBy: { startedAt: "desc" },
+    });
+    if (existing) return existing;
 
-  return prisma.chatSession.create({
-    data: { startedAt: start },
+    return tx.chatSession.create({
+      data: { startedAt: start },
+    });
   });
 }
 
@@ -108,6 +116,53 @@ export async function mergeWorkingMemory(
     data: { workingMemory: JSON.stringify(next) },
   });
   return next;
+}
+
+/**
+ * Atomically append `item` to a list at `key` inside the session's
+ * workingMemory. Read-modify-write is wrapped in $transaction so two
+ * concurrent appends don't race and lose one of the items.
+ *
+ * If the existing value at `key` is not an array (or is missing), it
+ * is initialized to [item]. Throws if the session is closed.
+ *
+ * Phase 13.1 — replaces the inline read-modify-write in
+ * `propose_dispatch` and any other tool that needs append semantics.
+ */
+export async function appendToWorkingMemoryList(
+  prisma: PrismaClient,
+  sessionId: string,
+  key: string,
+  item: unknown
+): Promise<{ list: unknown[]; total: number }> {
+  return prisma.$transaction(async (tx) => {
+    const session = await tx.chatSession.findUnique({ where: { id: sessionId } });
+    if (!session) {
+      throw new Error(`ChatSession ${sessionId} not found`);
+    }
+    if (session.closedAt !== null) {
+      throw new Error(`ChatSession ${sessionId} is closed; refusing to write`);
+    }
+
+    let wm: Json = {};
+    try {
+      const parsed = JSON.parse(session.workingMemory);
+      if (isPlainObject(parsed)) wm = parsed;
+    } catch {
+      // malformed → reset to empty
+    }
+
+    const existingValue = wm[key];
+    const list = Array.isArray(existingValue) ? [...existingValue, item] : [item];
+    const next = { ...wm, [key]: list };
+
+    await tx.chatSession.update({
+      where: { id: sessionId },
+      data: { workingMemory: JSON.stringify(next) },
+    });
+
+    return { list, total: list.length };
+  });
 }
 
 /**
