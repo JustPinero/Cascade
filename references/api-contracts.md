@@ -83,6 +83,24 @@ Get deployment status from Vercel/Railway.
 
 ## Overseer (Delamain)
 
+### GET /api/overseer/session-state
+Returns the day's `ChatSession` state. Phase 13.5 — gives the
+dashboard (or any consumer) access to structured outputs (e.g.
+`workingMemory.proposedDispatches`) without parsing chat text.
+
+Query params: `date` (YYYY-MM-DD, defaults to today UTC).
+
+Response shape:
+```json
+{
+  "sessionId": "ck...",
+  "startedAt": "2026-04-29T00:00:00.000Z",
+  "closedAt": null,
+  "activeFlow": "inventory_walk" | null,
+  "workingMemory": { ... }
+}
+```
+
 ### POST /api/overseer/chat
 Streaming SSE chat with the Overseer. Body shape:
 
