@@ -1,3 +1,11 @@
+/**
+ * Overseer (Delamain) chat endpoint. Manages the Cascade-side
+ * ChatSession — the conversational state inside Cascade's own UI.
+ * NOT to be confused with the webhook at /api/webhook/session-complete,
+ * which handles terminal Claude Code session completions for managed
+ * projects (those use the prisma.activityEvent + per-project session
+ * logs, not ChatSession).
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limiter";
@@ -19,7 +27,7 @@ import {
   type ToolContext,
 } from "@/lib/overseer-tools";
 import { buildDefaultRegistry } from "@/lib/overseer-tools-registry-default";
-import { getOrCreateSession } from "@/lib/chat-session";
+import { getOrCreateSession, isValidSessionDate } from "@/lib/chat-session";
 import {
   compressMessagesForSession,
   defaultSummarizer,
@@ -29,19 +37,6 @@ import {
 // after Phase 12, so rebuilding it on every request was wasted work.
 // (Phase 13.3.)
 const DEFAULT_REGISTRY = buildDefaultRegistry();
-
-/**
- * Phase 14.1 / 15 — accept body.sessionDate so the dashboard can pass
- * the user's local date for session binding. Strict YYYY-MM-DD AND
- * the value must produce a real Date when parsed (rejects 2026-13-99
- * and similar). Otherwise weird inputs reach the prisma query and 500.
- */
-function isValidSessionDate(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const d = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(d.getTime());
-}
 
 /**
  * The format string the model is told to emit for dispatches AND the

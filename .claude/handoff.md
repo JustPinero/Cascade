@@ -1,4 +1,28 @@
 # Session Handoff — Kilroy
+Date: 2026-04-29 — Phase 16 complete (all 8 findings from fourth review)
+
+Closed every item from the fourth senior code review. The bulk of
+the work was in `app/api/overseer/session-state/route.ts`, which
+had landed in Phase 13.5 without enough integration scrutiny.
+
+Highlights:
+- GET no longer creates a session row. Split `getSession` (read-only)
+  out of `getOrCreateSession`. Missing case returns `{exists: false}`.
+- Strict date validation on the GET. `isValidSessionDate` is now
+  shared (was duplicated/missing).
+- Renamed `?date=` to `?sessionDate=` so chat route and GET use
+  the same field name.
+- Cross-referencing docstrings on the two unrelated "session" files
+  (chat ChatSession vs webhook terminal-Claude-session).
+- 256KB cap on `workingMemory` size — both write helpers enforce.
+- Cache-Control: no-store on the GET response.
+- Singleton-cache test for `DEFAULT_REGISTRY`.
+
+Test count: 709 → 714. validate.sh green.
+
+---
+
+# Session Handoff — Kilroy (Phase 15 archive)
 Date: 2026-04-29 — Phase 15 complete (all 9 findings from third review)
 
 Closed every item from the third senior code review, including a

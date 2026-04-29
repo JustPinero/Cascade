@@ -71,38 +71,47 @@ function makeRequest(query: string = ""): NextRequest {
 }
 
 describe("GET /api/overseer/session-state", () => {
-  it("returns an empty session state for a fresh date", async () => {
-    const res = await GET(makeRequest("date=2026-04-29"));
+  it("returns {exists:false} for a fresh date and does NOT create a row (Phase 16)", async () => {
+    const before = await prisma.chatSession.count();
+    const res = await GET(makeRequest("sessionDate=2026-04-29"));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(typeof body.sessionId).toBe("string");
-    expect(body.activeFlow).toBeNull();
-    expect(body.workingMemory).toEqual({});
-    expect(body.closedAt).toBeNull();
+    expect(body.exists).toBe(false);
+    expect(body.sessionDate).toBe("2026-04-29");
+    expect(body.sessionId).toBeUndefined();
+
+    // No row was created by this read.
+    const after = await prisma.chatSession.count();
+    expect(after).toBe(before);
+
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
   });
 
   it("returns activeFlow + workingMemory after they're set", async () => {
-    // Seed a session and write to it via the helpers — then assert
-    // the route reflects the same state.
     const session = await getOrCreateSession(prisma, "2026-04-29");
     await setActiveFlow(prisma, session.id, "inventory_walk");
     await mergeWorkingMemory(prisma, session.id, {
       covered: { medipal: { progress: 40 } },
     });
 
-    const res = await GET(makeRequest("date=2026-04-29"));
+    const res = await GET(makeRequest("sessionDate=2026-04-29"));
     const body = await res.json();
 
+    expect(body.exists).toBe(true);
     expect(body.sessionId).toBe(session.id);
     expect(body.activeFlow).toBe("inventory_walk");
     expect(body.workingMemory).toEqual({
       covered: { medipal: { progress: 40 } },
     });
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
   });
 
   it("scopes by date — different dates return different sessions", async () => {
-    const today = await GET(makeRequest("date=2026-04-29"));
-    const tomorrow = await GET(makeRequest("date=2026-04-30"));
+    await getOrCreateSession(prisma, "2026-04-29");
+    await getOrCreateSession(prisma, "2026-04-30");
+
+    const today = await GET(makeRequest("sessionDate=2026-04-29"));
+    const tomorrow = await GET(makeRequest("sessionDate=2026-04-30"));
     const a = await today.json();
     const b = await tomorrow.json();
     expect(a.sessionId).not.toBe(b.sessionId);
@@ -112,12 +121,26 @@ describe("GET /api/overseer/session-state", () => {
     const res = await GET(makeRequest());
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.sessionId).toBeDefined();
+    // exists:false because no session was created for today; the
+    // default-date path still returned a structured payload.
+    expect(body.exists).toBe(false);
+    expect(body.sessionDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("rejects malformed sessionDate with 400 (Phase 16)", async () => {
+    const res = await GET(makeRequest("sessionDate=not-a-date"));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/Invalid sessionDate/);
+  });
+
+  it("rejects format-matching but invalid dates like 2026-13-99 (Phase 16)", async () => {
+    const res = await GET(makeRequest("sessionDate=2026-13-99"));
+    expect(res.status).toBe(400);
   });
 
   it("surfaces propose_dispatch output (Phase 13.5 use case)", async () => {
     const session = await getOrCreateSession(prisma, "2026-04-29");
-    // Simulate what proposeDispatchTool produces
     await mergeWorkingMemory(prisma, session.id, {
       proposedDispatches: [
         { slug: "cascade", mode: "continue", proposedAtISO: "2026-04-29T12:00:00Z" },
@@ -125,7 +148,7 @@ describe("GET /api/overseer/session-state", () => {
       ],
     });
 
-    const res = await GET(makeRequest("date=2026-04-29"));
+    const res = await GET(makeRequest("sessionDate=2026-04-29"));
     const body = await res.json();
     expect(body.workingMemory.proposedDispatches).toHaveLength(2);
     expect(body.workingMemory.proposedDispatches[0].slug).toBe("cascade");
