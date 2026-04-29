@@ -40,6 +40,26 @@ function dayBounds(date: string): { start: Date; end: Date } {
 }
 
 /**
+ * Read-only lookup: returns the latest open ChatSession whose
+ * startedAt falls on the given UTC date, or null if none exists.
+ * Phase 16 — split out from getOrCreateSession so callers (like the
+ * GET session-state endpoint) can read without inserting.
+ */
+export async function getSession(
+  prisma: PrismaClient,
+  date: string
+): Promise<ChatSession | null> {
+  const { start, end } = dayBounds(date);
+  return prisma.chatSession.findFirst({
+    where: {
+      startedAt: { gte: start, lt: end },
+      closedAt: null,
+    },
+    orderBy: { startedAt: "desc" },
+  });
+}
+
+/**
  * Find the latest open ChatSession whose startedAt falls on the given
  * UTC date (YYYY-MM-DD). Create one with startedAt at that day's UTC
  * midnight if none exists.
@@ -49,6 +69,10 @@ function dayBounds(date: string): { start: Date; end: Date } {
  * would both pass the findFirst check and both create rows. SQLite
  * acquires a write lock for the duration of the transaction, so only
  * one writer can run the create branch at a time.
+ *
+ * Use this from POST routes that should bind a session for the
+ * incoming chat. For read-only access, use `getSession` instead so
+ * GET requests don't have insert side effects (Phase 16).
  */
 export async function getOrCreateSession(
   prisma: PrismaClient,
@@ -73,6 +97,19 @@ export async function getOrCreateSession(
 }
 
 /**
+ * Phase 16 — strict date validator. Rejects malformed strings AND
+ * format-matching-but-invalid dates like "2026-13-99" by also
+ * checking that `new Date(s)` produces a real timestamp. Used by
+ * routes that accept a sessionDate body field or query param.
+ */
+export function isValidSessionDate(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(d.getTime());
+}
+
+/**
  * Read and JSON-parse the session's workingMemory. Returns `{}` if the
  * session is missing or the stored payload fails to parse.
  */
@@ -87,6 +124,22 @@ export async function readWorkingMemory(
     return isPlainObject(parsed) ? parsed : {};
   } catch {
     return {};
+  }
+}
+
+/**
+ * Phase 16 — sanity cap on workingMemory size. Prevents a runaway
+ * tool loop from accumulating megabytes of JSON in one column.
+ * 256KB is generous for a single conversation's structured state
+ * (typical inventory walk produces a few KB).
+ */
+const WORKING_MEMORY_MAX_BYTES = 256 * 1024;
+
+function assertWorkingMemoryFits(serialized: string): void {
+  if (serialized.length > WORKING_MEMORY_MAX_BYTES) {
+    throw new Error(
+      `workingMemory size cap exceeded (${serialized.length} > ${WORKING_MEMORY_MAX_BYTES} bytes). Consider summarizing into a smaller key, or call set_active_flow(null) and start fresh.`
+    );
   }
 }
 
@@ -111,9 +164,11 @@ export async function mergeWorkingMemory(
   await assertOpen(prisma, sessionId);
   const current = await readWorkingMemory(prisma, sessionId);
   const next = deepMerge(current, patch);
+  const serialized = JSON.stringify(next);
+  assertWorkingMemoryFits(serialized);
   await prisma.chatSession.update({
     where: { id: sessionId },
-    data: { workingMemory: JSON.stringify(next) },
+    data: { workingMemory: serialized },
   });
   return next;
 }
@@ -155,10 +210,12 @@ export async function appendToWorkingMemoryList(
     const existingValue = wm[key];
     const list = Array.isArray(existingValue) ? [...existingValue, item] : [item];
     const next = { ...wm, [key]: list };
+    const serialized = JSON.stringify(next);
+    assertWorkingMemoryFits(serialized);
 
     await tx.chatSession.update({
       where: { id: sessionId },
-      data: { workingMemory: JSON.stringify(next) },
+      data: { workingMemory: serialized },
     });
 
     return { list, total: list.length };

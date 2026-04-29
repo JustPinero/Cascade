@@ -1,3 +1,12 @@
+/**
+ * Webhook for terminal Claude Code session completions in MANAGED
+ * projects (the .claude/settings.json Stop hook in each dispatched
+ * project POSTs here when a session ends). NOT to be confused with
+ * the Overseer ChatSession which is the conversational state inside
+ * Cascade's own /api/overseer/chat endpoint — that's a different
+ * "session" concept handled in app/api/overseer/. (Phase 16 sign-
+ * posting after the two concepts both grew the word "session".)
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { importSingleProject } from "@/lib/project-import";

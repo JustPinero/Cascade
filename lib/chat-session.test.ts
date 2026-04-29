@@ -166,6 +166,31 @@ describe("mergeWorkingMemory", () => {
   });
 });
 
+describe("workingMemory size cap (Phase 16)", () => {
+  it("mergeWorkingMemory throws when the resulting payload exceeds 256KB", async () => {
+    const session = await getOrCreateSession(prisma, "2026-04-29");
+    // 300KB string — single value blows the cap on serialize.
+    const huge = "x".repeat(300 * 1024);
+    await expect(
+      mergeWorkingMemory(prisma, session.id, { huge })
+    ).rejects.toThrow(/workingMemory size cap exceeded/);
+
+    // The session's workingMemory was never written to.
+    const reloaded = await prisma.chatSession.findUnique({
+      where: { id: session.id },
+    });
+    expect(reloaded?.workingMemory).toBe("{}");
+  });
+
+  it("normal-sized writes pass through unaffected", async () => {
+    const session = await getOrCreateSession(prisma, "2026-04-29");
+    const out = await mergeWorkingMemory(prisma, session.id, {
+      covered: { x: 1 },
+    });
+    expect(out).toEqual({ covered: { x: 1 } });
+  });
+});
+
 describe("setActiveFlow", () => {
   it("sets and clears the activeFlow column", async () => {
     const session = await getOrCreateSession(prisma, "2026-04-28");

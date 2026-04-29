@@ -5,6 +5,14 @@
  * Wired into scripts/start.sh next to the version watcher. Without
  * this, the `closedAt = null = active` invariant is purely
  * aspirational and rows accumulate forever.
+ *
+ * TODO (production deployment): this runs ONCE on `pnpm dev` startup.
+ * If the Cascade process runs for >30 days without restart, no
+ * further sweeps happen until the next restart. For a hosted
+ * deployment, schedule this via cron OR wire into the existing
+ * dispatch-queue with a daily tick. For local dev (the only current
+ * deployment), the once-at-startup cadence is fine — restarts are
+ * frequent.
  */
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
