@@ -25,10 +25,13 @@ beforeEach(() => {
 describe("overseer-settings", () => {
   describe("getOverseerSettings", () => {
     it("returns defaults when no preference set", () => {
+      // Default talking portrait set to the bundled asset in the
+      // portrait-settings fix so the dual-face flip works out of the
+      // box. Users opt OUT of dual via the settings UI.
       const settings = getOverseerSettings();
       expect(settings.name).toBe("Overseer");
       expect(settings.portraitIdle).toBe("/delamain.jpg");
-      expect(settings.portraitTalking).toBeNull();
+      expect(settings.portraitTalking).toBe("/delamain-talking.jpg");
     });
 
     it("returns custom name after setting", () => {
@@ -70,8 +73,8 @@ describe("overseer-settings", () => {
       expect(getPortraitMode()).toBe("dual");
     });
 
-    it("returns single with defaults", () => {
-      expect(getPortraitMode()).toBe("single");
+    it("returns dual with defaults (talking portrait now ships by default)", () => {
+      expect(getPortraitMode()).toBe("dual");
     });
   });
 
