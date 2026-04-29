@@ -1,4 +1,38 @@
 # Session Handoff — Kilroy
+Date: 2026-04-29 — Phase 18 complete (Overseer migration arc closed)
+
+Phase 18 lifted `hasSessionMemory` + `SessionMemoryState` into
+`lib/session-memory.ts` so the dashboard conditional-rendering
+logic is unit-testable. 4 tests added, all green. Test count:
+723 → 727.
+
+## Pre-existing concern flagged during Phase 18
+
+Under suite-mode parallelism, ~20 test files time out in their
+`beforeAll` hook (each runs `prisma db push` and races against
+prisma's CLI). NOT introduced by Phase 12-18 — reproduces on bare
+main too. Workarounds:
+- `pnpm vitest run <specific files>` (focused — always green)
+- `pnpm vitest run --pool=forks --poolOptions.forks.singleFork=true`
+
+Fix is its own scope (shared schema push or faster setup). The full
+surface of Phase 12-18 work (103 tests across 12 files) runs green
+in focused mode.
+
+## The whole arc, Phase 12 → 18
+
+- **548 → 727 tests** (+179 over the arc)
+- 7 phase branches, 30+ commits, all merged to main
+- 14 tools, 1 endpoint, 1 dashboard panel
+- 6 review passes; every finding fixed or explicitly deferred
+- `app/api/overseer/chat/route.ts`: 615 → 287 lines
+- The user-reported bug (Delamain context loss during inventory
+  walks) fixed at the architecture level and guarded by an
+  integration regression test.
+
+---
+
+# Session Handoff — Kilroy (Phase 17 archive)
 Date: 2026-04-29 — Phase 17 complete (all 5 findings from fifth review)
 
 Closed every item from the fifth code review. Two test-coverage
