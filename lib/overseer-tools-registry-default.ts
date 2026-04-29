@@ -10,6 +10,9 @@ import { playbookTool } from "@/lib/overseer-tools-playbook";
 import { updateSessionMemoryTool } from "@/lib/overseer-tools-update-memory";
 import { setActiveFlowTool } from "@/lib/overseer-tools-set-flow";
 import { sessionStateTool } from "@/lib/overseer-tools-session-state";
+import { proposeDispatchTool } from "@/lib/overseer-tools-propose-dispatch";
+import { createReminderTool } from "@/lib/overseer-tools-create-reminder";
+import { createHumanTodoTool } from "@/lib/overseer-tools-create-human-todo";
 
 /**
  * Default tool registry for the Overseer chat path.
@@ -35,5 +38,9 @@ export function buildDefaultRegistry(): ToolRegistry {
   reg.register(updateSessionMemoryTool);
   reg.register(setActiveFlowTool);
   reg.register(sessionStateTool);
+  // 12C.2 — structured outputs replacing tag emission
+  reg.register(proposeDispatchTool);
+  reg.register(createReminderTool);
+  reg.register(createHumanTodoTool);
   return reg;
 }
