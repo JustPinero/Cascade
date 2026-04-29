@@ -6,6 +6,10 @@ import { playStartSound, playEndSound } from "@/lib/sounds";
 import { getOverseerSettings } from "@/lib/overseer-settings";
 import { extractDispatchActions } from "@/lib/dispatch-tag-parser";
 import { localToday } from "@/lib/local-today";
+import {
+  hasSessionMemory,
+  type SessionMemoryState,
+} from "@/lib/session-memory";
 
 // SpeechRecognition types for browser API
 interface SpeechRecognitionEvent {
@@ -54,10 +58,8 @@ interface OverseerChatProps {
 // read-only panel below the chat. Doesn't change the existing
 // [DISPATCH] tag-parsing flow — just exposes the structured state so
 // the developer can see what the model has recorded.
-interface SessionMemoryState {
-  activeFlow: string | null;
-  workingMemory: Record<string, unknown>;
-}
+// Types + hasSessionMemory live in lib/session-memory.ts (Phase 18)
+// so they're unit-testable without jsdom.
 
 export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -653,13 +655,6 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
         <SessionMemoryPanel state={sessionMemory} />
       ) : null}
     </div>
-  );
-}
-
-function hasSessionMemory(state: SessionMemoryState): boolean {
-  return (
-    state.activeFlow !== null ||
-    Object.keys(state.workingMemory).length > 0
   );
 }
 
