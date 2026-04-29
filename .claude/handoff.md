@@ -1,4 +1,17 @@
 # Session Handoff — Kilroy
+Date: 2026-04-29 — Phase 17 complete (all 5 findings from fifth review)
+
+Closed every item from the fifth code review. Two test-coverage
+gaps + three nits. Plus the long-deferred dashboard wiring of the
+session-state endpoint — `SessionMemoryPanel` now renders below the
+chat showing activeFlow + proposed-dispatch count + workingMemory
+keys. Read-only, coexists with the existing [DISPATCH] tag flow.
+
+Test count: 714 → 723 (+9). validate.sh green.
+
+---
+
+# Session Handoff — Kilroy (Phase 16 archive)
 Date: 2026-04-29 — Phase 16 complete (all 8 findings from fourth review)
 
 Closed every item from the fourth senior code review. The bulk of

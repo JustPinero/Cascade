@@ -6,6 +6,7 @@ import path from "path";
 import fs from "fs";
 import {
   getOrCreateSession,
+  getSession,
   readWorkingMemory,
   mergeWorkingMemory,
   setActiveFlow,
@@ -76,6 +77,36 @@ describe("deepMerge", () => {
     const result = deepMerge(target, source);
     expect(target).toEqual({ a: { b: 1 } });
     expect(result).toEqual({ a: { b: 1, c: 2 } });
+  });
+});
+
+describe("getSession (read-only — Phase 17)", () => {
+  it("returns null when no session exists for the given date", async () => {
+    const before = await prisma.chatSession.count();
+    const result = await getSession(prisma, "2026-04-29");
+    expect(result).toBeNull();
+    // Critical contract: a read MUST NOT create a row.
+    const after = await prisma.chatSession.count();
+    expect(after).toBe(before);
+  });
+
+  it("returns the existing open session when one is present", async () => {
+    const created = await getOrCreateSession(prisma, "2026-04-29");
+    const found = await getSession(prisma, "2026-04-29");
+    expect(found?.id).toBe(created.id);
+  });
+
+  it("returns null when the only session for that date is closed", async () => {
+    const created = await getOrCreateSession(prisma, "2026-04-29");
+    await closeSession(prisma, created.id);
+    const found = await getSession(prisma, "2026-04-29");
+    expect(found).toBeNull();
+  });
+
+  it("scopes by date — different days return different sessions or null", async () => {
+    await getOrCreateSession(prisma, "2026-04-29");
+    expect((await getSession(prisma, "2026-04-29"))?.id).toBeDefined();
+    expect(await getSession(prisma, "2026-04-30")).toBeNull();
   });
 });
 
