@@ -25,6 +25,49 @@ import {
   defaultSummarizer,
 } from "@/lib/chat-history-compressor";
 
+// Module-level singleton — the registry is pure and request-independent
+// after Phase 12, so rebuilding it on every request was wasted work.
+// (Phase 13.3.)
+const DEFAULT_REGISTRY = buildDefaultRegistry();
+
+/**
+ * Phase 13.3 — produce a useful surface when the loop bails at
+ * maxIterations or via abort. Lists the tools the model called so the
+ * developer can see what happened instead of a generic message.
+ */
+function formatTruncationSurface(
+  result: Awaited<ReturnType<typeof runToolUseLoop>>
+): string {
+  if (!result.truncated) return "";
+  const calls: { name: string; count: number }[] = [];
+  const counts = new Map<string, number>();
+  for (const m of result.messages) {
+    if (m.role === "assistant" && Array.isArray(m.content)) {
+      for (const block of m.content) {
+        if ((block as { type: string }).type === "tool_use") {
+          const name = (block as { name: string }).name;
+          counts.set(name, (counts.get(name) ?? 0) + 1);
+        }
+      }
+    }
+  }
+  for (const [name, count] of counts) calls.push({ name, count });
+  calls.sort((a, b) => b.count - a.count);
+
+  const callList = calls.length
+    ? calls.map((c) => `- ${c.name} (${c.count}×)`).join("\n")
+    : "- (no tool calls executed)";
+
+  return [
+    "I hit my tool-use iteration limit before reaching a final answer.",
+    "",
+    `Tools I called along the way (${result.toolCallsExecuted} total):`,
+    callList,
+    "",
+    "Try narrowing the question, or ask me to summarize what I learned so far.",
+  ].join("\n");
+}
+
 /**
  * System prompt for the Overseer chat path. Tool-only after Phase 12F:
  * project state and conversation memory are fetched/written exclusively
@@ -94,8 +137,16 @@ This is a UI bridge — the canonical record is the propose_dispatch call. Don't
  * Markdown payload as one assistant message. Matches the Anthropic
  * streaming envelope so the existing chat client UX (which expects
  * SSE) renders this without any client changes.
+ *
+ * `model` and message id default to honest values that reflect the
+ * caller (not the original feature-check leftover).
  */
-function sseFromText(text: string): ReadableStream<Uint8Array> {
+function sseFromText(
+  text: string,
+  options: { model?: string; messageId?: string } = {}
+): ReadableStream<Uint8Array> {
+  const model = options.model ?? "claude-sonnet-4-6";
+  const messageId = options.messageId ?? `msg-${Date.now().toString(36)}`;
   const enc = new TextEncoder();
   return new ReadableStream({
     start(controller) {
@@ -103,11 +154,11 @@ function sseFromText(text: string): ReadableStream<Uint8Array> {
         `event: message_start\ndata: ${JSON.stringify({
           type: "message_start",
           message: {
-            id: "msg-feature-check",
+            id: messageId,
             type: "message",
             role: "assistant",
             content: [],
-            model: "cascade-feature-check",
+            model,
             stop_reason: null,
             stop_sequence: null,
             usage: { input_tokens: 0, output_tokens: 0 },
@@ -212,7 +263,8 @@ export async function POST(request: NextRequest) {
     // Tool-only path. The legacy SP-injection streaming branch was
     // removed in Phase 12F — every conversational turn now goes
     // through runToolUseLoop with structured tool access.
-    const registry = buildDefaultRegistry();
+    // Registry is cached at module load (Phase 13.3).
+    const registry = DEFAULT_REGISTRY;
 
     // Bind every request to today's ChatSession so working-memory
     // tools can read/write session-scoped state.
@@ -261,18 +313,18 @@ export async function POST(request: NextRequest) {
       });
 
       const final =
-        result.finalText ||
-        (result.truncated
-          ? "I hit my tool-use iteration limit before reaching a final answer. Try narrowing the question."
-          : "");
+        result.finalText || formatTruncationSurface(result);
 
-      return new Response(sseFromText(final), {
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-        },
-      });
+      return new Response(
+        sseFromText(final, { model: "claude-sonnet-4-6" }),
+        {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+          },
+        }
+      );
     } finally {
       // Always release the timeout — whether the request finished,
       // failed, or aborted itself.
