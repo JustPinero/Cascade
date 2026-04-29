@@ -2,6 +2,7 @@ import Link from "next/link";
 import { HealthIndicator } from "./health-indicator";
 import { AdvisoryBadge } from "./advisory-badge";
 import { BADGE_STYLES, type Badge } from "@/lib/badges";
+import { getCompletionDisplay } from "@/lib/project-display";
 
 export interface ProjectTileData {
   slug: string;
@@ -43,7 +44,6 @@ function formatTimeAgo(dateStr: string): string {
 export function ProjectTile({ project }: ProjectTileProps) {
   const isDeployed = project.status === "deployed";
   const hasActiveSession = project.currentRequest?.includes("dispatched");
-  const score = project.progressScore ?? 0;
 
   // Parse badges once
   let parsedBadges: string[] = [];
@@ -94,30 +94,55 @@ export function ProjectTile({ project }: ProjectTileProps) {
         </div>
       </div>
 
-      {/* Phase + Progress */}
+      {/* Phase + Progress (Phase 19.1 — status-aware) */}
       <div className="mb-3">
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-xs font-mono text-info">
-            {project.currentPhase.replace(/-/g, " ").replace(/phase /, "P")}
-          </span>
-          <span className="text-[10px] font-mono text-space-400">
-            {score}%
-          </span>
-        </div>
-        <div className="w-full h-1 bg-space-700 overflow-hidden">
-          <div
-            className={`h-full transition-all duration-300 ${
-              score >= 75
-                ? "bg-success"
-                : score >= 40
-                  ? "bg-cyan"
-                  : score > 0
-                    ? "bg-amber"
-                    : "bg-space-600"
-            }`}
-            style={{ width: `${Math.min(project.progressScore ?? 0, 100)}%` }}
-          />
-        </div>
+        {(() => {
+          const display = getCompletionDisplay({
+            status: project.status,
+            progressScore: project.progressScore,
+          });
+          if (display.kind === "shipped") {
+            return (
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-mono text-info">
+                  {project.currentPhase.replace(/-/g, " ").replace(/phase /, "P")}
+                </span>
+                <span
+                  className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 border border-success/40 bg-success/10 text-success"
+                  title={`Phase progress score: ${display.score}%`}
+                >
+                  ✓ {display.label}
+                </span>
+              </div>
+            );
+          }
+          return (
+            <>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-mono text-info">
+                  {project.currentPhase.replace(/-/g, " ").replace(/phase /, "P")}
+                </span>
+                <span className="text-[10px] font-mono text-space-400">
+                  {display.score}%
+                </span>
+              </div>
+              <div className="w-full h-1 bg-space-700 overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-300 ${
+                    display.score >= 75
+                      ? "bg-success"
+                      : display.score >= 40
+                        ? "bg-cyan"
+                        : display.score > 0
+                          ? "bg-amber"
+                          : "bg-space-600"
+                  }`}
+                  style={{ width: `${display.score}%` }}
+                />
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       {/* Badges */}
