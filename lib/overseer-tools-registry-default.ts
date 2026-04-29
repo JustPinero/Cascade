@@ -7,6 +7,9 @@ import { dispatchOutcomesTool } from "@/lib/overseer-tools-dispatch-outcomes";
 import { yesterdaySummaryTool } from "@/lib/overseer-tools-yesterday-summary";
 import { engineerMessagesTool } from "@/lib/overseer-tools-engineer-messages";
 import { playbookTool } from "@/lib/overseer-tools-playbook";
+import { updateSessionMemoryTool } from "@/lib/overseer-tools-update-memory";
+import { setActiveFlowTool } from "@/lib/overseer-tools-set-flow";
+import { sessionStateTool } from "@/lib/overseer-tools-session-state";
 
 /**
  * Default tool registry for the Overseer chat path.
@@ -27,5 +30,10 @@ export function buildDefaultRegistry(): ToolRegistry {
   reg.register(yesterdaySummaryTool);
   reg.register(engineerMessagesTool);
   reg.register(playbookTool);
+  // 12C.1 — working memory writes (the canonical place for
+  // confirmed answers to land instead of being buried in prose)
+  reg.register(updateSessionMemoryTool);
+  reg.register(setActiveFlowTool);
+  reg.register(sessionStateTool);
   return reg;
 }

@@ -33,6 +33,15 @@ const mockProject = {
   lastSessionEndedAt: null,
 };
 
+// In-memory ChatSession for the route's getOrCreateSession call.
+const mockSession = {
+  id: "sess-test",
+  startedAt: new Date(),
+  closedAt: null,
+  activeFlow: null,
+  workingMemory: "{}",
+};
+
 vi.mock("@/lib/db", () => ({
   prisma: {
     project: {
@@ -44,6 +53,11 @@ vi.mock("@/lib/db", () => ({
     activityEvent: { findMany: vi.fn().mockResolvedValue([]) },
     chatMessage: { findMany: vi.fn().mockResolvedValue([]) },
     dispatchOutcome: { findMany: vi.fn().mockResolvedValue([]) },
+    chatSession: {
+      findFirst: vi.fn().mockResolvedValue(mockSession),
+      create: vi.fn().mockResolvedValue(mockSession),
+      findUnique: vi.fn().mockResolvedValue(mockSession),
+    },
   },
 }));
 
