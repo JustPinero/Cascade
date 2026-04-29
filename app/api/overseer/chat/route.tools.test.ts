@@ -42,8 +42,8 @@ const mockSession = {
   workingMemory: "{}",
 };
 
-vi.mock("@/lib/db", () => ({
-  prisma: {
+vi.mock("@/lib/db", () => {
+  const prismaMock = {
     project: {
       findUnique: vi.fn(async ({ where }: { where: { slug: string } }) =>
         where.slug === "cascade" ? mockProject : null
@@ -58,8 +58,14 @@ vi.mock("@/lib/db", () => ({
       create: vi.fn().mockResolvedValue(mockSession),
       findUnique: vi.fn().mockResolvedValue(mockSession),
     },
-  },
-}));
+    // Phase 13.1 — getOrCreateSession is wrapped in $transaction.
+    // The mock just invokes the callback with the same prisma mock.
+    $transaction: vi.fn(
+      async (cb: (tx: typeof prismaMock) => Promise<unknown>) => cb(prismaMock)
+    ),
+  };
+  return { prisma: prismaMock };
+});
 
 vi.mock("@/lib/rate-limiter", () => ({
   checkRateLimit: vi.fn().mockReturnValue(null),

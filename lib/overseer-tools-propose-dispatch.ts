@@ -1,5 +1,5 @@
 import type { Tool } from "@/lib/overseer-tools";
-import { mergeWorkingMemory } from "@/lib/chat-session";
+import { appendToWorkingMemoryList } from "@/lib/chat-session";
 
 const VALID_MODES = ["continue", "audit", "investigate", "custom"] as const;
 type DispatchMode = (typeof VALID_MODES)[number];
@@ -64,26 +64,15 @@ export const proposeDispatchTool: Tool<ProposeDispatchInput, ProposeDispatchOutp
     };
     if (input.instructions) proposal.instructions = input.instructions;
 
-    const session = await ctx.prisma.chatSession.findUnique({
-      where: { id: ctx.sessionId },
-    });
-    const existing = session
-      ? (() => {
-          try {
-            const wm = JSON.parse(session.workingMemory) as Record<string, unknown>;
-            const list = wm.proposedDispatches;
-            return Array.isArray(list) ? (list as DispatchProposal[]) : [];
-          } catch {
-            return [];
-          }
-        })()
-      : [];
+    // Atomic append (Phase 13.1) — closes the read-modify-write race
+    // that previously lost concurrent proposals.
+    const { total } = await appendToWorkingMemoryList(
+      ctx.prisma,
+      ctx.sessionId,
+      "proposedDispatches",
+      proposal
+    );
 
-    const newList = [...existing, proposal];
-    await mergeWorkingMemory(ctx.prisma, ctx.sessionId, {
-      proposedDispatches: newList,
-    });
-
-    return { proposal, totalProposed: newList.length };
+    return { proposal, totalProposed: total };
   },
 };
