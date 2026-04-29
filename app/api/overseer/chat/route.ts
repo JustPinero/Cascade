@@ -28,6 +28,8 @@ import {
 } from "@/lib/overseer-tools";
 import { buildDefaultRegistry } from "@/lib/overseer-tools-registry-default";
 import { getOrCreateSession, isValidSessionDate } from "@/lib/chat-session";
+import { extractEngineerMessages } from "@/lib/engineer-tag-parser";
+import { appendChannelMessage } from "@/lib/engineer-channel";
 import {
   compressMessagesForSession,
   defaultSummarizer,
@@ -335,6 +337,26 @@ export async function POST(request: NextRequest) {
 
       const final =
         result.finalText || formatTruncationSurface(result);
+
+      // Phase 19.2 — fire-and-forget channel writeback. If Del
+      // emitted [ENGINEER] tags in this turn's text, persist each to
+      // the engineer channel file. Failures are logged but never
+      // delay or fail the chat response.
+      const engineerMessages = extractEngineerMessages(final);
+      if (engineerMessages.length > 0) {
+        const cwd = process.cwd();
+        for (const message of engineerMessages) {
+          appendChannelMessage(cwd, "delamain", message).catch((err) => {
+            if (process.env.NODE_ENV !== "test") {
+              console.warn(
+                `[engineer-channel-writeback] failed to persist message: ${
+                  err instanceof Error ? err.message : String(err)
+                }`
+              );
+            }
+          });
+        }
+      }
 
       return new Response(
         sseFromText(final, { model: "claude-sonnet-4-6" }),

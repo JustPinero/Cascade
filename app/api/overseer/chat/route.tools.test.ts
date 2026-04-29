@@ -93,6 +93,21 @@ vi.mock("@/lib/anthropic-feature-proposer", () => ({
   renderProposalReport: vi.fn(),
 }));
 
+// Phase 19.2 — assert the route's engineer-channel writeback fires
+// without actually touching disk. We shadow the appendChannelMessage
+// fn and verify call shape.
+const appendChannelMessageMock = vi.fn().mockResolvedValue(undefined);
+vi.mock("@/lib/engineer-channel", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/engineer-channel")>(
+      "@/lib/engineer-channel"
+    );
+  return {
+    ...actual,
+    appendChannelMessage: appendChannelMessageMock,
+  };
+});
+
 // Phase 13.4 — replace the default summarizer with a deterministic
 // stub so we can assert the compressor was invoked end-to-end.
 const summarizerStub = vi.fn().mockResolvedValue("compressed-summary-stub");
@@ -360,6 +375,60 @@ describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () =
         .workingMemory
     );
     expect(writtenWM.covered.medipal.progress).toBe(40);
+  });
+
+  it("persists [ENGINEER] tags from Del's terminal text to the channel (Phase 19.2)", async () => {
+    appendChannelMessageMock.mockClear();
+    appendChannelMessageMock.mockResolvedValue(undefined);
+    mockCaller.mockResolvedValueOnce(
+      textResponse(
+        "Sure thing.\n[ENGINEER] dashboard score lags for shipped projects\n[ENGINEER] also wire the channel writeback\nThanks!"
+      )
+    );
+
+    const { POST } = await import("@/app/api/overseer/chat/route");
+    const res = await POST(
+      makeRequest({ messages: [{ role: "user", content: "post for me" }] })
+    );
+    expect(res.status).toBe(200);
+
+    // Both [ENGINEER] tags should have been written, with from: "delamain".
+    expect(appendChannelMessageMock).toHaveBeenCalledTimes(2);
+    expect(appendChannelMessageMock.mock.calls[0][1]).toBe("delamain");
+    expect(appendChannelMessageMock.mock.calls[0][2]).toBe(
+      "dashboard score lags for shipped projects"
+    );
+    expect(appendChannelMessageMock.mock.calls[1][2]).toBe(
+      "also wire the channel writeback"
+    );
+  });
+
+  it("does NOT call writeback when Del's text has no [ENGINEER] tags (Phase 19.2)", async () => {
+    appendChannelMessageMock.mockClear();
+    mockCaller.mockResolvedValueOnce(textResponse("plain answer with no tags"));
+
+    const { POST } = await import("@/app/api/overseer/chat/route");
+    const res = await POST(
+      makeRequest({ messages: [{ role: "user", content: "hi" }] })
+    );
+    expect(res.status).toBe(200);
+    expect(appendChannelMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("writeback failure does NOT fail the chat response (Phase 19.2)", async () => {
+    appendChannelMessageMock.mockClear();
+    appendChannelMessageMock.mockRejectedValue(new Error("disk full"));
+    mockCaller.mockResolvedValueOnce(
+      textResponse("[ENGINEER] this should be attempted")
+    );
+
+    const { POST } = await import("@/app/api/overseer/chat/route");
+    const res = await POST(
+      makeRequest({ messages: [{ role: "user", content: "hi" }] })
+    );
+    // The chat must still return 200 — writeback failure is silent.
+    expect(res.status).toBe(200);
+    expect(appendChannelMessageMock).toHaveBeenCalledTimes(1);
   });
 
   it("returns 500 when ANTHROPIC_API_KEY is missing (Phase 14.7)", async () => {
