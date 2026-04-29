@@ -16,6 +16,9 @@ describe("buildDefaultRegistry", () => {
       "update_session_memory",
       "set_active_flow",
       "get_session_state",
+      "propose_dispatch",
+      "create_reminder",
+      "create_human_todo",
     ];
     for (const name of expected) {
       expect(reg.has(name)).toBe(true);
