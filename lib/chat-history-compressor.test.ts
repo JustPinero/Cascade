@@ -141,6 +141,39 @@ describe("compressMessagesForSession", () => {
     expect(typeof out[0].content === "string" && out[0].content).toContain("after 40");
   });
 
+  it("falls back to raw truncation when the summarizer throws (Phase 14.2)", async () => {
+    const session = await prisma.chatSession.create({ data: {} });
+    const summarizer: MessageSummarizer = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Summarizer API error: 503"));
+
+    const out = await compressMessagesForSession(
+      prisma,
+      session.id,
+      makeMessages(30),
+      { threshold: 25, keepRecent: 10, summarizer }
+    );
+
+    // Same shape as a successful compression: 1 notice + 10 recent.
+    expect(out.length).toBe(11);
+    expect(out[0].role).toBe("user");
+    expect(typeof out[0].content === "string" && out[0].content).toContain(
+      "Earlier conversation truncated"
+    );
+    expect(typeof out[0].content === "string" && out[0].content).toContain(
+      "summarizer was unavailable"
+    );
+
+    // Recent messages preserved verbatim.
+    expect(out[10]).toEqual(makeMessages(30)[29]);
+
+    // No cache write happened (we don't cache fallback truncations).
+    const reloaded = await prisma.chatSession.findUnique({
+      where: { id: session.id },
+    });
+    expect(reloaded?.compressedHistory).toBeNull();
+  });
+
   it("ignores malformed compressedHistory JSON and recomputes", async () => {
     const session = await prisma.chatSession.create({
       data: { compressedHistory: "{not valid" },

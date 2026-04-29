@@ -181,6 +181,29 @@ export async function setActiveFlow(
 }
 
 /**
+ * Phase 14.8 — close every open session whose startedAt is older than
+ * `cutoff`. Use case: a periodic cron run (e.g. nightly) so the
+ * `closedAt = null` invariant ("session is currently active") stays
+ * meaningful instead of accumulating year-old open rows forever.
+ *
+ * Returns the number of sessions closed. Idempotent — sessions that
+ * are already closed are not touched.
+ *
+ * Where to schedule: the existing dispatch-queue / cron infrastructure
+ * (or `pnpm dev` startup) can call this on a 24h tick.
+ */
+export async function closeStaleSessions(
+  prisma: PrismaClient,
+  cutoff: Date
+): Promise<{ closed: number }> {
+  const result = await prisma.chatSession.updateMany({
+    where: { closedAt: null, startedAt: { lt: cutoff } },
+    data: { closedAt: new Date() },
+  });
+  return { closed: result.count };
+}
+
+/**
  * Set closedAt if not already set. Idempotent — a second call leaves
  * the original closedAt timestamp intact.
  */

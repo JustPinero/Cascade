@@ -26,6 +26,14 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await prisma.chatSession.deleteMany({});
+  await prisma.project.deleteMany({});
+  // Phase 14.3 — propose_dispatch now validates the slug against a
+  // real Project row. Seed the slugs the existing tests use.
+  for (const slug of ["cascade", "a", "b", "c", "x"]) {
+    await prisma.project.create({
+      data: { name: slug, slug, path: `/tmp/${slug}` },
+    });
+  }
 });
 
 describe("proposeDispatchTool", () => {
@@ -77,6 +85,29 @@ describe("proposeDispatchTool", () => {
     );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/Unknown mode/);
+  });
+
+  it("rejects unknown project slugs (Phase 14.3)", async () => {
+    const session = await prisma.chatSession.create({ data: {} });
+    const reg = new ToolRegistry();
+    reg.register(proposeDispatchTool);
+    const result = await reg.execute(
+      "propose_dispatch",
+      { slug: "definitely-not-a-real-project", mode: "continue" },
+      { prisma, sessionId: session.id }
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/Unknown project slug/);
+      expect(result.error).toMatch(/query_projects/);
+    }
+
+    // No proposal should have been recorded.
+    const reloaded = await prisma.chatSession.findUnique({
+      where: { id: session.id },
+    });
+    const wm = JSON.parse(reloaded!.workingMemory);
+    expect(wm.proposedDispatches).toBeUndefined();
   });
 
   it("returns tool error when ctx.sessionId is missing", async () => {
