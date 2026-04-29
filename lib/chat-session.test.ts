@@ -10,6 +10,7 @@ import {
   mergeWorkingMemory,
   setActiveFlow,
   closeSession,
+  closeStaleSessions,
   deepMerge,
 } from "@/lib/chat-session";
 
@@ -187,6 +188,64 @@ describe("setActiveFlow", () => {
     await expect(
       setActiveFlow(prisma, session.id, "incident_triage")
     ).rejects.toThrow(/closed/i);
+  });
+});
+
+describe("closeStaleSessions (Phase 14.8)", () => {
+  it("closes only sessions older than the cutoff", async () => {
+    const day = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    const stale = await prisma.chatSession.create({
+      data: { startedAt: new Date(now - 10 * day) },
+    });
+    const fresh = await prisma.chatSession.create({
+      data: { startedAt: new Date(now - 1 * day) },
+    });
+
+    const cutoff = new Date(now - 5 * day);
+    const result = await closeStaleSessions(prisma, cutoff);
+    expect(result.closed).toBe(1);
+
+    const reloadedStale = await prisma.chatSession.findUnique({
+      where: { id: stale.id },
+    });
+    expect(reloadedStale?.closedAt).toBeInstanceOf(Date);
+
+    const reloadedFresh = await prisma.chatSession.findUnique({
+      where: { id: fresh.id },
+    });
+    expect(reloadedFresh?.closedAt).toBeNull();
+  });
+
+  it("does not re-close already-closed sessions", async () => {
+    const day = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const closed = await prisma.chatSession.create({
+      data: {
+        startedAt: new Date(now - 10 * day),
+        closedAt: new Date(now - 8 * day),
+      },
+    });
+
+    const result = await closeStaleSessions(
+      prisma,
+      new Date(now - 5 * day)
+    );
+    expect(result.closed).toBe(0);
+
+    const reloaded = await prisma.chatSession.findUnique({
+      where: { id: closed.id },
+    });
+    expect(reloaded?.closedAt?.getTime()).toBe(now - 8 * day);
+  });
+
+  it("returns {closed: 0} when there are no stale sessions", async () => {
+    const result = await closeStaleSessions(
+      prisma,
+      new Date(Date.now() - 100 * 24 * 60 * 60 * 1000)
+    );
+    expect(result.closed).toBe(0);
   });
 });
 

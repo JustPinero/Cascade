@@ -264,6 +264,105 @@ describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () =
     expect(params.messages[0].content).toContain("compressed-summary-stub");
   });
 
+  it("uses body.sessionDate when provided (Phase 14.1)", async () => {
+    mockCaller.mockResolvedValueOnce(textResponse("ok"));
+    const findFirstSpy = vi.mocked(
+      (await import("@/lib/db")).prisma.chatSession.findFirst
+    );
+    findFirstSpy.mockClear();
+
+    const { POST } = await import("@/app/api/overseer/chat/route");
+    await POST(
+      makeRequest({
+        messages: [{ role: "user", content: "hi" }],
+        sessionDate: "2026-01-15",
+      })
+    );
+
+    // The session lookup should have been keyed against 2026-01-15,
+    // not the server's UTC today.
+    const lookupArgs = findFirstSpy.mock.calls[0]?.[0] as
+      | { where: { startedAt: { gte: Date; lt: Date } } }
+      | undefined;
+    expect(lookupArgs).toBeDefined();
+    const start = lookupArgs!.where.startedAt.gte;
+    expect(start.toISOString().startsWith("2026-01-15")).toBe(true);
+  });
+
+  it("ignores malformed body.sessionDate and falls back to server UTC (Phase 14.1)", async () => {
+    mockCaller.mockResolvedValueOnce(textResponse("ok"));
+    const findFirstSpy = vi.mocked(
+      (await import("@/lib/db")).prisma.chatSession.findFirst
+    );
+    findFirstSpy.mockClear();
+
+    const { POST } = await import("@/app/api/overseer/chat/route");
+    await POST(
+      makeRequest({
+        messages: [{ role: "user", content: "hi" }],
+        sessionDate: "not-a-date",
+      })
+    );
+
+    const lookupArgs = findFirstSpy.mock.calls[0]?.[0] as
+      | { where: { startedAt: { gte: Date } } }
+      | undefined;
+    const today = new Date().toISOString().split("T")[0];
+    expect(lookupArgs!.where.startedAt.gte.toISOString().startsWith(today)).toBe(
+      true
+    );
+  });
+
+  it("returns 500 when ANTHROPIC_API_KEY is missing (Phase 14.7)", async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+
+    const { POST } = await import("@/app/api/overseer/chat/route");
+    const res = await POST(
+      makeRequest({ messages: [{ role: "user", content: "hi" }] })
+    );
+
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toMatch(/ANTHROPIC_API_KEY/i);
+    expect(mockCaller).not.toHaveBeenCalled();
+  });
+
+  it("registers exactly the documented set of tools (Phase 14.7)", async () => {
+    mockCaller.mockResolvedValueOnce(textResponse("ok"));
+
+    const { POST } = await import("@/app/api/overseer/chat/route");
+    await POST(
+      makeRequest({ messages: [{ role: "user", content: "hi" }] })
+    );
+
+    const params = mockCaller.mock.calls[0][0];
+    const toolNames = params.tools
+      .map((t: { name: string }) => t.name)
+      .sort();
+
+    // Exact-set assertion (not just subset) — adding a new tool should
+    // require updating this list, which forces a deliberate decision
+    // about advertising it to the model.
+    expect(toolNames).toEqual(
+      [
+        "create_human_todo",
+        "create_reminder",
+        "get_dispatch_outcomes",
+        "get_engineer_messages",
+        "get_playbook",
+        "get_recent_activity",
+        "get_session_logs",
+        "get_session_state",
+        "get_yesterday_summary",
+        "propose_dispatch",
+        "query_project",
+        "query_projects",
+        "set_active_flow",
+        "update_session_memory",
+      ].sort()
+    );
+  });
+
   it("does NOT invoke the compressor on a short conversation", async () => {
     summarizerStub.mockClear();
     mockCaller.mockResolvedValueOnce(textResponse("ok"));
@@ -279,18 +378,4 @@ describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () =
     expect(summarizerStub).not.toHaveBeenCalled();
   });
 
-  it("ignores `useTools: false` after Phase 12F — the legacy path no longer exists", async () => {
-    mockCaller.mockResolvedValueOnce(textResponse("ok"));
-
-    const { POST } = await import("@/app/api/overseer/chat/route");
-    await POST(
-      makeRequest({
-        messages: [{ role: "user", content: "Plain chat." }],
-        useTools: false,
-      })
-    );
-
-    // useTools:false used to bypass to legacy. Now it's a no-op flag.
-    expect(mockCaller).toHaveBeenCalledTimes(1);
-  });
 });

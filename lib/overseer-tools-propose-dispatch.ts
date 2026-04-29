@@ -57,6 +57,21 @@ export const proposeDispatchTool: Tool<ProposeDispatchInput, ProposeDispatchOutp
         `Unknown mode "${input.mode}". Valid: ${VALID_MODES.join(", ")}.`
       );
     }
+
+    // Phase 14.3 — verify the project exists. Otherwise the model can
+    // record a proposal for a misspelled or hallucinated slug; later
+    // when the user clicks Execute Sprint, the dispatch endpoint
+    // fails with a confusing 404. Catch it at proposal time.
+    const exists = await ctx.prisma.project.findUnique({
+      where: { slug: input.slug },
+      select: { slug: true },
+    });
+    if (!exists) {
+      throw new Error(
+        `Unknown project slug "${input.slug}". Call query_projects to see what's registered.`
+      );
+    }
+
     const proposal: DispatchProposal = {
       slug: input.slug,
       mode: input.mode,

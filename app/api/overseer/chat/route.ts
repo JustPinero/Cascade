@@ -31,6 +31,15 @@ import {
 const DEFAULT_REGISTRY = buildDefaultRegistry();
 
 /**
+ * Phase 14.1 — accept body.sessionDate so the dashboard can pass the
+ * user's local date for session binding. Strict YYYY-MM-DD; rejects
+ * anything else to avoid silently routing to weird dates.
+ */
+function isValidSessionDate(value: unknown): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+/**
  * Phase 13.3 — produce a useful surface when the loop bails at
  * maxIterations or via abort. Lists the tools the model called so the
  * developer can see what happened instead of a generic message.
@@ -81,7 +90,8 @@ function formatTruncationSurface(
  * as a UI bridge until the dashboard migrates to read
  * workingMemory.proposedDispatches directly (separate scope).
  */
-const TOOL_PATH_SYSTEM_PROMPT = `You are the Overseer (also called Delamain) — the AI project manager inside Cascade. Calm, precise, efficient, like a vehicle dispatcher running a fleet. The developer may call you by a custom name; use whatever name they address you by.
+// Exported for the dispatch-tag contract test (Phase 14.6).
+export const TOOL_PATH_SYSTEM_PROMPT = `You are the Overseer (also called Delamain) — the AI project manager inside Cascade. Calm, precise, efficient, like a vehicle dispatcher running a fleet. The developer may call you by a custom name; use whatever name they address you by.
 
 # Your job
 Help the developer plan their daily sprint. When they describe what they want done, you create dispatch plans they can execute.
@@ -260,16 +270,19 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Tool-only path. The legacy SP-injection streaming branch was
-    // removed in Phase 12F — every conversational turn now goes
-    // through runToolUseLoop with structured tool access.
-    // Registry is cached at module load (Phase 13.3).
+    // Tool-only path. Every non-slash request goes through
+    // runToolUseLoop with structured tool access. Registry is
+    // cached at module load.
     const registry = DEFAULT_REGISTRY;
 
-    // Bind every request to today's ChatSession so working-memory
-    // tools can read/write session-scoped state.
-    const today = new Date().toISOString().split("T")[0];
-    const session = await getOrCreateSession(prisma, today);
+    // Bind the request to a ChatSession (Phase 12C.1). Phase 14.1
+    // accepts an optional body.sessionDate so the dashboard can pass
+    // the user's local date — server UTC fallback would otherwise
+    // split conversations across midnight UTC for non-UTC users.
+    const sessionDate = isValidSessionDate(body.sessionDate)
+      ? body.sessionDate
+      : new Date().toISOString().split("T")[0];
+    const session = await getOrCreateSession(prisma, sessionDate);
     const ctx: ToolContext = { prisma, sessionId: session.id };
 
     // Phase 13.2 — abort discipline. 60s ceiling for the whole
@@ -336,10 +349,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
-// Phase 12F removed:
-//   - buildOverseerSystemPrompt() (legacy SP-injection function)
-//   - The streaming fetch fallback branch (useTools !== false case)
-// All Overseer chat now flows through runToolUseLoop with structured
-// tool access. The dashboard's [DISPATCH] tag parsing continues to
-// work via the model's text response.

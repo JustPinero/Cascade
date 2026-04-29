@@ -61,6 +61,19 @@ function formatSummaryAsMessage(summary: string): AnthropicMessage {
 }
 
 /**
+ * Phase 14.2 — fallback synthetic message when the summarizer fails.
+ * Compression is a SAFETY NET; it must not become a failure mode.
+ * If Haiku is down, drop the older portion silently with a notice
+ * rather than 500-ing the whole conversation.
+ */
+function formatTruncationNotice(droppedCount: number): AnthropicMessage {
+  return {
+    role: "user",
+    content: `[Earlier conversation truncated — ${droppedCount} older turns dropped because the summarizer was unavailable. workingMemory remains the source of truth for confirmed facts.]`,
+  };
+}
+
+/**
  * Returns a possibly-compressed message array. If the input is at or
  * below the threshold, returns it unchanged. Otherwise, returns
  * `[summary message, ...last N recent messages]`. Caches the summary
@@ -88,15 +101,34 @@ export async function compressMessagesForSession(
     return [formatSummaryAsMessage(cached.summary), ...recentMessages];
   }
 
-  const summary = await opts.summarizer(olderMessages, { signal: opts.signal });
-  await prisma.chatSession.update({
-    where: { id: sessionId },
-    data: {
-      compressedHistory: JSON.stringify({
-        summarizedThroughMessageCount: olderMessages.length,
-        summary,
-      }),
-    },
+  // Phase 14.2 — summarizer failure must not cascade into a 500.
+  // Fall back to raw truncation with a notice; conversation continues.
+  let summary: string;
+  try {
+    summary = await opts.summarizer(olderMessages, { signal: opts.signal });
+  } catch (err) {
+    if (process.env.NODE_ENV !== "test") {
+      console.warn(
+        `[compressor] summarizer failed; falling back to raw truncation: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
+    return [formatTruncationNotice(olderMessages.length), ...recentMessages];
+  }
+
+  // Phase 14.4 — wrap the cache update in $transaction so two parallel
+  // requests can't overwrite each other's compressedHistory writes.
+  await prisma.$transaction(async (tx) => {
+    await tx.chatSession.update({
+      where: { id: sessionId },
+      data: {
+        compressedHistory: JSON.stringify({
+          summarizedThroughMessageCount: olderMessages.length,
+          summary,
+        }),
+      },
+    });
   });
 
   return [formatSummaryAsMessage(summary), ...recentMessages];

@@ -1,4 +1,33 @@
 # Session Handoff — Kilroy
+Date: 2026-04-29 — Phase 14 complete (bug fixes from second review)
+
+Phase 14 closed every 🟥 and 🟧 finding from the second senior code
+review and the second QA pass. Test count: 688 → 705 (+17). All
+checks green via `validate.sh`.
+
+Highlights:
+- TZ-aware session binding via optional `body.sessionDate`
+- Compressor falls back to raw truncation when summarizer fails (no
+  more 500 on Haiku outage)
+- `propose_dispatch` validates the slug against a real Project
+- Compressor's cache write is now in `$transaction` (matches 13.1)
+- Dead `body.useTools` flag and stale 12F comment block removed
+- `[DISPATCH]` tag/regex contract test (extracted parser to
+  `lib/dispatch-tag-parser.ts`, used by both dashboard + tests)
+- Route error-path tests (missing API key → 500; tool registry
+  exact-set assertion catches drift)
+- `closeStaleSessions` helper makes the `closedAt` invariant
+  enforceable
+
+Intentionally deferred:
+- `commit_dispatches` effect tool — would let the model fire
+  dispatches autonomously without user approval. Either dashboard
+  needs to call it on Execute Sprint, or model autonomy boundaries
+  need explicit definition. Separate scope.
+
+---
+
+# Session Handoff — Kilroy (Phase 13 archive)
 Date: 2026-04-29 — Phase 13 complete (stability + test hardening)
 
 ## Identity

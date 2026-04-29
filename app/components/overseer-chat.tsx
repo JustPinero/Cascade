@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { sendNotification } from "@/lib/notify";
 import { playStartSound, playEndSound } from "@/lib/sounds";
 import { getOverseerSettings } from "@/lib/overseer-settings";
+import { extractDispatchActions } from "@/lib/dispatch-tag-parser";
 
 // SpeechRecognition types for browser API
 interface SpeechRecognitionEvent {
@@ -293,20 +294,10 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
     }
   }
 
+  // Phase 14.6 — extracted to lib/dispatch-tag-parser.ts so a unit
+  // test can verify the SP-documented format and this regex agree.
   function extractActions(content: string): ParsedAction[] {
-    const actions: ParsedAction[] = [];
-    // Look for [DISPATCH] markers in the response
-    const regex =
-      /\[DISPATCH\]\s*(\S+)\s*:\s*(continue|audit|investigate|custom)\s*(?:—|-)?\s*(.*)/gi;
-    let match;
-    while ((match = regex.exec(content)) !== null) {
-      actions.push({
-        project: match[1],
-        action: match[2],
-        prompt: match[3]?.trim() || "",
-      });
-    }
-    return actions;
+    return extractDispatchActions(content) as ParsedAction[];
   }
 
   /**
