@@ -126,10 +126,13 @@ model ChatSession {
   id            String        @id @default(cuid())
   startedAt     DateTime      @default(now())
   closedAt      DateTime?
-  activeFlow    String?       // "inventory_walk" | "dispatch_planning" | "incident_triage" | null
-  workingMemory String        @default("{}") // JSON string
+  activeFlow        String?       // "inventory_walk" | "dispatch_planning" | "incident_triage" | null
+  workingMemory     String        @default("{}") // JSON string
+  // Phase 12E — cached summary of the older portion of the conversation.
+  // JSON: {summarizedThroughMessageCount, summary}.
+  compressedHistory String?
 
-  messages      ChatMessage[]
+  messages          ChatMessage[]
 
   @@index([startedAt])
   @@index([closedAt])

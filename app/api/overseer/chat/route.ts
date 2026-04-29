@@ -23,6 +23,10 @@ import {
 } from "@/lib/overseer-tools";
 import { buildDefaultRegistry } from "@/lib/overseer-tools-registry-default";
 import { getOrCreateSession } from "@/lib/chat-session";
+import {
+  compressMessagesForSession,
+  defaultSummarizer,
+} from "@/lib/chat-history-compressor";
 
 /**
  * System prompt for the tool-use path. Kept short and stable so it
@@ -519,14 +523,31 @@ export async function POST(request: NextRequest) {
       const session = await getOrCreateSession(prisma, today);
       const ctx: ToolContext = { prisma, sessionId: session.id };
 
+      // Phase 12E — history compression safety net. Once the
+      // conversation gets long, replace older turns with a cached
+      // summary. WorkingMemory remains the canonical store for
+      // confirmed facts; this just keeps raw message count under
+      // control on multi-hour sessions.
+      const inputMessages = validation.messages.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: typeof m.content === "string" ? m.content : "",
+      }));
+      const messages = await compressMessagesForSession(
+        prisma,
+        session.id,
+        inputMessages,
+        {
+          threshold: 25,
+          keepRecent: 10,
+          summarizer: defaultSummarizer(apiKey),
+        }
+      );
+
       const result = await runToolUseLoop({
         caller: defaultAnthropicCaller(apiKey),
         model: "claude-sonnet-4-6",
         systemPrompt: TOOL_PATH_SYSTEM_PROMPT,
-        messages: validation.messages.map((m) => ({
-          role: m.role as "user" | "assistant",
-          content: typeof m.content === "string" ? m.content : "",
-        })),
+        messages,
         registry,
         ctx,
         maxIterations: 8,
