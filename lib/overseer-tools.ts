@@ -76,7 +76,8 @@ export interface AnthropicMessageResponse {
 }
 
 export type AnthropicCaller = (
-  params: AnthropicMessageParams
+  params: AnthropicMessageParams,
+  options?: { signal?: AbortSignal }
 ) => Promise<AnthropicMessageResponse>;
 
 // -- ToolRegistry -----------------------------------------------------
@@ -139,6 +140,13 @@ export interface ToolUseLoopParams {
   ctx: ToolContext;
   maxIterations?: number;
   maxTokens?: number;
+  /**
+   * Optional abort signal — propagated to each `caller` invocation.
+   * If aborted between iterations, the loop returns immediately with
+   * `truncated: true`. Tools-in-flight are not interrupted; only the
+   * outer caller call respects the signal.
+   */
+  signal?: AbortSignal;
 }
 
 export interface ToolUseLoopResult {
@@ -180,22 +188,31 @@ export async function runToolUseLoop(
     ctx,
     maxIterations = 8,
     maxTokens = 2048,
+    signal,
   } = params;
 
   const messages: AnthropicMessage[] = [...initialMessages];
   let toolCallsExecuted = 0;
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
-    const response = await caller({
-      model,
-      system: systemPrompt,
-      // Pass a fresh array slice so callers (especially test mocks
-      // that capture params) see a snapshot at call-time rather than
-      // a live reference we keep mutating.
-      messages: [...messages],
-      tools: registry.toAnthropicTools(),
-      max_tokens: maxTokens,
-    });
+    // Honor abort between iterations. Mid-iteration abort happens
+    // inside the caller via the signal we pass down.
+    if (signal?.aborted) {
+      return { messages, finalText: "", toolCallsExecuted, truncated: true };
+    }
+    const response = await caller(
+      {
+        model,
+        system: systemPrompt,
+        // Pass a fresh array slice so callers (especially test mocks
+        // that capture params) see a snapshot at call-time rather than
+        // a live reference we keep mutating.
+        messages: [...messages],
+        tools: registry.toAnthropicTools(),
+        max_tokens: maxTokens,
+      },
+      { signal }
+    );
 
     const toolUseBlocks = extractToolUseBlocks(response.content);
 
@@ -246,7 +263,7 @@ export async function runToolUseLoop(
  * fetch. Not used by tests.
  */
 export function defaultAnthropicCaller(apiKey: string): AnthropicCaller {
-  return async (params) => {
+  return async (params, options) => {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -255,6 +272,7 @@ export function defaultAnthropicCaller(apiKey: string): AnthropicCaller {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify(params),
+      signal: options?.signal,
     });
     if (!response.ok) {
       const text = await response.text();

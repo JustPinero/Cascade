@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   ToolRegistry,
   runToolUseLoop,
@@ -266,6 +266,49 @@ describe("runToolUseLoop", () => {
 
     expect(result.truncated).toBe(true);
     expect(result.toolCallsExecuted).toBe(3);
+  });
+
+  it("propagates the abort signal to the caller", async () => {
+    const reg = new ToolRegistry();
+    const seenSignals: (AbortSignal | undefined)[] = [];
+    const caller: AnthropicCaller = async (_p, options) => {
+      seenSignals.push(options?.signal);
+      return textResponse("ok");
+    };
+
+    const ac = new AbortController();
+    await runToolUseLoop({
+      caller,
+      model: "claude-sonnet-4-6",
+      systemPrompt: "x",
+      messages: [{ role: "user", content: "hi" }],
+      registry: reg,
+      ctx: ctx(),
+      signal: ac.signal,
+    });
+
+    expect(seenSignals.length).toBe(1);
+    expect(seenSignals[0]).toBe(ac.signal);
+  });
+
+  it("returns truncated:true and stops looping when the signal is already aborted", async () => {
+    const reg = new ToolRegistry();
+    const caller = vi.fn();
+    const ac = new AbortController();
+    ac.abort();
+
+    const result = await runToolUseLoop({
+      caller,
+      model: "claude-sonnet-4-6",
+      systemPrompt: "x",
+      messages: [{ role: "user", content: "hi" }],
+      registry: reg,
+      ctx: ctx(),
+      signal: ac.signal,
+    });
+
+    expect(result.truncated).toBe(true);
+    expect(caller).not.toHaveBeenCalled();
   });
 
   it("handles parallel tool_use blocks in a single response", async () => {

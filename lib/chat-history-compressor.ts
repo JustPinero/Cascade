@@ -21,10 +21,13 @@ export interface CompressorOptions {
   keepRecent: number;
   /** Summarizer; receives the older portion and returns a string. */
   summarizer: MessageSummarizer;
+  /** Optional abort signal forwarded to the summarizer. */
+  signal?: AbortSignal;
 }
 
 export type MessageSummarizer = (
-  messages: AnthropicMessage[]
+  messages: AnthropicMessage[],
+  options?: { signal?: AbortSignal }
 ) => Promise<string>;
 
 interface CachedSummary {
@@ -85,7 +88,7 @@ export async function compressMessagesForSession(
     return [formatSummaryAsMessage(cached.summary), ...recentMessages];
   }
 
-  const summary = await opts.summarizer(olderMessages);
+  const summary = await opts.summarizer(olderMessages, { signal: opts.signal });
   await prisma.chatSession.update({
     where: { id: sessionId },
     data: {
@@ -104,7 +107,7 @@ export async function compressMessagesForSession(
  * API. Returns the model's text output as the summary.
  */
 export function defaultSummarizer(apiKey: string): MessageSummarizer {
-  return async (messages) => {
+  return async (messages, options) => {
     const transcript = messages
       .map((m) => {
         const role = m.role.toUpperCase();
@@ -132,6 +135,7 @@ export function defaultSummarizer(apiKey: string): MessageSummarizer {
           { role: "user", content: `Conversation to summarize:\n\n${transcript}` },
         ],
       }),
+      signal: options?.signal,
     });
 
     if (!response.ok) {
