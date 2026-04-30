@@ -8,6 +8,15 @@ export interface OverseerSettings {
   portraitIdle: string;
   portraitTalking: string | null;
   personality: string | null;
+  // Phase 20 — voice output (Web Speech API). Off by default; user
+  // opts in via the settings UI or the chat-header quick toggle.
+  voiceEnabled: boolean;
+  /** voiceURI from speechSynthesis.getVoices(); null = browser default */
+  voiceURI: string | null;
+  /** Speech rate, clamped 0–2 by speak() before being passed to the API. */
+  voiceRate: number;
+  /** Speech pitch, clamped 0–2 by speak() before being passed to the API. */
+  voicePitch: number;
 }
 
 const STORAGE_KEY = "cascade-overseer";
@@ -19,6 +28,10 @@ const DEFAULTS: OverseerSettings = {
   // the box. localStorage overrides via the Overseer settings panel.
   portraitTalking: "/delamain-talking.jpg",
   personality: null,
+  voiceEnabled: false,
+  voiceURI: null,
+  voiceRate: 1.0,
+  voicePitch: 1.0,
 };
 
 /**
