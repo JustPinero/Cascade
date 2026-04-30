@@ -37,6 +37,11 @@ describe("overseer-settings", () => {
       expect(settings.voiceURI).toBeNull();
       expect(settings.voiceRate).toBe(1.0);
       expect(settings.voicePitch).toBe(1.0);
+      // Phase 21 — talking face on by default; mic toggle is the
+      // existing behavior; silence threshold 1500ms.
+      expect(settings.usesTalkingFace).toBe(true);
+      expect(settings.silenceThresholdMs).toBe(1500);
+      expect(settings.micMode).toBe("toggle");
     });
 
     it("round-trips voice preferences (Phase 20)", () => {
@@ -94,6 +99,15 @@ describe("overseer-settings", () => {
 
     it("returns dual with defaults (talking portrait now ships by default)", () => {
       expect(getPortraitMode()).toBe("dual");
+    });
+
+    it("returns single when usesTalkingFace is false (Phase 21)", () => {
+      setOverseerSettings({
+        portraitIdle: "/idle.jpg",
+        portraitTalking: "/talking.jpg",
+        usesTalkingFace: false,
+      });
+      expect(getPortraitMode()).toBe("single");
     });
   });
 
