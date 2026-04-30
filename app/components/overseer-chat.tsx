@@ -16,6 +16,7 @@ import {
   createSilenceDetector,
   type SilenceDetector,
 } from "@/lib/silence-detector";
+import { Portrait } from "@/app/components/portrait";
 
 // SpeechRecognition types for browser API. Extended in Phase 21
 // to surface `length` and `isFinal` so Conversation Mode can iterate
@@ -701,13 +702,14 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
                   : "border-space-600 shadow-[0_0_4px_rgba(65,166,181,0.1)]"
               }`}
             >
-              <img
+              <Portrait
                 src={
                   streaming && usesTalkingFace && portraitTalking
                     ? portraitTalking
                     : portraitIdle
                 }
                 alt={overseerName}
+                size="lg"
                 className={`w-full h-full object-cover transition-all duration-300 ${
                   streaming ? "brightness-125" : "brightness-90"
                 }`}
@@ -732,9 +734,10 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
       <div className="px-4 py-2 border-b border-space-600 bg-space-800">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <img
+            <Portrait
               src={portraitIdle}
               alt={overseerName}
+              size="sm"
               className="w-5 h-5 rounded-full ring-1 ring-cyan/40"
             />
             <span className="text-xs font-mono text-cyan uppercase tracking-wider font-bold">
