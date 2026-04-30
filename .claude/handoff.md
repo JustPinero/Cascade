@@ -1,4 +1,48 @@
 # Session Handoff — Kilroy
+Date: 2026-04-30 — Phase 22 complete (lead-stall guardrails + placeholder portrait)
+
+Phase 22 ships the Cascade-side guardrails for the 2026-04-29 lead-stall
+brief Delamain raised. Most of the deeper fixes (Agent error surfacing,
+partial-team rollback, native lead recovery) live INSIDE Claude Code —
+filed as a separate bug report (Justin handling). What landed here is
+the orchestration-side defense:
+
+- **22.1** `<Portrait/>` component (`app/components/portrait.tsx`) +
+  `lib/portrait-fallback.ts` helper. Pure-SVG inline fallback (neutral
+  speech-bubble glyph) replaces broken-image icons when an asset URL is
+  empty / null / 404s. Wired into the chat header + main portrait + both
+  settings previews. No theme can fail-render anymore.
+- **22.2** `lib/iterm-session-validator.ts` — `isITermSessionAlive(id)`
+  primitive via osascript. Strict UUID-shape input validation (no shell
+  injection vector). Subprocess-injectable for tests. Available for
+  future use; not wired into dispatchTeam (which uses tmux not iTerm).
+- **22.4** `lib/team-config-scanner.ts` — pure helper that reads
+  `~/.claude/teams/*/config.json` and surfaces three diagnostic kinds:
+  `partial-team` (member with empty tmuxPaneId past the spawn handshake
+  window), `stale-config` (no writes in N hours — silent stall), and
+  `malformed` (broken JSON). Filesystem-injectable + Date.now-injectable
+  for tests.
+- **22.4 wire-up** `scripts/run-team-stall-scan.ts` runs the scanner on
+  startup (next to the version watcher + stale-session cleanup), records
+  each diagnostic as `ActivityEvent({eventType: "team-stalled"})`. Local-
+  dev cadence is fine; prod would need cron / dispatch-queue scheduling.
+- **22.5** Hardened the sprint prompt in `dispatchTeam` (lib/claude-
+  dispatcher.ts) with explicit rules: after every Agent batch, check for
+  empty / opaque / error results; emit user-visible text BEFORE yielding;
+  never silent-yield on tool errors; flag broken team configs honestly.
+
+Test count: 765 → 789 (+24). validate.sh green (second run; first
+hit the documented parallel-suite prisma-push flake).
+
+## Lead-stall bug report status
+The Claude Code-side fixes (Agent error surfacing, partial team-config
+rollback, native silent-yield prevention) are filed separately by
+Justin. Track in upstream `anthropics/claude-code` issues. Cascade
+guardrails above are the workaround until those land.
+
+---
+
+# Session Handoff — Kilroy (Phase 21 archive)
 Date: 2026-04-29 — Phase 18 complete (Overseer migration arc closed)
 
 Phase 18 lifted `hasSessionMemory` + `SessionMemoryState` into

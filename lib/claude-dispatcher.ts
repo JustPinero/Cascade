@@ -735,6 +735,29 @@ ${playbookContent ? `### Overseer Playbook\n${playbookContent}\n` : ""}
 - If teammate hits a blocker, investigate and help
 - When done, write sprint summary with [LESSON] and [HUMAN TODO] tags
 
+## Failure handling — non-negotiable (Phase 22.5 hardening)
+The 2026-04-29 stall happened because a parallel Agent batch failed,
+the lead got opaque error results, and ended its turn silently. To
+prevent that recurring:
+
+- After EVERY Agent batch (especially parallel ones), inspect each
+  result. If any tool result is empty, opaque ("[Tool result missing
+  due to internal error]"), or contains an error string, you MUST:
+    1. Acknowledge the error in user-visible text BEFORE yielding
+       the turn. Silent yield on tool errors is a bug.
+    2. Try ONE retry of the failing call(s), only if the cause is
+       transient (transport / session). Do not retry if the error
+       indicates a code-level problem.
+    3. If retry fails, surface the diagnosis to the user with
+       concrete next steps (reset session, switch transport, abort
+       sprint).
+- If every tool call in a batch errored — even more important. Never
+  end the turn without text. The user has no signal otherwise.
+- If you spawn teammates and the team config file
+  (~/.claude/teams/*/config.json) shows members with
+  tmuxPaneId == "" after the spawn handshake, the team is broken.
+  Do not pretend it succeeded. Tell the user.
+
 Begin by spawning the team.`;
 
   const tmpFile = path.join(

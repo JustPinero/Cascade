@@ -19,5 +19,11 @@ pnpm exec tsx scripts/run-version-watcher.ts 2>/dev/null || true
 # rows forever. Best-effort — never blocks startup.
 pnpm exec tsx scripts/run-stale-session-cleanup.ts 2>/dev/null || true
 
+# Phase 22.4 — scan ~/.claude/teams/*/config.json for stalled or
+# partial teams (the 2026-04-29 lead-stall failure mode). Records
+# ActivityEvents for any diagnostics; surfaces in the dashboard.
+# Best-effort — never blocks startup.
+pnpm exec tsx scripts/run-team-stall-scan.ts 2>/dev/null || true
+
 echo "Starting dev server at http://localhost:3000"
 pnpm dev
