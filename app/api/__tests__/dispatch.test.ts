@@ -1,12 +1,11 @@
 import { describe, it, expect } from "vitest";
 import path from "path";
+import os from "os";
 import { isValidSlug, isInsideProjectsDir } from "@/lib/validators";
 
-const base = path.resolve(
-  path.sep === "\\"
-    ? "C:/Users/justinpinero/Desktop/projects"
-    : "/Users/justinpinero/Desktop/projects"
-);
+// Use a portable per-host projects path so the test runs on any
+// developer's machine without leaking specific usernames.
+const base = path.resolve(path.join(os.homedir(), "Desktop", "projects"));
 const inside = path.join(base, "ratracer");
 const outside = path.resolve(path.sep === "\\" ? "C:/etc/passwd" : "/etc/passwd");
 const traversal = path.join(base, "..", "..", "..", "etc", "passwd");

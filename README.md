@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@justpinero/create-cascade?label=create-cascade&color=0366d6)](https://www.npmjs.com/package/@justpinero/create-cascade)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
-[![Tests](https://img.shields.io/badge/tests-428+-brightgreen)](#)
+[![Tests](https://img.shields.io/badge/tests-765+-brightgreen)](#)
 
 A nerve center for orchestrating multi-project Claude Code workflows. The **Overseer** — your customizable AI fleet dispatcher — manages your projects, learns from every session, and tells you when it needs you.
 
@@ -25,17 +25,20 @@ If you want to understand exactly what it does, or install manually, read on.
 
 ## What It Does
 
-- **Fleet Dashboard** — monitor health, progress, and status across all your projects at a glance
-- **The Overseer AI Dispatcher** — tell the Overseer what you want done; he creates dispatch plans, launches Claude sessions, tracks outcomes
+- **Fleet Dashboard** — monitor health, progress, and status across all your projects at a glance. Shipped projects show a "Deployed" / "Complete" badge; in-flight projects show a phase-based progress bar
+- **The Overseer (a tool-using agent)** — Claude Sonnet wired through Anthropic's tool-use API with 14 built-in tools. Reads project state, fleet activity, session logs, dispatch outcomes, the playbook, and engineer messages on demand instead of cramming everything into a 6K-token system prompt
+- **Structured Working Memory** — every chat is bound to a `ChatSession` with a JSON `workingMemory` document. The Overseer writes confirmed values via `update_session_memory` so they survive across turns instead of getting lost in conversation prose
+- **Inventory-Walk Pattern** — explicit conversation flows (`inventory_walk`, `dispatch_planning`, `incident_triage`) keep the Overseer grounded across long fleet reviews without repeating questions or losing answers
+- **History Compression** — once a conversation exceeds 25 turns, older messages get summarized via Haiku and cached on the session. Falls back to raw truncation if Haiku is unhealthy
 - **Closed Feedback Loop** — sessions report back automatically via Stop hooks. Cascade knows when sessions end, what happened, what went wrong
 - **Memory-Safe Concurrency** — subagent spawns go through a queue sized to your host RAM (1 slot on <16GB, 2 on 16–32GB, 4 on ≥48GB). No more terminal deaths on laptops
 - **1Password-Backed Secrets** — your Anthropic API key lives in 1Password. `.env` holds `op://` references; plaintext never touches disk
 - **Knowledge Base** — lessons harvested from project history. The Overseer uses these to advise other projects
 - **Morning Briefing** — auto-generated summary of what happened overnight, what's blocked, what to prioritize
-- **Conversation Memory** — the Overseer remembers yesterday's sprint plan and references it today
 - **Semi-Auto Dispatch** — routine "continue" operations execute without approval
 - **Human Tasks** — things only you can do (upload assets, get API keys) tracked in a checklist. Claude sessions auto-create them via `[HUMAN TODO]` tags
-- **Voice Input** — talk to the Overseer with your voice via browser SpeechRecognition
+- **Voice Output (TTS)** — the Overseer can speak responses aloud via the browser's Web Speech API. Voice, rate, and pitch all configurable; toggle on/off from the chat header
+- **Voice Input + Conversation Mode** — speak to the Overseer (single-shot toggle, hold-to-talk push-to-talk, or hands-free Conversation Mode that auto-submits on silence and reopens the mic after the response). Configurable silence threshold; Esc bails out instantly
 - **Desktop Notifications** — get notified when sessions end or blockers are detected
 - **Retroactive Harvest** — extract lessons from project git history, even projects started before Cascade existed
 - **Engineering Methodology** — projects bootstrapped via a kickoff template that generates CLAUDE.md, TDD-enforced request files, audit skills, and deployment references
@@ -159,19 +162,23 @@ Projects need `CLAUDE.md` + `.git` + `package.json` (or `Cargo.toml` / `pyprojec
 | **Knowledge Base** | Lessons harvested from all projects, searchable |
 | **Templates** | Kickoff templates for the project creation wizard |
 | **Reports** | Per-project and cross-project reports (Markdown + PDF) |
-| **Settings** | Theme, notifications, sounds, auto-dispatch, concurrency override |
+| **Settings** | Theme, notifications, sounds, auto-dispatch, concurrency override, Overseer identity (name + idle/talking portraits), Voice (TTS on/off, voice picker, rate/pitch, mic input mode, silence threshold) |
 
 ---
 
 ## Key Concepts
 
-**The Overseer** — Claude Sonnet instance running inside Cascade. Customizable name and portrait. Plans sprints, recommends dispatches, tracks outcomes. Has conversation memory.
+**The Overseer** — Claude Sonnet instance running inside Cascade as a tool-using agent. Customizable name, portrait (idle + optional talking face), and voice. Plans sprints, recommends dispatches, tracks outcomes. Tools rather than prompt-injected snapshots — fresh project state on every read, structured working memory on every write.
+
+**Tool Framework** (`lib/overseer-tools.ts`) — `Tool` type + `ToolRegistry` + `runToolUseLoop`. Decoupled from Anthropic's SDK by an injectable `AnthropicCaller`, so tests drive canned responses and a future cloud-TTS or alternate model swaps in cleanly. 14 built-in tools cover read (`query_project`, `query_projects`, `get_recent_activity`, `get_session_logs`, `get_dispatch_outcomes`, `get_yesterday_summary`, `get_engineer_messages`, `get_playbook`, `get_session_state`) and write (`update_session_memory`, `set_active_flow`, `propose_dispatch`, `create_reminder`, `create_human_todo`).
+
+**ChatSession + workingMemory** — every chat turn is bound to a `ChatSession` row with a JSON `workingMemory` column. The Overseer writes confirmed values there during inventory walks, so a follow-up turn ("actually medipal is at 40%") reconciles cleanly instead of fighting a stale prompt.
 
 **Stop Hooks** — Claude Code hooks installed on every project. When a session ends, the hook pings Cascade's webhook. Cascade auto-scans, releases the dispatch queue slot, fires desktop notifications, and harvests lessons.
 
 **Dispatch Queue** — process-wide concurrency gate. Every subagent spawn goes through `lib/dispatch-queue.ts`. Default cap auto-detects from host RAM; override via `CASCADE_MAX_CONCURRENT_SUBAGENTS` in `.env`.
 
-**Engineer Brain** — optional. A separate Claude Code instance dedicated to building Cascade itself, distinct from the per-project Claude sessions you dispatch into your other repos. Worth giving its own identity because it has a bird's-eye view across all your projects and is the Claude you talk to when working on Cascade's internals or your dispatch service. Justin named his **Kilroy**; pick whatever fits your setup — the goal is just to signal "this Claude has cross-project context, treat it differently." The engineer brain communicates with the Overseer through `.claude/kilroy-channel.md` (gitignored — you create the file locally; the filename references Justin's brain name but you can keep it as-is or edit the path in `app/api/overseer/chat/route.ts` if you'd rather rename). The Overseer reads the channel on load.
+**Engineer Brain** — optional architectural pattern. A separate Claude Code instance dedicated to building Cascade itself, distinct from the per-project Claude sessions you dispatch into your other repos. Worth giving its own identity (Cascade's own author named theirs **Kilroy**) because it has a bird's-eye view across the whole fleet and is the Claude you talk to when working on Cascade's internals or your dispatch service. The engineer brain communicates with the Overseer via the engineer channel — a gitignored Markdown file the Overseer reads on load (`app/api/overseer/chat/route.ts` looks for `.claude/engineer-channel.md` first, falling back to `.claude/kilroy-channel.md` for back-compat). When the Overseer emits an `[ENGINEER]` tag in chat output, the route appends it to the channel automatically.
 
 **Backburner** — project status for intentionally parked projects. Suppressed from sprint planning.
 
