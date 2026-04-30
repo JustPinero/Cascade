@@ -16,6 +16,7 @@ import {
   getSoundPreference,
   setSoundPreference,
 } from "@/lib/sounds";
+import { speak, listVoices } from "@/lib/speak";
 
 interface AuthStatus {
   service: string;
@@ -428,6 +429,158 @@ function OverseerPanel() {
   );
 }
 
+function VoicePanel() {
+  const [enabled, setEnabled] = useState(
+    () => getOverseerSettings().voiceEnabled
+  );
+  const [voiceURI, setVoiceURI] = useState<string | null>(
+    () => getOverseerSettings().voiceURI
+  );
+  const [rate, setRate] = useState(() => getOverseerSettings().voiceRate);
+  const [pitch, setPitch] = useState(() => getOverseerSettings().voicePitch);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [saved, setSaved] = useState(false);
+
+  // Some browsers populate the voice list asynchronously. Listen for
+  // the voiceschanged event so the dropdown fills in once available.
+  useEffect(() => {
+    const refresh = () => setVoices(listVoices());
+    refresh();
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.addEventListener("voiceschanged", refresh);
+      return () => {
+        window.speechSynthesis.removeEventListener("voiceschanged", refresh);
+      };
+    }
+  }, []);
+
+  function handleSave() {
+    setOverseerSettings({
+      voiceEnabled: enabled,
+      voiceURI,
+      voiceRate: rate,
+      voicePitch: pitch,
+    });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  function handleTest() {
+    speak(
+      "Delamain reporting in. Voice output is configured and ready.",
+      {
+        voiceEnabled: true,
+        voiceURI,
+        voiceRate: rate,
+        voicePitch: pitch,
+      }
+    );
+  }
+
+  return (
+    <div className="mb-8">
+      <h2 className="text-sm font-mono font-bold text-cyan uppercase tracking-wider mb-4">
+        Voice
+      </h2>
+      <div className="space-y-3">
+        <div className="p-3 border border-space-600 bg-space-800">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+              className="accent-cyan"
+            />
+            <span className="text-sm font-mono text-text-bright">
+              Enable voice output
+            </span>
+          </label>
+          <p className="text-[10px] font-mono text-space-500 mt-1 ml-6">
+            Delamain speaks responses aloud after streaming completes.
+            Uses your browser&apos;s built-in voices — no network call.
+          </p>
+        </div>
+
+        <div className="p-3 border border-space-600 bg-space-800">
+          <label className="text-sm font-mono text-text-bright block mb-2">
+            Voice
+          </label>
+          <select
+            value={voiceURI ?? ""}
+            onChange={(e) =>
+              setVoiceURI(e.target.value === "" ? null : e.target.value)
+            }
+            className="w-full px-3 py-1.5 text-sm font-mono bg-space-900 border border-space-600 text-text-bright focus:border-cyan focus:outline-none"
+          >
+            <option value="">Browser default</option>
+            {voices.map((v) => (
+              <option key={v.voiceURI} value={v.voiceURI}>
+                {v.name} ({v.lang})
+                {v.localService ? " · local" : ""}
+              </option>
+            ))}
+          </select>
+          <p className="text-[10px] font-mono text-space-500 mt-1">
+            Available voices come from your OS / browser. Quality and
+            count vary by platform.
+          </p>
+        </div>
+
+        <div className="p-3 border border-space-600 bg-space-800">
+          <label className="text-sm font-mono text-text-bright block mb-2">
+            Rate <span className="text-space-400">({rate.toFixed(2)}×)</span>
+          </label>
+          <input
+            type="range"
+            min="0.5"
+            max="2"
+            step="0.05"
+            value={rate}
+            onChange={(e) => setRate(parseFloat(e.target.value))}
+            className="w-full accent-cyan"
+          />
+          <p className="text-[10px] font-mono text-space-500 mt-1">
+            How fast Delamain speaks. 1.0 is normal speed.
+          </p>
+        </div>
+
+        <div className="p-3 border border-space-600 bg-space-800">
+          <label className="text-sm font-mono text-text-bright block mb-2">
+            Pitch <span className="text-space-400">({pitch.toFixed(2)}×)</span>
+          </label>
+          <input
+            type="range"
+            min="0.5"
+            max="2"
+            step="0.05"
+            value={pitch}
+            onChange={(e) => setPitch(parseFloat(e.target.value))}
+            className="w-full accent-cyan"
+          />
+          <p className="text-[10px] font-mono text-space-500 mt-1">
+            Vocal pitch. 1.0 is the voice&apos;s natural tone.
+          </p>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={handleTest}
+            className="px-3 py-1.5 text-xs font-mono border border-space-600 text-text hover:border-cyan hover:text-cyan transition-colors"
+          >
+            Test Voice
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-4 py-1.5 text-xs font-mono border border-cyan text-cyan hover:bg-cyan/10 transition-colors"
+          >
+            {saved ? "Saved" : "Save Voice"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
 
@@ -441,6 +594,8 @@ export default function SettingsPage() {
       </p>
 
       <OverseerPanel />
+
+      <VoicePanel />
 
       <div className="divider-h mb-8" />
 

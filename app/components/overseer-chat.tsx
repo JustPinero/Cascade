@@ -10,6 +10,8 @@ import {
   hasSessionMemory,
   type SessionMemoryState,
 } from "@/lib/session-memory";
+import { speak as speakText, cancel as cancelSpeech } from "@/lib/speak";
+import { setOverseerSettings as persistOverseerSettings } from "@/lib/overseer-settings";
 
 // SpeechRecognition types for browser API
 interface SpeechRecognitionEvent {
@@ -47,6 +49,25 @@ interface ParsedAction {
 
 // localToday() lives in lib/local-today.ts (Phase 17) so it has unit
 // tests against DST transitions and timezone offsets.
+
+/**
+ * Phase 20 — strip the bracketed tag formats Delamain emits in text
+ * output ([DISPATCH], [REMINDER], [HUMAN TODO], [PLAYBOOK],
+ * [ENGINEER]) before passing the response to TTS. Reading "open
+ * bracket dispatch close bracket cascade colon continue" out loud
+ * is hostile UX. Whole tagged lines are dropped.
+ */
+function stripTagsForSpeech(text: string): string {
+  return text
+    .split("\n")
+    .filter(
+      (line) =>
+        !/\[(DISPATCH|REMINDER|HUMAN TODO|PLAYBOOK|ENGINEER)\]/i.test(line)
+    )
+    .join("\n")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 interface OverseerChatProps {
   onDispatch: (results: unknown[]) => void;
@@ -132,6 +153,14 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
   const [overseerName, setOverseerName] = useState("Overseer");
   const [portraitIdle, setPortraitIdle] = useState("/delamain.jpg");
   const [portraitTalking, setPortraitTalking] = useState<string | null>(null);
+  // Phase 20 — speech-OUTPUT (TTS) state. Distinct from the
+  // existing voiceEnabled, which controls speech INPUT (the mic).
+  // Read once on mount; mutated via the chat-header quick toggle
+  // and the settings-page Voice panel.
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [ttsVoiceURI, setTtsVoiceURI] = useState<string | null>(null);
+  const [ttsRate, setTtsRate] = useState(1.0);
+  const [ttsPitch, setTtsPitch] = useState(1.0);
 
   // Load overseer settings on mount
   useEffect(() => {
@@ -139,7 +168,23 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
     setOverseerName(settings.name);
     setPortraitIdle(settings.portraitIdle);
     setPortraitTalking(settings.portraitTalking);
+    setTtsEnabled(settings.voiceEnabled);
+    setTtsVoiceURI(settings.voiceURI);
+    setTtsRate(settings.voiceRate);
+    setTtsPitch(settings.voicePitch);
   }, []);
+
+  // Phase 20 — chat-header quick toggle for speech output. Persists
+  // to localStorage so the next session inherits the choice.
+  function toggleTts() {
+    setTtsEnabled((prev) => {
+      const next = !prev;
+      persistOverseerSettings({ voiceEnabled: next });
+      // If the user mutes mid-utterance, kill it immediately.
+      if (!next) cancelSpeech();
+      return next;
+    });
+  }
 
   useEffect(() => {
     setHasSpeechSupport(
@@ -208,6 +253,9 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
     setStreaming(true);
     playStartSound();
     setPendingActions(null);
+    // Phase 20 — kill any in-flight speech the moment a new turn
+    // starts. Stops Delamain mid-sentence if the user types over them.
+    cancelSpeech();
 
     try {
       const res = await fetch("/api/overseer/chat", {
@@ -272,6 +320,22 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
         { role: "assistant", content: assistantContent },
       ];
       setMessages(finalMessages);
+
+      // Phase 20 — speak the assistant response if TTS is enabled.
+      // Strip [DISPATCH] / [HUMAN TODO] / etc tags before speaking so
+      // we don't read raw markup. Best-effort; speak() is a no-op
+      // when disabled or when speechSynthesis is unavailable.
+      if (ttsEnabled && assistantContent) {
+        const spoken = stripTagsForSpeech(assistantContent);
+        if (spoken) {
+          speakText(spoken, {
+            voiceEnabled: true,
+            voiceURI: ttsVoiceURI,
+            voiceRate: ttsRate,
+            voicePitch: ttsPitch,
+          });
+        }
+      }
 
       // Persist the new messages to history
       fetch("/api/overseer/history", {
@@ -503,24 +567,55 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
               {overseerName} — Sprint Planning
             </span>
           </div>
-          {hasSpeechSupport && (
+          <div className="flex items-center gap-2">
+            {/* Phase 20 — TTS quick toggle. Mutes Delamain mid-
+                response if pressed while speaking. Persists. */}
             <button
-              onClick={() => {
-                if (voiceEnabled && listening) stopListening();
-                setVoiceEnabled(!voiceEnabled);
-              }}
+              onClick={toggleTts}
+              title={
+                ttsEnabled
+                  ? "Mute Delamain (TTS on)"
+                  : "Have Delamain speak responses (TTS off)"
+              }
               className={`flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-mono uppercase border transition-colors ${
-                voiceEnabled
+                ttsEnabled
                   ? "border-cyan text-cyan"
                   : "border-space-600 text-space-500 hover:text-text"
               }`}
             >
               <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
-                <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+                {ttsEnabled ? (
+                  <path d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.617.787L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.797-3.787a1 1 0 011-.137zM14 7.05a3 3 0 010 5.9V7.05zM14 4.05a6 6 0 010 11.9V4.05z" />
+                ) : (
+                  <path d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.617.787L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.797-3.787a1 1 0 011-.137zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z" />
+                )}
               </svg>
-              {voiceEnabled ? "Voice On" : "Voice"}
+              {ttsEnabled ? "Speaking On" : "Speaking"}
             </button>
-          )}
+            {hasSpeechSupport && (
+              <button
+                onClick={() => {
+                  if (voiceEnabled && listening) stopListening();
+                  setVoiceEnabled(!voiceEnabled);
+                }}
+                title={
+                  voiceEnabled
+                    ? "Voice input on — click the mic to speak"
+                    : "Enable voice input"
+                }
+                className={`flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-mono uppercase border transition-colors ${
+                  voiceEnabled
+                    ? "border-cyan text-cyan"
+                    : "border-space-600 text-space-500 hover:text-text"
+                }`}
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                  <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+                </svg>
+                {voiceEnabled ? "Mic On" : "Mic"}
+              </button>
+            )}
+          </div>
         </div>
         <p className="text-[10px] font-mono text-space-500 mt-0.5">
           {voiceEnabled

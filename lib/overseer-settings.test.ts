@@ -32,6 +32,25 @@ describe("overseer-settings", () => {
       expect(settings.name).toBe("Overseer");
       expect(settings.portraitIdle).toBe("/delamain.jpg");
       expect(settings.portraitTalking).toBe("/delamain-talking.jpg");
+      // Phase 20 — voice off by default; users opt in.
+      expect(settings.voiceEnabled).toBe(false);
+      expect(settings.voiceURI).toBeNull();
+      expect(settings.voiceRate).toBe(1.0);
+      expect(settings.voicePitch).toBe(1.0);
+    });
+
+    it("round-trips voice preferences (Phase 20)", () => {
+      setOverseerSettings({
+        voiceEnabled: true,
+        voiceURI: "samantha",
+        voiceRate: 1.25,
+        voicePitch: 0.9,
+      });
+      const settings = getOverseerSettings();
+      expect(settings.voiceEnabled).toBe(true);
+      expect(settings.voiceURI).toBe("samantha");
+      expect(settings.voiceRate).toBe(1.25);
+      expect(settings.voicePitch).toBe(0.9);
     });
 
     it("returns custom name after setting", () => {
