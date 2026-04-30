@@ -17,6 +17,16 @@ export interface OverseerSettings {
   voiceRate: number;
   /** Speech pitch, clamped 0–2 by speak() before being passed to the API. */
   voicePitch: number;
+  // Phase 21 — Conversation Mode + Push-to-Talk.
+  /** Whether the talking-portrait field is honored. When false, the
+   *  chat uses the idle portrait for both states. Lets users opt out
+   *  of the dual-face flip without clearing the URL. */
+  usesTalkingFace: boolean;
+  /** Silence threshold (ms) before Conversation Mode auto-submits. */
+  silenceThresholdMs: number;
+  /** "toggle" = click to toggle mic; "push-to-talk" = hold to record,
+   *  release to auto-submit. Conversation Mode overrides this. */
+  micMode: "toggle" | "push-to-talk";
 }
 
 const STORAGE_KEY = "cascade-overseer";
@@ -32,6 +42,9 @@ const DEFAULTS: OverseerSettings = {
   voiceURI: null,
   voiceRate: 1.0,
   voicePitch: 1.0,
+  usesTalkingFace: true,
+  silenceThresholdMs: 1500,
+  micMode: "toggle",
 };
 
 /**
@@ -64,10 +77,13 @@ export function setOverseerSettings(
 }
 
 /**
- * Determine portrait mode based on whether a talking image exists.
+ * Determine portrait mode. Phase 21 — also gated by the
+ * `usesTalkingFace` toggle so users can opt out without clearing
+ * the talking-portrait URL.
  */
 export function getPortraitMode(): "single" | "dual" {
   const settings = getOverseerSettings();
+  if (!settings.usesTalkingFace) return "single";
   return settings.portraitTalking ? "dual" : "single";
 }
 

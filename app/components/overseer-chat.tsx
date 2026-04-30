@@ -12,10 +12,20 @@ import {
 } from "@/lib/session-memory";
 import { speak as speakText, cancel as cancelSpeech } from "@/lib/speak";
 import { setOverseerSettings as persistOverseerSettings } from "@/lib/overseer-settings";
+import {
+  createSilenceDetector,
+  type SilenceDetector,
+} from "@/lib/silence-detector";
 
-// SpeechRecognition types for browser API
+// SpeechRecognition types for browser API. Extended in Phase 21
+// to surface `length` and `isFinal` so Conversation Mode can iterate
+// the result list and tell interim from confirmed transcripts.
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  [index: number]: { transcript: string };
+}
 interface SpeechRecognitionEvent {
-  results: { [index: number]: { [index: number]: { transcript: string } } };
+  results: { length: number; [index: number]: SpeechRecognitionResult };
 }
 
 interface SpeechRecognitionInstance extends EventTarget {
@@ -161,6 +171,18 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
   const [ttsVoiceURI, setTtsVoiceURI] = useState<string | null>(null);
   const [ttsRate, setTtsRate] = useState(1.0);
   const [ttsPitch, setTtsPitch] = useState(1.0);
+  // Phase 21 — conversation mode (chat-screen toggle, never persisted),
+  // mic mode + silence threshold (loaded from settings, persisted),
+  // talking-face gating.
+  const [conversationMode, setConversationMode] = useState(false);
+  const [silenceThresholdMs, setSilenceThresholdMs] = useState(1500);
+  const [micMode, setMicMode] = useState<"toggle" | "push-to-talk">("toggle");
+  const [usesTalkingFace, setUsesTalkingFace] = useState(true);
+  // Refs for use inside async callbacks (avoid stale closures)
+  const conversationModeRef = useRef(false);
+  const isSpeakingRef = useRef(false);
+  const silenceDetectorRef = useRef<SilenceDetector | null>(null);
+  const accumulatedTranscriptRef = useRef("");
 
   // Load overseer settings on mount
   useEffect(() => {
@@ -172,7 +194,15 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
     setTtsVoiceURI(settings.voiceURI);
     setTtsRate(settings.voiceRate);
     setTtsPitch(settings.voicePitch);
+    setSilenceThresholdMs(settings.silenceThresholdMs);
+    setMicMode(settings.micMode);
+    setUsesTalkingFace(settings.usesTalkingFace);
   }, []);
+
+  // Keep the ref in sync with state (used inside async callbacks).
+  useEffect(() => {
+    conversationModeRef.current = conversationMode;
+  }, [conversationMode]);
 
   // Phase 20 — chat-header quick toggle for speech output. Persists
   // to localStorage so the next session inherits the choice.
@@ -230,14 +260,127 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
     setListening(true);
   }, [hasSpeechSupport]);
 
-  // Cleanup on unmount
+  // Phase 21 — Conversation Mode listener. Continuous + interim,
+  // silence-detection auto-submits, mic auto-rearms after Del finishes.
+  const sendMessageRef = useRef<() => Promise<void>>(async () => {});
+  const startConversationListening = useCallback(() => {
+    if (!hasSpeechSupport) return;
+    if (isSpeakingRef.current) return; // don't open mic over Del's voice
+
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    accumulatedTranscriptRef.current = "";
+
+    if (!silenceDetectorRef.current) {
+      silenceDetectorRef.current = createSilenceDetector(
+        silenceThresholdMs,
+        () => {
+          // Silence fired — submit whatever's in the input.
+          silenceDetectorRef.current?.stop();
+          if (recognitionRef.current) {
+            recognitionRef.current.stop();
+            recognitionRef.current = null;
+          }
+          setListening(false);
+          // Defer to next tick so React state updates settle first.
+          setTimeout(() => sendMessageRef.current(), 0);
+        }
+      );
+    }
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let interimText = "";
+      const results = event.results;
+      for (let i = 0; i < results.length; i++) {
+        const result = results[i];
+        const transcript = result[0].transcript;
+        if (result.isFinal) {
+          accumulatedTranscriptRef.current += transcript;
+        } else {
+          interimText += transcript;
+        }
+      }
+      const composed = (
+        accumulatedTranscriptRef.current + interimText
+      ).trimStart();
+      setInput(composed);
+      // Each fragment resets the silence clock.
+      silenceDetectorRef.current?.reset(silenceThresholdMs);
+    };
+
+    recognition.onerror = () => {
+      setListening(false);
+    };
+
+    recognition.onend = () => {
+      setListening(false);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setListening(true);
+  }, [hasSpeechSupport, silenceThresholdMs]);
+
+  const stopConversationListening = useCallback(() => {
+    silenceDetectorRef.current?.stop();
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    accumulatedTranscriptRef.current = "";
+    setListening(false);
+  }, []);
+
+  // Toggle Conversation Mode. Always starts off on mount; off on
+  // unmount. Persists nothing — opt-in per session.
+  function toggleConversation() {
+    setConversationMode((prev) => {
+      const next = !prev;
+      if (!next) {
+        // Turning OFF: stop the mic. TTS in flight is allowed to
+        // finish (per design — disarm the mic, don't cut Del off).
+        stopConversationListening();
+      } else {
+        // Turning ON: start listening unless Del is currently
+        // speaking — in that case we'll re-arm via TTS onComplete.
+        if (!isSpeakingRef.current) {
+          startConversationListening();
+        }
+      }
+      return next;
+    });
+  }
+
+  // Cleanup on unmount: stop mic + cancel TTS. Conversation Mode
+  // is always-off-on-mount so we don't need to persist anything.
   useEffect(() => {
     return () => {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
+      silenceDetectorRef.current?.stop();
+      cancelSpeech();
     };
   }, []);
+
+  // Phase 21 — Esc key cancels everything (TTS + mic + Conversation
+  // Mode). Bound while the chat is mounted.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        cancelSpeech();
+        stopConversationListening();
+        setConversationMode(false);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [stopConversationListening]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight);
@@ -245,6 +388,17 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
 
   async function sendMessage() {
     if (!input.trim() || streaming) return;
+
+    // Phase 21 — submitting a turn always stops the mic + silence
+    // detector, even if Conversation Mode is on. The next mic-rearm
+    // happens after Del's response (via TTS onComplete).
+    silenceDetectorRef.current?.stop();
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    setListening(false);
+    accumulatedTranscriptRef.current = "";
 
     const userMessage: ChatMessage = { role: "user", content: input.trim() };
     const newMessages = [...messages, userMessage];
@@ -328,11 +482,21 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
       if (ttsEnabled && assistantContent) {
         const spoken = stripTagsForSpeech(assistantContent);
         if (spoken) {
+          isSpeakingRef.current = true;
           speakText(spoken, {
             voiceEnabled: true,
             voiceURI: ttsVoiceURI,
             voiceRate: ttsRate,
             voicePitch: ttsPitch,
+            // Phase 21 — when Del finishes, re-arm the mic if
+            // Conversation Mode is still on. (Toggle off mid-speech
+            // means we just clear the speaking flag and stay silent.)
+            onComplete: () => {
+              isSpeakingRef.current = false;
+              if (conversationModeRef.current) {
+                startConversationListening();
+              }
+            },
           });
         }
       }
@@ -414,6 +578,12 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
       refreshSessionMemory();
     }
   }
+
+  // Phase 21 — silence-detector callbacks need a stable handle to
+  // sendMessage; bind it after declaration.
+  useEffect(() => {
+    sendMessageRef.current = sendMessage;
+  });
 
   // Phase 14.6 — extracted to lib/dispatch-tag-parser.ts so a unit
   // test can verify the SP-documented format and this regex agree.
@@ -532,7 +702,11 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
               }`}
             >
               <img
-                src={streaming && portraitTalking ? portraitTalking : portraitIdle}
+                src={
+                  streaming && usesTalkingFace && portraitTalking
+                    ? portraitTalking
+                    : portraitIdle
+                }
                 alt={overseerName}
                 className={`w-full h-full object-cover transition-all duration-300 ${
                   streaming ? "brightness-125" : "brightness-90"
@@ -568,6 +742,31 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {/* Phase 21 — Conversation Mode toggle. Always off on
+                mount; never persisted. Cancels on unmount, Esc, or
+                explicit toggle-off. While ON, the Mic button is
+                disabled — Conversation Mode owns the mic. */}
+            {hasSpeechSupport && (
+              <button
+                onClick={toggleConversation}
+                title={
+                  conversationMode
+                    ? "Conversation Mode on — Esc to stop"
+                    : "Hands-free conversation (best with headphones)"
+                }
+                className={`flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-mono uppercase border transition-colors ${
+                  conversationMode
+                    ? "border-cyan text-cyan"
+                    : "border-space-600 text-space-500 hover:text-text"
+                }`}
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                  <path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z" />
+                  <path d="M15 7v2a4 4 0 01-4 4H9.41l-1.7 1.7c.18.13.39.21.61.27.13.04.25.06.38.06h2.59l4.71 4.7V13a2 2 0 002-2V9a2 2 0 00-2-2h-1z" />
+                </svg>
+                {conversationMode ? "Conversation On" : "Conversation"}
+              </button>
+            )}
             {/* Phase 20 — TTS quick toggle. Mutes Delamain mid-
                 response if pressed while speaking. Persists. */}
             <button
@@ -617,11 +816,26 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
             )}
           </div>
         </div>
-        <p className="text-[10px] font-mono text-space-500 mt-0.5">
-          {voiceEnabled
-            ? "Voice mode active — click the mic to speak"
-            : "Tell me what you want done today. I\u2019ll create the dispatch plan."}
-        </p>
+        <div className="flex items-center justify-between gap-2 mt-0.5">
+          <p className="text-[10px] font-mono text-space-500">
+            {conversationMode
+              ? "Conversation Mode — speak, pause, I\u2019ll respond. Esc to stop."
+              : voiceEnabled
+                ? "Voice mode active — click the mic to speak"
+                : "Tell me what you want done today. I\u2019ll create the dispatch plan."}
+          </p>
+          {/* Phase 21 — listening indicator. Red dot + chat-bubble
+              icon. Visible whenever the mic is actually transcribing. */}
+          {listening ? (
+            <span className="flex items-center gap-1.5 text-[10px] font-mono text-danger">
+              <span className="w-2 h-2 rounded-full bg-danger pulse-blocked" />
+              <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                <path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2h-3l-3 3-3-3H4a2 2 0 01-2-2V5z" />
+              </svg>
+              Listening…
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {/* Messages */}
@@ -703,14 +917,63 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
       <div className="flex border-t border-space-600">
         {voiceEnabled && (
           <button
-            onClick={listening ? stopListening : startListening}
-            disabled={streaming}
+            // Phase 21 — mic-mode aware. In "toggle" the click flips
+            // recording on/off (existing behavior). In "push-to-talk"
+            // mousedown starts, mouseup stops + auto-submits.
+            onClick={
+              micMode === "toggle"
+                ? listening
+                  ? stopListening
+                  : startListening
+                : undefined
+            }
+            onMouseDown={
+              micMode === "push-to-talk"
+                ? () => {
+                    if (!streaming) startListening();
+                  }
+                : undefined
+            }
+            onMouseUp={
+              micMode === "push-to-talk"
+                ? () => {
+                    stopListening();
+                    setTimeout(() => sendMessageRef.current(), 50);
+                  }
+                : undefined
+            }
+            onTouchStart={
+              micMode === "push-to-talk"
+                ? () => {
+                    if (!streaming) startListening();
+                  }
+                : undefined
+            }
+            onTouchEnd={
+              micMode === "push-to-talk"
+                ? () => {
+                    stopListening();
+                    setTimeout(() => sendMessageRef.current(), 50);
+                  }
+                : undefined
+            }
+            disabled={streaming || conversationMode}
             className={`px-3 flex items-center justify-center border-r border-space-600 transition-colors ${
               listening
                 ? "text-danger bg-danger/10 pulse-blocked"
                 : "text-cyan hover:bg-cyan/10"
-            }`}
-            title={listening ? "Stop recording" : "Start recording"}
+            } ${conversationMode ? "opacity-30" : ""}`}
+            title={
+              conversationMode
+                ? "Conversation Mode is on — disabled"
+                : micMode === "push-to-talk"
+                  ? listening
+                    ? "Recording — release to send"
+                    : "Hold to record, release to send"
+                  : listening
+                    ? "Stop recording"
+                    : "Start recording"
+            }
           >
             <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
               <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />

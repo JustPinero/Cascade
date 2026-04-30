@@ -323,6 +323,9 @@ function OverseerPanel() {
   const [portraitTalking, setPortraitTalking] = useState(
     () => getOverseerSettings().portraitTalking ?? ""
   );
+  const [usesTalkingFace, setUsesTalkingFace] = useState(
+    () => getOverseerSettings().usesTalkingFace
+  );
   const [saved, setSaved] = useState(false);
 
   function handleSave() {
@@ -332,6 +335,7 @@ function OverseerPanel() {
       portraitIdle: portraitIdle.trim() || "/delamain.jpg",
       // Empty string clears it (single-face mode); non-empty stores it.
       portraitTalking: trimmedTalking ? trimmedTalking : null,
+      usesTalkingFace,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -389,31 +393,47 @@ function OverseerPanel() {
         </div>
 
         <div className="p-3 border border-space-600 bg-space-800">
-          <label className="text-sm font-mono text-text-bright block mb-2">
-            Talking Portrait
-          </label>
-          <div className="flex gap-3 items-start">
-            <div className="w-16 h-16 rounded border border-space-600 overflow-hidden bg-space-900 shrink-0">
-              {portraitTalking.trim() ? (
-                <img
-                  src={portraitTalking}
-                  alt="talking preview"
-                  className="w-full h-full object-cover"
-                />
-              ) : null}
-            </div>
+          <label className="flex items-center gap-3 cursor-pointer mb-2">
             <input
-              type="text"
-              value={portraitTalking}
-              onChange={(e) => setPortraitTalking(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSave()}
-              placeholder="/delamain-talking.jpg (leave empty for single-face mode)"
-              className="flex-1 px-3 py-1.5 text-sm font-mono bg-space-900 border border-space-600 text-text-bright placeholder:text-space-500 focus:border-cyan focus:outline-none"
+              type="checkbox"
+              checked={usesTalkingFace}
+              onChange={(e) => setUsesTalkingFace(e.target.checked)}
+              className="accent-cyan"
             />
-          </div>
-          <p className="text-[10px] font-mono text-space-500 mt-1">
-            Shown while the Overseer is generating a response. Leave empty to use the idle portrait for both states.
-          </p>
+            <span className="text-sm font-mono text-text-bright">
+              Use a talking portrait
+            </span>
+          </label>
+          {usesTalkingFace ? (
+            <>
+              <div className="flex gap-3 items-start">
+                <div className="w-16 h-16 rounded border border-space-600 overflow-hidden bg-space-900 shrink-0">
+                  {portraitTalking.trim() ? (
+                    <img
+                      src={portraitTalking}
+                      alt="talking preview"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : null}
+                </div>
+                <input
+                  type="text"
+                  value={portraitTalking}
+                  onChange={(e) => setPortraitTalking(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSave()}
+                  placeholder="/delamain-talking.jpg"
+                  className="flex-1 px-3 py-1.5 text-sm font-mono bg-space-900 border border-space-600 text-text-bright placeholder:text-space-500 focus:border-cyan focus:outline-none"
+                />
+              </div>
+              <p className="text-[10px] font-mono text-space-500 mt-1">
+                Shown while the Overseer is generating a response.
+              </p>
+            </>
+          ) : (
+            <p className="text-[10px] font-mono text-space-500">
+              The idle portrait will be shown for both states.
+            </p>
+          )}
         </div>
 
         <div className="flex justify-end">
@@ -438,6 +458,12 @@ function VoicePanel() {
   );
   const [rate, setRate] = useState(() => getOverseerSettings().voiceRate);
   const [pitch, setPitch] = useState(() => getOverseerSettings().voicePitch);
+  const [silenceThresholdMs, setSilenceThresholdMs] = useState(
+    () => getOverseerSettings().silenceThresholdMs
+  );
+  const [micMode, setMicMode] = useState<"toggle" | "push-to-talk">(
+    () => getOverseerSettings().micMode
+  );
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [saved, setSaved] = useState(false);
 
@@ -460,6 +486,8 @@ function VoicePanel() {
       voiceURI,
       voiceRate: rate,
       voicePitch: pitch,
+      silenceThresholdMs,
+      micMode,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -559,6 +587,66 @@ function VoicePanel() {
           />
           <p className="text-[10px] font-mono text-space-500 mt-1">
             Vocal pitch. 1.0 is the voice&apos;s natural tone.
+          </p>
+        </div>
+
+        <div className="p-3 border border-space-600 bg-space-800">
+          <label className="text-sm font-mono text-text-bright block mb-2">
+            Mic Input Mode
+          </label>
+          <div className="space-y-2">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="radio"
+                name="mic-mode"
+                value="toggle"
+                checked={micMode === "toggle"}
+                onChange={() => setMicMode("toggle")}
+                className="accent-cyan"
+              />
+              <span className="text-xs font-mono text-text-bright">
+                <span className="font-bold">Click to toggle</span> — click mic on, speak, click off, then Send
+              </span>
+            </label>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="radio"
+                name="mic-mode"
+                value="push-to-talk"
+                checked={micMode === "push-to-talk"}
+                onChange={() => setMicMode("push-to-talk")}
+                className="accent-cyan"
+              />
+              <span className="text-xs font-mono text-text-bright">
+                <span className="font-bold">Hold to talk</span> — hold the mic button, release to auto-submit
+              </span>
+            </label>
+          </div>
+          <p className="text-[10px] font-mono text-space-500 mt-2">
+            How the mic button behaves. Conversation Mode (chat-screen toggle) overrides this when active.
+          </p>
+        </div>
+
+        <div className="p-3 border border-space-600 bg-space-800">
+          <label className="text-sm font-mono text-text-bright block mb-2">
+            Conversation Silence Threshold{" "}
+            <span className="text-space-400">
+              ({(silenceThresholdMs / 1000).toFixed(2)}s)
+            </span>
+          </label>
+          <input
+            type="range"
+            min="500"
+            max="4000"
+            step="100"
+            value={silenceThresholdMs}
+            onChange={(e) =>
+              setSilenceThresholdMs(parseInt(e.target.value, 10))
+            }
+            className="w-full accent-cyan"
+          />
+          <p className="text-[10px] font-mono text-space-500 mt-1">
+            How long to wait after you stop speaking before Conversation Mode auto-submits. Shorter = snappier; longer = more pause-tolerant.
           </p>
         </div>
 
