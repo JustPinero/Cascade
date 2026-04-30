@@ -17,6 +17,7 @@ import {
   setSoundPreference,
 } from "@/lib/sounds";
 import { speak, listVoices } from "@/lib/speak";
+import { Portrait } from "@/app/components/portrait";
 
 interface AuthStatus {
   service: string;
@@ -370,13 +371,12 @@ function OverseerPanel() {
           </label>
           <div className="flex gap-3 items-start">
             <div className="w-16 h-16 rounded border border-space-600 overflow-hidden bg-space-900 shrink-0">
-              {portraitIdle.trim() ? (
-                <img
-                  src={portraitIdle}
-                  alt="idle preview"
-                  className="w-full h-full object-cover"
-                />
-              ) : null}
+              <Portrait
+                src={portraitIdle}
+                alt="idle preview"
+                size="md"
+                className="w-full h-full object-cover"
+              />
             </div>
             <input
               type="text"
@@ -408,13 +408,12 @@ function OverseerPanel() {
             <>
               <div className="flex gap-3 items-start">
                 <div className="w-16 h-16 rounded border border-space-600 overflow-hidden bg-space-900 shrink-0">
-                  {portraitTalking.trim() ? (
-                    <img
-                      src={portraitTalking}
-                      alt="talking preview"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : null}
+                  <Portrait
+                    src={portraitTalking}
+                    alt="talking preview"
+                    size="md"
+                    className="w-full h-full object-cover"
+                  />
                 </div>
                 <input
                   type="text"
