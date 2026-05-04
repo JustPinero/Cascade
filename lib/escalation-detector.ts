@@ -44,11 +44,24 @@ export function detectEscalations(content: string): EscalationSignal[] {
     });
   }
 
-  // Test failures — various patterns
+  // Test failures — tightened in Phase 23 follow-up P1.2.
+  // - Pattern 1: digit + test/spec word + failed — "5 tests failed".
+  // - Pattern 2: failed/failing + test/spec context — "failing tests",
+  //   "failed in the build". "failed to" no longer triggers (the
+  //   alternative is "in <test|spec|build|ci>", not bare "in").
+  // - Pattern 3: word-bounded "test fail" — "8 tests fail in suite".
+  //   The trailing \b rejects "test failed to compile" (fail is a
+  //   substring of failed, no boundary).
+  // - Pattern 4: runner-summary form "Tests: 5 failed" / "Tests 5
+  //   failed". Test runners (jest, pytest, vitest) emit this shape.
+  //
+  // What's deliberately excluded by these tightenings: "5 failed
+  // deployments", "8 failed health checks", "test failed to compile".
   const testFailurePatterns = [
-    /(\d+)\s+(?:tests?\s+)?fail(?:ed|ing)/i,
-    /fail(?:ed|ing)\s+(?:tests?|in)/i,
-    /tests?\s+fail/i,
+    /(\d+)\s+(?:tests?|specs?)\s+fail(?:ed|ing)/i,
+    /fail(?:ed|ing)\s+(?:tests?|specs?|in\s+(?:the\s+)?(?:test|spec|build|ci))/i,
+    /\btests?\s+fail\b/i,
+    /\btests?\s*[:.]?\s*\d+\s+fail(?:ed|ing)/i,
   ];
   for (const pattern of testFailurePatterns) {
     const match = content.match(pattern);
@@ -61,10 +74,16 @@ export function detectEscalations(content: string): EscalationSignal[] {
     }
   }
 
-  // Phase completion
+  // Phase completion — tightened in P1.2.
+  // \b after the digit prevents `\d+` from backtracking to a shorter
+  // match. (?!-) then rejects identifiers like "phase 12-alpha" or
+  // "phase 12-rc1" where the number is part of a longer token.
+  // Without \b, the engine would try `\d+`="12" → fail (next is "-"),
+  // then backtrack to "1" → succeed (next is "2", not "-"). The \b
+  // forces the digit run to be a complete number first.
   const phaseCompletePatterns = [
-    /phase\s+\d+\s+complete/i,
-    /completed?\s+phase\s+\d+/i,
+    /phase\s+\d+\b(?!-)\s+complete/i,
+    /completed?\s+phase\s+\d+\b(?!-)/i,
     /all\s+requests?\s+(?:done|complete)/i,
   ];
   for (const pattern of phaseCompletePatterns) {
