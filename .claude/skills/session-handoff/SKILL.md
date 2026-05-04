@@ -53,3 +53,24 @@ Request: X.Y — Title
 - Branch: branch-name
 - Tests: passing/failing (N failures)
 ```
+
+## Operational gotchas to capture in handoff when relevant
+
+### Schema-changing slices require a dev server restart
+If your slice modified `prisma/schema.prisma`, the Turbopack dev server's
+Prisma client is stale until the process restarts. Manual testing of any
+new model / column will throw `TypeError: Cannot read properties of
+undefined (reading '<method>')` on routes that touch the new shape.
+
+When this applies, add this line to the handoff:
+
+> **Restart required:** `prisma/schema.prisma` modified — kill the dev server PID and re-run `pnpm dev` before manual testing.
+
+The next session sees that note before they spend 10 minutes hunting a
+ghost bug.
+
+### Anything else that requires user-side action between sessions
+Migrations applied to one DB but not another, hooks that need a refresh
+sweep (`pnpm tsx scripts/install-hooks.ts`), env-var changes — call them
+out under a **Restart / refresh** subsection so they don't get lost in
+the body.

@@ -129,8 +129,10 @@ ${sessionList}
 ## Pending Human Tasks
 ${taskList}`;
 
+    const BRIEFING_MODEL = "claude-haiku-4-5-20251001";
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30_000);
+    const start = performance.now();
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -140,7 +142,7 @@ ${taskList}`;
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: BRIEFING_MODEL,
         max_tokens: 512,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
@@ -159,6 +161,17 @@ ${taskList}`;
     }
 
     const data = await response.json();
+    // Phase 23 follow-up P2.4 — usage telemetry. Briefing is fully
+    // dynamic so it doesn't benefit from caching, but knowing its
+    // cost + latency in /observability/cache is useful.
+    const { logUsage } = await import("@/lib/anthropic-usage-log");
+    const { prisma: prismaClient } = await import("@/lib/db");
+    logUsage(prismaClient, {
+      callSite: "briefing",
+      model: BRIEFING_MODEL,
+      usage: data.usage,
+      durationMs: Math.round(performance.now() - start),
+    });
     const briefing =
       data.content?.[0]?.text || "Unable to generate briefing.";
 
