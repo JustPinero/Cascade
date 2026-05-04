@@ -13,6 +13,8 @@ import { sessionStateTool } from "@/lib/overseer-tools-session-state";
 import { proposeDispatchTool } from "@/lib/overseer-tools-propose-dispatch";
 import { createReminderTool } from "@/lib/overseer-tools-create-reminder";
 import { createHumanTodoTool } from "@/lib/overseer-tools-create-human-todo";
+import { outcomeHistoryTool } from "@/lib/overseer-tools-outcome-history";
+import { toolCallStatsTool } from "@/lib/overseer-tools-stats";
 
 /**
  * Default tool registry for the Overseer chat path.
@@ -42,5 +44,14 @@ export function buildDefaultRegistry(): ToolRegistry {
   reg.register(proposeDispatchTool);
   reg.register(createReminderTool);
   reg.register(createHumanTodoTool);
+  // 24.1 — outcome-conditioned dispatch (propose-only). Read this
+  // BEFORE proposing a dispatch so the recommendation reflects what
+  // worked recently. Pure heuristic summary; no recursive Anthropic
+  // call, so it's cheap to call on every dispatch turn.
+  reg.register(outcomeHistoryTool);
+  // 24.2 — tool-call telemetry self-introspection. Lets the Overseer
+  // answer "which tools did I call most this week?" / "is something
+  // failing?" from its own ToolCallEvent rows.
+  reg.register(toolCallStatsTool);
   return reg;
 }

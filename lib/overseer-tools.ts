@@ -280,20 +280,69 @@ export async function runToolUseLoop(
 
     const toolResultBlocks: ToolResultBlock[] = [];
     for (const block of toolUseBlocks) {
+      const callStart = performance.now();
       const result = await registry.execute(block.name, block.input, ctx);
+      const durationMs = Math.round(performance.now() - callStart);
       toolCallsExecuted++;
+
+      let outputContent: string;
       if (result.ok) {
+        outputContent = stringifyToolOutput(result.output);
         toolResultBlocks.push({
           type: "tool_result",
           tool_use_id: block.id,
-          content: stringifyToolOutput(result.output),
+          content: outputContent,
         });
       } else {
+        outputContent = result.error;
         toolResultBlocks.push({
           type: "tool_result",
           tool_use_id: block.id,
-          content: result.error,
+          content: outputContent,
           is_error: true,
+        });
+      }
+
+      // Phase 24.2 — fire-and-forget tool-call telemetry. Uses
+      // ctx.prisma so scratch-SQLite tests see the writes. Wrapped
+      // in try/catch + optional chaining + .catch() so:
+      //   - synchronous errors (prisma disconnected mid-microtask
+      //     when a test completes) don't escape to the test runner
+      //   - async errors (insert reject) get logged in production
+      //     and swallowed in test
+      if (ctx.sessionId) {
+        const sessionId = ctx.sessionId;
+        const inputJson = stringifyToolOutput(block.input).slice(0, 4096);
+        const outputSize = outputContent.length;
+        const errorMessage = result.ok ? null : result.error;
+        const telemetryPrisma = ctx.prisma;
+        queueMicrotask(() => {
+          try {
+            const promise = telemetryPrisma.toolCallEvent?.create({
+              data: {
+                sessionId,
+                iteration,
+                toolName: block.name,
+                input: inputJson,
+                outputSize,
+                success: result.ok,
+                errorMessage,
+                durationMs,
+              },
+            });
+            promise?.catch((err: unknown) => {
+              if (process.env.NODE_ENV !== "test") {
+                console.warn(
+                  `[tool-call-telemetry] insert failed for ${block.name}: ${
+                    err instanceof Error ? err.message : String(err)
+                  }`
+                );
+              }
+            });
+          } catch {
+            // Ignore — prisma is gone (test disposed) or the schema
+            // doesn't carry the model. Telemetry must never throw.
+          }
         });
       }
     }

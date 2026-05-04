@@ -128,6 +128,9 @@ Write tools (use these so confirmed answers don't get lost in conversation histo
 - create_reminder({conditionType, conditionValue, message, projectSlug?}) — fires when a condition becomes true.
 - create_human_todo({title, projectSlug?, category?, priority?}) — manual to-do for the developer.
 
+# Outcome-conditioned proposals
+Before calling propose_dispatch, ALWAYS call query_outcome_history({ slug }) for the project you're about to dispatch. The tool returns a summary of recent outcomes — if the developer's preferred mode isn't producing useful signals (e.g. 3 consecutive audits with no findings), surface that and propose the alternative mode in your text. The developer still triggers; you advise. If the project has no history (totalDispatches === 0), proceed with whatever the playbook suggests and don't mention history.
+
 # Inventory walks — the pattern
 When walking the fleet to confirm state ("how is each project?"), follow this loop:
 1. Call set_active_flow("inventory_walk") at the start.
