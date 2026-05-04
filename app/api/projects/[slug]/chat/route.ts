@@ -87,7 +87,35 @@ export async function POST(
       );
     }
 
-    return new Response(response.body, {
+    if (!response.body) {
+      return NextResponse.json(
+        { error: "Anthropic streaming response had no body" },
+        { status: 500 }
+      );
+    }
+
+    // Phase 25.2 — tap the stream for usage telemetry. We split the
+    // body into a passthrough for the client and a parser that
+    // watches for message_delta events (carries usage). Closes
+    // audits/debt.md 23.D3 for this route.
+    const start = performance.now();
+    const [forClient, forTap] = response.body.tee();
+    const { pipeSseEvents } = await import("@/lib/overseer-tools-streaming");
+    const { logUsage } = await import("@/lib/anthropic-usage-log");
+    void pipeSseEvents(forTap, (event) => {
+      if (event.type === "message_delta" && event.usage) {
+        logUsage(prisma, {
+          callSite: "project.chat",
+          model: "claude-sonnet-4-6",
+          usage: event.usage as Parameters<typeof logUsage>[1]["usage"],
+          durationMs: Math.round(performance.now() - start),
+        });
+      }
+    }).catch(() => {
+      // tap failures must not break the client stream
+    });
+
+    return new Response(forClient, {
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
