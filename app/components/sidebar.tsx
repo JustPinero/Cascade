@@ -123,6 +123,7 @@ const navItems = [
   { href: "/reports", label: "Reports", icon: <ReportsIcon />, tooltip: "Generate project and fleet reports" },
   { href: "/templates", label: "Templates", icon: <TemplatesIcon />, tooltip: "Manage kickoff templates" },
   { href: "/observability/cache", label: "Cache Telemetry", icon: <ObservabilityIcon />, tooltip: "Per-request token usage and cache hit rate" },
+  { href: "/observability/tools", label: "Tool Telemetry", icon: <ObservabilityIcon />, tooltip: "Per-tool-call success rates and latency" },
   { href: "/settings", label: "Settings", icon: <SettingsIcon />, tooltip: "Theme, notifications, sounds, automation" },
 ];
 

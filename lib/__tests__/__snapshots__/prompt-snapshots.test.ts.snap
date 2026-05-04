@@ -28,6 +28,9 @@ Write tools (use these so confirmed answers don't get lost in conversation histo
 - create_reminder({conditionType, conditionValue, message, projectSlug?}) — fires when a condition becomes true.
 - create_human_todo({title, projectSlug?, category?, priority?}) — manual to-do for the developer.
 
+# Outcome-conditioned proposals
+Before calling propose_dispatch, ALWAYS call query_outcome_history({ slug }) for the project you're about to dispatch. The tool returns a summary of recent outcomes — if the developer's preferred mode isn't producing useful signals (e.g. 3 consecutive audits with no findings), surface that and propose the alternative mode in your text. The developer still triggers; you advise. If the project has no history (totalDispatches === 0), proceed with whatever the playbook suggests and don't mention history.
+
 # Inventory walks — the pattern
 When walking the fleet to confirm state ("how is each project?"), follow this loop:
 1. Call set_active_flow("inventory_walk") at the start.
@@ -324,9 +327,6 @@ exports[`Overseer system + tools snapshot > Overseer tool definitions are stable
     "name": "create_reminder",
   },
   {
-    "cache_control": {
-      "type": "ephemeral",
-    },
     "description": "Create a manual to-do item for the developer. Structured equivalent of the [HUMAN TODO] tag. Use for things only the developer can do (upload assets, get API keys, manual testing, deploy approval, code review, etc.).",
     "input_schema": {
       "properties": {
@@ -367,6 +367,55 @@ exports[`Overseer system + tools snapshot > Overseer tool definitions are stable
       "type": "object",
     },
     "name": "create_human_todo",
+  },
+  {
+    "description": "Read recent dispatch outcomes for a project. Call this BEFORE proposing a dispatch — your recommendation should reflect what has worked recently. Returns per-mode counts, success rates, recurring signals, and a one-line summary.",
+    "input_schema": {
+      "properties": {
+        "slug": {
+          "description": "Project slug to query history for.",
+          "type": "string",
+        },
+        "windowDays": {
+          "description": "How many days back to look. Default 14.",
+          "type": "number",
+        },
+      },
+      "required": [
+        "slug",
+      ],
+      "type": "object",
+    },
+    "name": "query_outcome_history",
+  },
+  {
+    "cache_control": {
+      "type": "ephemeral",
+    },
+    "description": "Read tool-call telemetry. Useful when the developer asks about which tools you use, why a session hit the iteration limit, or whether a tool keeps failing. Returns aggregated counts, success rates, and latency stats.",
+    "input_schema": {
+      "properties": {
+        "groupBy": {
+          "description": "What to group by. Default 'tool'.",
+          "enum": [
+            "tool",
+            "session",
+            "iteration",
+          ],
+          "type": "string",
+        },
+        "sessionId": {
+          "description": "Restrict to one ChatSession id. Default: current session if available.",
+          "type": "string",
+        },
+        "windowDays": {
+          "description": "How many days back to aggregate. Default 7, max 90.",
+          "type": "number",
+        },
+      },
+      "type": "object",
+    },
+    "name": "get_tool_call_stats",
   },
 ]
 `;
