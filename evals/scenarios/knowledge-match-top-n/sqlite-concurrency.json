@@ -1,0 +1,45 @@
+{
+  "name": "sqlite-concurrency",
+  "kind": "knowledge-match-top-n",
+  "input": {
+    "query": "SQLITE_BUSY errors under concurrent writes",
+    "lessons": [
+      {
+        "id": 42,
+        "title": "SQLite concurrent writes need WAL mode",
+        "content": "Switch to WAL journaling when SQLITE_BUSY surfaces under load. The default rollback journal serializes writers and produces busy errors under contention.",
+        "category": "database",
+        "severity": "critical",
+        "tags": ["sqlite", "wal", "concurrency", "locks"]
+      },
+      {
+        "id": 17,
+        "title": "Indexes speed up SELECT queries",
+        "content": "Adding indexes on JOIN columns reduces SELECT latency under load.",
+        "category": "database",
+        "severity": "important",
+        "tags": ["sqlite", "indexes", "performance"]
+      },
+      {
+        "id": 8,
+        "title": "Race condition in concurrent SQLite reads",
+        "content": "Reading while another connection writes can return stale data. Use BEGIN IMMEDIATE to lock the database for the read window.",
+        "category": "database",
+        "severity": "important",
+        "tags": ["sqlite", "race-condition", "concurrency"]
+      },
+      {
+        "id": 3,
+        "title": "Auth tokens belong in httpOnly cookies",
+        "content": "Storing session tokens in localStorage exposes them to XSS.",
+        "category": "auth",
+        "severity": "important",
+        "tags": ["auth", "tokens", "xss"]
+      }
+    ]
+  },
+  "assert": {
+    "ids": [42, 8, 17],
+    "topN": 3
+  }
+}

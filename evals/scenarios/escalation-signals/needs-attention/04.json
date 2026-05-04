@@ -1,0 +1,6 @@
+{
+  "name": "needs-attention-04",
+  "kind": "escalation-signals",
+  "input": { "logFile": "04.log" },
+  "assert": { "signals": ["needs-attention", "needs-attention"] }
+}

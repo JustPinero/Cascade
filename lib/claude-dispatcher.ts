@@ -8,6 +8,7 @@ import { isInsideProjectsDir } from "./validators";
 import { readIfExists } from "./file-utils";
 import { detectPlatform } from "./platform";
 import { getDispatchQueue } from "./dispatch-queue";
+import { enqueueWithDispatchRow } from "./dispatch-lifecycle";
 
 export type DispatchMode = "continue" | "audit" | "investigate" | "custom";
 
@@ -193,15 +194,30 @@ function killTmuxSession(): void {
  * Launch a command in a terminal window, platform-aware.
  * macOS: opens Terminal.app via osascript
  * Linux/WSL2: runs in a new tmux session directly
+ *
+ * `extraEnv` is forwarded to the spawned child process. Phase 23.2
+ * uses this to pass `CASCADE_DISPATCH_ID` through to the Stop hook.
+ * On macOS the env reaches Terminal.app via the AppleScript shell
+ * invocation through inline `KEY=VALUE` prefixing of the cmd string.
  */
-function launchInTerminal(cmd: string, fullscreen = false): void {
+function launchInTerminal(
+  cmd: string,
+  fullscreen = false,
+  extraEnv?: Record<string, string>
+): void {
   const platform = detectPlatform();
+  const envPrefix = extraEnv
+    ? Object.entries(extraEnv)
+        .map(([k, v]) => `${k}='${String(v).replace(/'/g, "'\\''")}'`)
+        .join(" ") + " "
+    : "";
+  const cmdWithEnv = envPrefix + cmd;
 
   if (platform === "macos") {
     const script = fullscreen
       ? `
       tell application "Terminal"
-        do script "${cmd.replace(/"/g, '\\"')}"
+        do script "${cmdWithEnv.replace(/"/g, '\\"')}"
         activate
         delay 0.5
         tell application "System Events" to tell process "Terminal"
@@ -211,7 +227,7 @@ function launchInTerminal(cmd: string, fullscreen = false): void {
     `
       : `
       tell application "Terminal"
-        do script "${cmd.replace(/"/g, '\\"')}"
+        do script "${cmdWithEnv.replace(/"/g, '\\"')}"
         activate
       end tell
     `;
@@ -227,7 +243,7 @@ function launchInTerminal(cmd: string, fullscreen = false): void {
     const child = spawn("bash", ["-c", cmd], {
       detached: true,
       stdio: "ignore",
-      env: { ...process.env },
+      env: { ...process.env, ...(extraEnv ?? {}) },
     });
     child.unref();
   }
@@ -268,12 +284,33 @@ function attachTmuxSession(sessionName: string): void {
 /**
  * Launch Claude Code in a single terminal for one project.
  * Used for single-project dispatch from the project detail page.
+ *
+ * Phase 23.2 — now writes a Dispatch row at enqueue and threads
+ * `CASCADE_DISPATCH_ID` to the spawned process so the Stop hook can
+ * round-trip it back to the webhook for deterministic idempotency.
  */
+export interface DispatchClaudeResult {
+  success: boolean;
+  error: string | null;
+  /** Phase 23.2 — populated on success; the unique key the Stop hook returns. */
+  idempotencyKey?: string;
+  /** Phase 23.2 — populated on success; the Dispatch row's primary key. */
+  dispatchId?: string;
+}
+
+export interface DispatchClaudeOptions {
+  mode?: DispatchMode;
+  customPrompt?: string;
+  healthAtDispatch?: string;
+}
+
 export async function dispatchClaude(
-  projectPath: string,
-  prompt: string
-): Promise<{ success: boolean; error: string | null }> {
-  if (!isInsideProjectsDir(projectPath)) {
+  prisma: PrismaClient,
+  project: { id: number; slug: string; path: string },
+  prompt: string,
+  opts: DispatchClaudeOptions = {}
+): Promise<DispatchClaudeResult> {
+  if (!isInsideProjectsDir(project.path)) {
     return { success: false, error: "Invalid project path" };
   }
 
@@ -281,15 +318,27 @@ export async function dispatchClaude(
     const tmpFile = path.join(os.tmpdir(), `cascade-prompt-${Date.now()}.txt`);
     fsSync.writeFileSync(tmpFile, prompt, "utf-8");
 
-    const escapedPath = projectPath.replace(/'/g, "'\\''");
+    const escapedPath = project.path.replace(/'/g, "'\\''");
     const cmd = `cd '${escapedPath}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
 
-    const queue = getDispatchQueue();
-    await queue.enqueue({
-      id: projectPath,
-      dispatch: () => launchInTerminal(cmd),
+    const result = await enqueueWithDispatchRow(prisma, {
+      project,
+      mode: opts.mode ?? "continue",
+      prompt,
+      customPrompt: opts.customPrompt,
+      healthAtDispatch: opts.healthAtDispatch,
+      spawnFn: (idempotencyKey) =>
+        launchInTerminal(cmd, false, {
+          CASCADE_DISPATCH_ID: idempotencyKey,
+        }),
     });
-    return { success: true, error: null };
+
+    return {
+      success: true,
+      error: null,
+      idempotencyKey: result.idempotencyKey,
+      dispatchId: result.dispatchId,
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return { success: false, error: message };
@@ -425,9 +474,22 @@ function createPaneGrid(jobNames: string[]): string[] {
 /**
  * Replace a pane's placeholder command with the real Claude invocation.
  * tmux respawn-pane -k kills the current placeholder and execs the new command in place.
+ *
+ * Phase 23.2 — `extraEnv` is shell-prefixed onto the cmd so the spawned
+ * process inherits the env. tmux respawn-pane runs cmd via the user's
+ * shell, so `KEY='value' cmd` is the standard mechanism.
  */
-function launchInPane(target: string, cmd: string): void {
-  const wrapped = wrapCommand(cmd);
+function launchInPane(
+  target: string,
+  cmd: string,
+  extraEnv?: Record<string, string>
+): void {
+  const envPrefix = extraEnv
+    ? Object.entries(extraEnv)
+        .map(([k, v]) => `${k}='${String(v).replace(/'/g, "'\\''")}'`)
+        .join(" ") + " "
+    : "";
+  const wrapped = wrapCommand(envPrefix + cmd);
   execSync(
     `tmux respawn-pane -k -t ${target} '${escapeForTmux(wrapped)}'`,
     { stdio: "pipe" }
@@ -483,37 +545,62 @@ export async function dispatchAll(
   }
 
   const paneTargets = createPaneGrid(readyJobs.map((j) => j.project.name));
-  const queue = getDispatchQueue();
 
   for (let i = 0; i < readyJobs.length; i++) {
     const { project, cmd, prompt } = readyJobs[i];
     const target = paneTargets[i];
 
-    await queue.enqueue({
-      id: project.path,
-      dispatch: async () => {
-        launchInPane(target, cmd);
-        await prisma.activityEvent.create({
-          data: {
-            projectId: project.id,
-            eventType: "session-launched",
-            summary: `Dispatched: ${mode} mode`,
-            details: JSON.stringify({ mode, promptLength: prompt.length }),
-          },
-        });
-      },
-    });
+    // Phase 23.5.1 — wrap per-project enqueue. The lifecycle helper
+    // marks the Dispatch row failed on spawn throw and rethrows; the
+    // queue rethrows that out of enqueue. Without this catch, one
+    // project's failure would abort the rest of the batch. Capture
+    // the per-project error in `results` and continue the loop.
+    try {
+      await enqueueWithDispatchRow(prisma, {
+        project,
+        mode,
+        prompt,
+        healthAtDispatch: project.health,
+        spawnFn: async (idempotencyKey) => {
+          launchInPane(target, cmd, { CASCADE_DISPATCH_ID: idempotencyKey });
+          await prisma.activityEvent.create({
+            data: {
+              projectId: project.id,
+              eventType: "session-launched",
+              summary: `Dispatched: ${mode} mode`,
+              details: JSON.stringify({
+                mode,
+                promptLength: prompt.length,
+                idempotencyKey,
+              }),
+            },
+          });
+        },
+      });
 
-    results.push({
-      success: true,
-      projectName: project.name,
-      projectSlug: project.slug,
-      mode,
-      prompt: prompt.slice(0, 300),
-      ready: true,
-      readyIssues: [],
-      error: null,
-    });
+      results.push({
+        success: true,
+        projectName: project.name,
+        projectSlug: project.slug,
+        mode,
+        prompt: prompt.slice(0, 300),
+        ready: true,
+        readyIssues: [],
+        error: null,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      results.push({
+        success: false,
+        projectName: project.name,
+        projectSlug: project.slug,
+        mode,
+        prompt: prompt.slice(0, 300),
+        ready: true,
+        readyIssues: [],
+        error: message,
+      });
+    }
   }
 
   try {
@@ -609,37 +696,57 @@ export async function dispatchBatch(
   }
 
   const paneTargets = createPaneGrid(readyJobs.map((j) => j.project.name));
-  const queue = getDispatchQueue();
 
   for (let i = 0; i < readyJobs.length; i++) {
     const { project, cmd, prompt, mode } = readyJobs[i];
     const target = paneTargets[i];
 
-    await queue.enqueue({
-      id: project.path,
-      dispatch: async () => {
-        launchInPane(target, cmd);
-        await prisma.activityEvent.create({
-          data: {
-            projectId: project.id,
-            eventType: "session-launched",
-            summary: `Dispatched: ${mode} mode`,
-            details: JSON.stringify({ mode, promptLength: prompt.length }),
-          },
-        });
-      },
-    });
+    // Phase 23.5.1 — see dispatchAll for the rationale; same pattern.
+    try {
+      await enqueueWithDispatchRow(prisma, {
+        project,
+        mode,
+        prompt,
+        spawnFn: async (idempotencyKey) => {
+          launchInPane(target, cmd, { CASCADE_DISPATCH_ID: idempotencyKey });
+          await prisma.activityEvent.create({
+            data: {
+              projectId: project.id,
+              eventType: "session-launched",
+              summary: `Dispatched: ${mode} mode`,
+              details: JSON.stringify({
+                mode,
+                promptLength: prompt.length,
+                idempotencyKey,
+              }),
+            },
+          });
+        },
+      });
 
-    results.push({
-      success: true,
-      projectName: project.name,
-      projectSlug: project.slug,
-      mode,
-      prompt: prompt.slice(0, 300),
-      ready: true,
-      readyIssues: [],
-      error: null,
-    });
+      results.push({
+        success: true,
+        projectName: project.name,
+        projectSlug: project.slug,
+        mode,
+        prompt: prompt.slice(0, 300),
+        ready: true,
+        readyIssues: [],
+        error: null,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      results.push({
+        success: false,
+        projectName: project.name,
+        projectSlug: project.slug,
+        mode,
+        prompt: prompt.slice(0, 300),
+        ready: true,
+        readyIssues: [],
+        error: message,
+      });
+    }
   }
 
   try {

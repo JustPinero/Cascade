@@ -104,6 +104,14 @@ function SettingsIcon() {
   );
 }
 
+function ObservabilityIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+      <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
+    </svg>
+  );
+}
+
 const navItems = [
   { href: "/", label: "Dashboard", icon: <DashboardIcon />, tooltip: "Project overview — health, progress, activity" },
   { href: "/delamain", label: "Overseer", icon: <DelamainIcon />, tooltip: "Talk to your AI dispatcher" },
@@ -114,6 +122,7 @@ const navItems = [
   { href: "/create", label: "Create Project", icon: <CreateIcon />, tooltip: "Launch a new project with the wizard" },
   { href: "/reports", label: "Reports", icon: <ReportsIcon />, tooltip: "Generate project and fleet reports" },
   { href: "/templates", label: "Templates", icon: <TemplatesIcon />, tooltip: "Manage kickoff templates" },
+  { href: "/observability/cache", label: "Cache Telemetry", icon: <ObservabilityIcon />, tooltip: "Per-request token usage and cache hit rate" },
   { href: "/settings", label: "Settings", icon: <SettingsIcon />, tooltip: "Theme, notifications, sounds, automation" },
 ];
 

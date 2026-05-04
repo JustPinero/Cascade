@@ -1,0 +1,45 @@
+{
+  "name": "auth-token-storage",
+  "kind": "knowledge-match-top-n",
+  "input": {
+    "query": "Session tokens visible in browser localStorage causing security issues",
+    "lessons": [
+      {
+        "id": 11,
+        "title": "Auth tokens belong in httpOnly cookies, not localStorage",
+        "content": "Tokens placed in localStorage are reachable by any script on the page; httpOnly cookies are not. The session XSS attack surface drops to zero.",
+        "category": "auth",
+        "severity": "critical",
+        "tags": ["auth", "tokens", "session", "security", "cookies", "localstorage"]
+      },
+      {
+        "id": 12,
+        "title": "XSS attacks can read browser localStorage",
+        "content": "Any compromised script — including third-party deps — can read localStorage. Treat it as public.",
+        "category": "auth",
+        "severity": "important",
+        "tags": ["xss", "security", "localstorage", "browser"]
+      },
+      {
+        "id": 13,
+        "title": "Session management in Next.js apps",
+        "content": "Sessions belong server-side; the browser only carries an opaque identifier.",
+        "category": "auth",
+        "severity": "important",
+        "tags": ["session", "nextjs"]
+      },
+      {
+        "id": 77,
+        "title": "Tailwind dark mode with class strategy",
+        "content": "Use `dark:` variants and toggle a class on html to switch themes.",
+        "category": "performance",
+        "severity": "nice-to-know",
+        "tags": ["tailwind", "darkmode"]
+      }
+    ]
+  },
+  "assert": {
+    "ids": [11, 12, 13],
+    "topN": 3
+  }
+}
