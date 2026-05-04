@@ -770,11 +770,26 @@ export async function dispatchBatch(
  * Dispatch a lead Claude with agent teams enabled.
  * The lead receives a sprint plan and spawns/coordinates teammates
  * to work on multiple projects simultaneously.
+ *
+ * Phase 23 follow-up P0.2 (v1) — the LEAD now writes a Dispatch row
+ * via the lifecycle helper. CASCADE_DISPATCH_ID is threaded into
+ * the lead's spawn env so the lead's Stop hook completes the row.
+ * Per-teammate Dispatch rows are NOT yet wired (v2 work) — teammate
+ * Stop hooks fall back to the legacy lookup until then.
  */
+export interface DispatchTeamResult {
+  success: boolean;
+  error: string | null;
+  /** v1 — lead's idempotencyKey, populated on success. */
+  idempotencyKey?: string;
+  /** v1 — lead's Dispatch.id, populated on success. */
+  dispatchId?: string;
+}
+
 export async function dispatchTeam(
   prisma: PrismaClient,
   items: BatchDispatchItem[]
-): Promise<{ success: boolean; error: string | null }> {
+): Promise<DispatchTeamResult> {
   if (items.length === 0) {
     return { success: false, error: "No projects to dispatch" };
   }
@@ -876,20 +891,41 @@ Begin by spawning the team.`;
   try {
     const cmd = `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude --teammate-mode tmux "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
 
-    // The lead agent holds exactly one queue slot regardless of team size.
-    // Slot id is synthetic since team dispatch does not bind to a single project path.
-    // First project's path gives a usable release key when its Stop hook fires; if no
-    // projects found we fall back to a timestamp id.
+    // P0.2 v1 — anchor the lead's Dispatch row to the first known
+    // project in the batch. The lead spawn carries CASCADE_DISPATCH_ID
+    // for that row's idempotencyKey; when the LEAD's Stop hook fires,
+    // the webhook completes the row. Per-teammate rows are NOT
+    // written (v2 work) — teammate Stop hooks still fall back to the
+    // legacy session-launched lookup.
     const firstFound = items.find((it) => it.slug);
-    const leadId = firstFound ? `team:${firstFound.slug}` : `team:${Date.now()}`;
+    if (!firstFound) {
+      return { success: false, error: "No valid projects in dispatch list" };
+    }
+    const leadProject = await prisma.project.findUnique({
+      where: { slug: firstFound.slug },
+    });
+    if (!leadProject) {
+      return {
+        success: false,
+        error: `Lead project not found: ${firstFound.slug}`,
+      };
+    }
 
-    const queue = getDispatchQueue();
-    await queue.enqueue({
-      id: leadId,
-      dispatch: () => launchInTerminal(cmd, true),
+    const result = await enqueueWithDispatchRow(prisma, {
+      project: leadProject,
+      mode: "custom",
+      prompt: sprintPrompt.slice(0, 500),
+      healthAtDispatch: leadProject.health,
+      spawnFn: (idempotencyKey) =>
+        launchInTerminal(cmd, true, { CASCADE_DISPATCH_ID: idempotencyKey }),
     });
 
-    return { success: true, error: null };
+    return {
+      success: true,
+      error: null,
+      idempotencyKey: result.idempotencyKey,
+      dispatchId: result.dispatchId,
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return { success: false, error: message };

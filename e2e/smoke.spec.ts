@@ -36,4 +36,19 @@ test.describe("smokes", () => {
       page.getByRole("heading", { name: /anthropic cache observability/i })
     ).toBeVisible();
   });
+
+  test("project wizard renders without throwing", async ({ page }) => {
+    // Phase 23 follow-up P1.3 — wizard is the new-user onboarding
+    // surface; covered specs were deleted in 23.8 cleanup, restored
+    // here. Verifies the wizard mounts and the project-name input
+    // is interactive — doesn't drive the full 7-step flow.
+    await page.goto("/create");
+    await expect(
+      page.getByRole("heading", { level: 1, name: /create project/i })
+    ).toBeVisible();
+    const nameInput = page.getByPlaceholder(/my awesome project/i);
+    await expect(nameInput).toBeVisible();
+    await nameInput.fill("Smoke Test Project");
+    await expect(nameInput).toHaveValue("Smoke Test Project");
+  });
 });

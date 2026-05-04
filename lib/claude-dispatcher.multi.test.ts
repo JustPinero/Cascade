@@ -118,19 +118,29 @@ describe("multi-project dispatch — queue integration", () => {
     expect(byMode).toEqual({ alpha: "continue", beta: "audit" });
   });
 
-  it("dispatchTeam enqueues exactly one lead-agent job", async () => {
+  it("dispatchTeam enqueues exactly one lead-agent job and writes a lead Dispatch row", async () => {
     rig = await createDispatchRig({ concurrency: 1, fakeTimers: false });
     await rig.createProject({ slug: "alpha", path: "/p/alpha" });
     await rig.createProject({ slug: "beta", path: "/p/beta" });
     await rig.createProject({ slug: "gamma", path: "/p/gamma" });
 
     const spy = vi.spyOn(rig.queue, "enqueue");
-    await dispatchTeam(rig.prisma as unknown as DispatcherPrisma, [
+    const result = await dispatchTeam(rig.prisma as unknown as DispatcherPrisma, [
       { slug: "alpha", mode: "continue" },
       { slug: "beta", mode: "continue" },
       { slug: "gamma", mode: "continue" },
     ]);
 
     expect(spy).toHaveBeenCalledTimes(1);
+
+    // Phase 23 follow-up P0.2 v1 — exactly one lead Dispatch row,
+    // anchored to the first project in the batch.
+    expect(result.success).toBe(true);
+    expect(result.idempotencyKey).toBeTruthy();
+    const dispatches = await rig.getDispatches();
+    expect(dispatches).toHaveLength(1);
+    expect(dispatches[0].projectSlug).toBe("alpha");
+    expect(dispatches[0].mode).toBe("custom");
+    expect(dispatches[0].idempotencyKey).toBe(result.idempotencyKey);
   });
 });
