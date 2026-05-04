@@ -45,6 +45,7 @@ model Project {
   activityEvents   ActivityEvent[]
   humanTasks       HumanTask[]
   dispatchOutcomes DispatchOutcome[]
+  dispatches       Dispatch[]
   featureUsages    ProjectFeatureUsage[]
   featureProposals FeatureProposal[]
   kickoffTemplate  KickoffTemplate?  @relation(fields: [kickoffTemplateId], references: [id])
@@ -114,8 +115,42 @@ model DispatchOutcome {
   signals        String   @default("[]") // JSON array of escalation signal types detected
   dispatchedAt   DateTime
   completedAt    DateTime @default(now())
+  // Phase 23.2 — link outcome to its originating Dispatch row.
+  // Nullable for backfill of pre-23.2 rows; new rows must populate.
+  dispatchId     String?  @unique
 
-  project Project @relation(fields: [projectId], references: [id])
+  project  Project   @relation(fields: [projectId], references: [id])
+  dispatch Dispatch? @relation(fields: [dispatchId], references: [id])
+}
+
+// Phase 23.2 — first-class Dispatch lifecycle row.
+// Written at enqueue, transitioned by the dispatcher and webhook,
+// timed-out by the watchdog. The idempotencyKey is the canonical
+// correlation handle between the dispatcher, the spawned Claude Code
+// session (passed via CASCADE_DISPATCH_ID env), and the Stop-hook
+// webhook.
+model Dispatch {
+  id               String           @id @default(cuid())
+  idempotencyKey   String           @unique @default(cuid())
+  projectId        Int
+  projectSlug      String
+  mode             String                                  // continue | audit | investigate | custom
+  customPrompt    String?
+  status           String           @default("queued")     // queued | started | completed | failed | timeout
+  prompt           String?
+  healthAtDispatch String?
+  expectedBy       DateTime?
+  enqueuedAt       DateTime         @default(now())
+  startedAt        DateTime?
+  completedAt      DateTime?
+  errorMessage     String?
+
+  outcome          DispatchOutcome?
+  project          Project          @relation(fields: [projectId], references: [id])
+
+  @@index([projectId, status])
+  @@index([expectedBy])
+  @@index([status])
 }
 
 // Phase 12A.1 — ChatSession owns conversation state.
@@ -242,6 +277,28 @@ model FeatureProposal {
   @@index([featureId])
   @@index([status])
   @@index([generatedAt])
+}
+
+// Phase 23.3 — Anthropic API usage telemetry.
+// Fire-and-forget row written by every Anthropic call site. Drives
+// /observability/cache hit-rate visibility and protects 23.4's
+// caching rollout from silent regressions.
+model AnthropicUsageEvent {
+  id                        Int      @id @default(autoincrement())
+  callSite                  String   // "overseer.chat" | "summarizer" | "feature-proposer" | "wizard" | "project.chat"
+  model                     String
+  inputTokens               Int
+  cacheReadInputTokens      Int      @default(0)
+  cacheCreationInputTokens  Int      @default(0)
+  cacheCreation5mTokens     Int      @default(0)
+  cacheCreation1hTokens     Int      @default(0)
+  outputTokens              Int
+  durationMs                Int
+  createdAt                 DateTime @default(now())
+
+  @@index([callSite, createdAt])
+  @@index([createdAt])
+  @@index([model])
 }
 
 // Single-row config table for Cascade-wide state.

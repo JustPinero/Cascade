@@ -54,9 +54,18 @@ function parseCachedSummary(raw: string | null): CachedSummary | null {
 }
 
 function formatSummaryAsMessage(summary: string): AnthropicMessage {
+  // Phase 23.4 — emit as a content array with cache_control so the
+  // prefix extends through the synthetic summary message. Stable for
+  // the rest of the session: the summary doesn't change once cached.
   return {
     role: "user",
-    content: `[Earlier conversation summary — older turns compressed for context window control]\n\n${summary}`,
+    content: [
+      {
+        type: "text",
+        text: `[Earlier conversation summary — older turns compressed for context window control]\n\n${summary}`,
+        cache_control: { type: "ephemeral" },
+      },
+    ],
   };
 }
 
@@ -157,8 +166,15 @@ export async function compressMessagesForSession(
 /**
  * Default summarizer — calls Claude Haiku via the Anthropic Messages
  * API. Returns the model's text output as the summary.
+ *
+ * Phase 23.3 — writes a usage row per call. Phase 23.4's caching
+ * rollout intentionally skips this call site (Haiku 4.5 has a 4,096
+ * token minimum; the summarizer system prompt is ~100 tokens so
+ * caching can't fire), but telemetry still lets us see compression
+ * latency / cost.
  */
 export function defaultSummarizer(apiKey: string): MessageSummarizer {
+  const SUMMARIZER_MODEL = "claude-haiku-4-5-20251001";
   return async (messages, options) => {
     const transcript = messages
       .map((m) => {
@@ -171,6 +187,7 @@ export function defaultSummarizer(apiKey: string): MessageSummarizer {
       })
       .join("\n\n");
 
+    const start = performance.now();
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -179,7 +196,7 @@ export function defaultSummarizer(apiKey: string): MessageSummarizer {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: SUMMARIZER_MODEL,
         max_tokens: 800,
         system:
           "You summarize the older portion of an Overseer (Delamain) conversation into a compact briefing. Preserve: confirmed project states, decisions, blockers raised, dispatch proposals. Drop: greetings, repeated questions, conversational filler. Output a single paragraph in past tense — '...the developer confirmed... I proposed... we deferred...'.",
@@ -194,6 +211,16 @@ export function defaultSummarizer(apiKey: string): MessageSummarizer {
       throw new Error(`Summarizer API error: ${response.status}`);
     }
     const json = await response.json();
+    // Phase 23.3 — fire-and-forget usage logging. Lazy import to
+    // avoid pulling prisma into call sites that don't need it.
+    const { logUsage } = await import("./anthropic-usage-log");
+    const { prisma } = await import("./db");
+    logUsage(prisma, {
+      callSite: "summarizer",
+      model: SUMMARIZER_MODEL,
+      usage: json.usage,
+      durationMs: Math.round(performance.now() - start),
+    });
     const content = (json.content as Array<{ type: string; text?: string }>) ?? [];
     return content
       .filter((b) => b.type === "text")

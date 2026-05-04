@@ -35,7 +35,22 @@ interface SettingsJson {
 }
 
 const SESSION_LOG_COMMAND = `mkdir -p "$PWD/.claude/sessions" && if [ -f "$PWD/.claude/handoff.md" ]; then cp "$PWD/.claude/handoff.md" "$PWD/.claude/sessions/$(date +%Y-%m-%dT%H-%M-%S).md"; fi`;
-const WEBHOOK_COMMAND = `curl -s -X POST http://localhost:${CASCADE_PORT}/api/webhook/session-complete -H 'Content-Type: application/json' -d "{\\"projectPath\\":\\"$PWD\\"}" > /dev/null 2>&1 &`;
+
+/**
+ * Phase 23.2 — round-trip CASCADE_DISPATCH_ID through the webhook so
+ * the route handler can correlate the Stop hook to its originating
+ * Dispatch row. The bash `${VAR:+,...}` substitution inserts the
+ * key+value only when the env is set; pre-23.2 sessions (no env)
+ * post the legacy {projectPath} body and the webhook falls back.
+ *
+ * Exported so unit tests can assert the shape without spawning a real
+ * shell.
+ */
+export function buildWebhookCommand(port: string): string {
+  return `curl -s -X POST http://localhost:${port}/api/webhook/session-complete -H 'Content-Type: application/json' -d "{\\"projectPath\\":\\"$PWD\\"\${CASCADE_DISPATCH_ID:+,\\"idempotencyKey\\":\\"$CASCADE_DISPATCH_ID\\"}}" > /dev/null 2>&1 &`;
+}
+
+const WEBHOOK_COMMAND = buildWebhookCommand(CASCADE_PORT);
 
 const STOP_HOOK: HookEntry = {
   matcher: "",
@@ -215,4 +230,8 @@ function main() {
   );
 }
 
-main();
+// Only run when invoked as a script. Importing this module for
+// testing helpers (buildWebhookCommand) must not trigger the script.
+if (require.main === module) {
+  main();
+}

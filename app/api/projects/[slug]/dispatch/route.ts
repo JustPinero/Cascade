@@ -41,7 +41,11 @@ export async function POST(
       customPrompt
     );
 
-    const result = await dispatchClaude(project.path, generatedPrompt);
+    const result = await dispatchClaude(prisma, project, generatedPrompt, {
+      mode: mode as DispatchMode,
+      customPrompt,
+      healthAtDispatch: project.health,
+    });
 
     if (result.success) {
       await prisma.activityEvent.create({
@@ -49,7 +53,13 @@ export async function POST(
           projectId: project.id,
           eventType: "session-launched",
           summary: `Dispatched: ${mode} mode`,
-          details: JSON.stringify({ mode }),
+          details: JSON.stringify({
+            mode,
+            // Phase 23.2 — surface the idempotency key in activity
+            // logs so legacy fallback lookups can correlate.
+            idempotencyKey: result.idempotencyKey,
+            dispatchId: result.dispatchId,
+          }),
         },
       });
 
@@ -63,6 +73,8 @@ export async function POST(
       success: result.success,
       mode,
       error: result.error,
+      idempotencyKey: result.idempotencyKey,
+      dispatchId: result.dispatchId,
     });
   } catch (error) {
     const message =

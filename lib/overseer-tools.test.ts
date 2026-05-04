@@ -58,6 +58,7 @@ describe("ToolRegistry", () => {
       })
     );
     const result = reg.toAnthropicTools();
+    // Phase 23.4 — last tool gets cache_control for prompt caching.
     expect(result).toEqual([
       {
         name: "query_project",
@@ -67,8 +68,25 @@ describe("ToolRegistry", () => {
           properties: { slug: { type: "string" } },
           required: ["slug"],
         },
+        cache_control: { type: "ephemeral" },
       },
     ]);
+  });
+
+  it("only the last tool carries cache_control when multiple tools are registered", () => {
+    const reg = new ToolRegistry();
+    reg.register(makeTool({ name: "first", description: "first" }));
+    reg.register(makeTool({ name: "second", description: "second" }));
+    reg.register(makeTool({ name: "third", description: "third" }));
+    const result = reg.toAnthropicTools();
+    expect(result[0].cache_control).toBeUndefined();
+    expect(result[1].cache_control).toBeUndefined();
+    expect(result[2].cache_control).toEqual({ type: "ephemeral" });
+  });
+
+  it("empty registry returns an empty array without throwing", () => {
+    const reg = new ToolRegistry();
+    expect(reg.toAnthropicTools()).toEqual([]);
   });
 });
 

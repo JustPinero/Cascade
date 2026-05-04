@@ -1,0 +1,4 @@
+## CI output
+
+  FAIL  lib/auth.test.ts
+  failing tests in the auth module

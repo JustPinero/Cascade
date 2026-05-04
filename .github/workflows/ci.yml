@@ -83,12 +83,36 @@ jobs:
       - name: Build
         run: pnpm build
 
+  scenario:
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma Client
+        run: pnpm exec prisma generate
+      - name: Configure git for tests
+        run: |
+          git config --global user.email "ci@cascade.dev"
+          git config --global user.name "Cascade CI"
+      - name: Run scenario tests
+        run: pnpm vitest run tests/scenarios/
+
   e2e:
     runs-on: ubuntu-latest
     needs: [build]
-    # E2E tests require a running dev server + database.
-    # Skip in CI for now — run locally via: pnpm exec playwright test
-    if: false
+    # Phase 23.8 — re-enabled. playwright.config.ts uses `pnpm dev:ci`
+    # in CI mode (no 1Password dependency). The smoke specs exercise
+    # page rendering only — no Anthropic API calls — so a fake key
+    # placeholder is enough to satisfy startup validation.
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
@@ -104,5 +128,12 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - name: Generate Prisma Client
         run: pnpm exec prisma generate
+      - name: Push schema to test e2e DB
+        run: pnpm exec prisma db push
+        env:
+          DATABASE_URL: file:./test-e2e.db
       - name: Run E2E tests
         run: pnpm exec playwright test
+        env:
+          ANTHROPIC_API_KEY: sk-ant-ci-fake-key-not-used-by-smoke-specs
+          DATABASE_URL: file:./test-e2e.db

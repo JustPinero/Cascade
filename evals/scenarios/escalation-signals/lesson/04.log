@@ -1,0 +1,2 @@
+[LESSON] Always test the rollback before celebrating the migration
+[LESSON] Never trust user-controlled paths inside shell commands without escaping

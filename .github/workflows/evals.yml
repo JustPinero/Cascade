@@ -1,0 +1,26 @@
+# Phase 23.6 — eval suite (replay-only on PRs and nightly).
+#
+# Recorded responses are committed to evals/recordings/ so this
+# workflow runs offline. Refresh against the live API by running
+# `pnpm eval:refresh` locally and reviewing the diff in PR.
+name: Evals
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 7 * * *"  # daily 07:00 UTC
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+      - run: pnpm eval
