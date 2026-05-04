@@ -1,4 +1,120 @@
 # Session Handoff — Kilroy
+Date: 2026-05-04 — Phase 23 complete (regression spine + caching)
+
+Phase 23 was the rigorous one. It built the regression spine the audit
+had flagged: a shared dispatch test rig, a Dispatch lifecycle table,
+Anthropic usage telemetry, prompt caching everywhere it pays, scenario
+tests for race conditions, an offline eval runner with kind executors,
+and revived E2E in CI. Plus the 23.5.1 follow-up that fixed the
+real partial-batch-failure bug surfaced while writing scenario tests.
+
+Sub-slices that landed (all green, all merged through validate.sh):
+
+- **23.1** `tests/harness/dispatch-rig.ts` — shared test harness with
+  scratch SQLite + queue singleton + spawn-record introspection +
+  fake timers + Anthropic mock + dispose cleanup. 15 self-tests.
+  `lib/claude-dispatcher.multi.test.ts` rewritten on the rig.
+- **23.2** `Dispatch` model + idempotency-key migration. Lifecycle
+  helper at `lib/dispatch-lifecycle.ts`. `dispatchClaude`,
+  `dispatchAll`, `dispatchBatch` route through the helper.
+  `launchInTerminal` and `launchInPane` thread `CASCADE_DISPATCH_ID`
+  into the spawned env. Webhook correlates by idempotencyKey, dedups
+  on already-completed, falls back to legacy lookup for orphaned
+  hooks. Watchdog at `lib/dispatch-watchdog.ts`. `scripts/install-hooks.ts`
+  updated to round-trip `idempotencyKey` via `${CASCADE_DISPATCH_ID:+...}`.
+  4 webhook scenarios + 5 watchdog tests + 5 schema tests + 5 install-hooks
+  tests + 4 lifecycle tests.
+- **23.3** `AnthropicUsageEvent` model + `lib/anthropic-usage-log.ts`
+  (`logUsage` + `extractUsageFields`, fire-and-forget via
+  `queueMicrotask`). Wired into the 3 buffered call sites
+  (overseer.chat, summarizer, feature-proposer). `lib/observability/usage-events.ts`
+  with cursor pagination + computed `hitRate` per row.
+  `app/observability/cache/page.tsx` — server-component flat table,
+  no charts. Linked in sidebar as "Cache Telemetry."
+- **23.4** Type widening for `cache_control` (TextBlock,
+  AnthropicToolDefinition, SystemBlock, AnthropicMessageResponse.usage).
+  `ToolRegistry.toAnthropicTools()` marks the last tool with
+  `cache_control: ephemeral`. Compressed-history summary block,
+  per-project chat system, and feature-proposer system (1h TTL) all
+  cached. `lib/__tests__/prompt-snapshots.test.ts` snapshots the
+  Overseer system prompt + tools and asserts the prefix-marker
+  invariant + that the combined prefix exceeds Sonnet 4.6's 2,048-token
+  cache minimum.
+- **23.5** 11 scenario tests across `tests/scenarios/`:
+  webhook-idempotency-key-path (4), webhook-resilience (4),
+  dispatcher-resilience (4) covering race conditions and failure
+  modes that the prior unit tests missed.
+- **23.5.1** Real bug fix: per-project try/catch in `dispatchAll` /
+  `dispatchBatch` so a single spawn failure doesn't abort the batch.
+  3 batch-resilience tests + 4 shell-escape-verifier tests asserting
+  the architecture-level invariant that prompts go through tmpfiles.
+- **23.6** Eval runner scaffolding under `evals/`: `recorder.ts`
+  with pinned hash function, `asserters.ts` (3 asserters returning
+  `{ pass, diff }`), `runner.ts` with kind-executor registry, `run.ts`
+  CLI with `--record`/`--scenario=`/`--kind=` flags. `pnpm eval` and
+  `pnpm eval:refresh` scripts. `.github/workflows/evals.yml` runs
+  replay-only on PR + nightly cron.
+- **23.7** Kind executors for all three kinds. 3 knowledge-matcher
+  fixtures, 35 escalation-detector logs (6 per signal type + 5
+  true-negative false-positive risks). 38 eval scenarios passing.
+  Overseer fixtures deferred (need live-API record pass — see debt
+  23.D1).
+- **23.8** E2E re-enabled in CI. `pnpm dev:ci` skips `op run`. 3
+  fast Playwright smokes covering dashboard, Overseer chat,
+  `/observability/cache`. Plus a CI `scenario` job running
+  `tests/scenarios/`.
+- **23.9** Audits/debt + handoff bookkeeping (this entry).
+
+## Test counts and metrics
+
+- Vitest: **131 files, ~917 tests, all green deterministically**
+  (was flaky at 896 before the globalSetup fix)
+- Eval suite: **38 scenarios green** under `pnpm eval`
+- Playwright smokes: **3 green** (~2s total)
+- `pnpm validate`: green end-to-end
+
+## Known production behaviors verified post-merge
+
+These are manual checks recommended after this branch deploys:
+
+1. Open Overseer chat, send a message, then send another within 5
+   minutes. Confirm at `/observability/cache` that turn 2 shows
+   non-zero `cacheReadInputTokens`.
+2. Dispatch a single project. Verify the activity-event log shows
+   the `idempotencyKey` value in the details JSON, and the
+   `Dispatch` row shows `status: "completed"` after the Stop hook
+   fires.
+3. After `pnpm tsx scripts/install-hooks.ts` re-runs across
+   managed projects, confirm a fresh dispatch produces an
+   `idempotencyKey` field in the webhook POST body (visible via
+   `dispatch.findUnique` for a recently-completed row).
+
+## Real bugs Phase 23 caught while building
+
+- **The intermittent test flake** — root cause: parallel vitest
+  workers racing on `prisma db push` regenerating the client.
+  Fixed via `tests/harness/global-setup.ts` (push-once template DB)
+  + `vi.importActual<fs>` for the rig's `copyFileSync`.
+- **Partial-batch failure abort** in `dispatchAll`/`dispatchBatch`
+  — surfaced by writing the respawn-pane scenario test, fixed
+  in 23.5.1.
+- **Stale dev server caught locally** — when AnthropicUsageEvent
+  was added, the running dev server's Prisma client didn't have it.
+  Restart resolved. Worth flagging that schema-changing slices
+  require a dev-server restart for the user's manual testing.
+
+## Next phases
+
+- **Phase 24** — Overseer Intelligence (outcome-conditioned dispatch
+  + tool-call observability). Specs in
+  `requests/phase-24-overseer-intelligence/`.
+- **Phase 25** — UX Polish (adaptive thinking, streaming, citations).
+  Specs in `requests/phase-25-ux-polish/`.
+- **Phase 26+** — Theme Pack (relocated from Phase 23).
+
+---
+
+# Session Handoff — Kilroy (Phase 22 archive)
 Date: 2026-04-30 — Phase 22 complete (lead-stall guardrails + placeholder portrait)
 
 Phase 22 ships the Cascade-side guardrails for the 2026-04-29 lead-stall

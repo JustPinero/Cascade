@@ -1,0 +1,6 @@
+{
+  "name": "test-failure-01",
+  "kind": "escalation-signals",
+  "input": { "logFile": "01.log" },
+  "assert": { "signals": ["test-failure"] }
+}

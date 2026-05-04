@@ -38,6 +38,19 @@ function makeMessages(n: number): AnthropicMessage[] {
   })) as AnthropicMessage[];
 }
 
+/**
+ * Phase 23.4 — the synthetic summary message is a content array with
+ * cache_control on the first text block. The truncation-notice fallback
+ * stays as a string. This helper extracts the summary text from either
+ * shape so assertions don't have to branch.
+ */
+function summaryText(msg: AnthropicMessage): string {
+  if (typeof msg.content === "string") return msg.content;
+  return msg.content
+    .map((b) => ("text" in b ? b.text : ""))
+    .join("");
+}
+
 describe("compressMessagesForSession", () => {
   it("returns input unchanged when message count is at or below threshold", async () => {
     const session = await prisma.chatSession.create({ data: {} });
@@ -68,12 +81,8 @@ describe("compressMessagesForSession", () => {
     // 1 synthetic summary message + last 10 messages = 11 total
     expect(out.length).toBe(11);
     expect(out[0].role).toBe("user");
-    expect(typeof out[0].content === "string" && out[0].content).toContain(
-      "Earlier conversation summary"
-    );
-    expect(typeof out[0].content === "string" && out[0].content).toContain(
-      "covered projects A"
-    );
+    expect(summaryText(out[0])).toContain("Earlier conversation summary");
+    expect(summaryText(out[0])).toContain("covered projects A");
     // last verbatim message preserved
     expect(out[10]).toEqual(messages[29]);
   });
@@ -113,7 +122,7 @@ describe("compressMessagesForSession", () => {
       summarizer,
     });
     expect(summarizer).toHaveBeenCalledTimes(1);
-    expect(typeof out[0].content === "string" && out[0].content).toContain("cached one");
+    expect(summaryText(out[0])).toContain("cached one");
   });
 
   it("re-summarizes when the older portion has grown beyond the cached count", async () => {
@@ -138,7 +147,7 @@ describe("compressMessagesForSession", () => {
     });
 
     expect(summarizer).toHaveBeenCalledTimes(2);
-    expect(typeof out[0].content === "string" && out[0].content).toContain("after 40");
+    expect(summaryText(out[0])).toContain("after 40");
   });
 
   it("falls back to raw truncation when the summarizer throws (Phase 14.2)", async () => {

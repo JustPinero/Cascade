@@ -61,7 +61,16 @@ export async function POST(
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
         max_tokens: 4096,
-        system: systemPrompt,
+        // Phase 23.4 — wrap as cached array. The system prompt is
+        // dynamic across projects but stable within a single project
+        // session; cache hits land for turn 2+ in the same chat.
+        system: [
+          {
+            type: "text",
+            text: systemPrompt,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
         messages: validation.messages,
         stream: true,
       }),

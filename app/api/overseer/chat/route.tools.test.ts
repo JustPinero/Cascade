@@ -271,10 +271,17 @@ describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () =
     expect(mockCaller).toHaveBeenCalledTimes(1);
     const params = mockCaller.mock.calls[0][0];
     expect(params.messages.length).toBe(11);
-    expect(params.messages[0].content).toContain(
-      "Earlier conversation summary"
-    );
-    expect(params.messages[0].content).toContain("compressed-summary-stub");
+    // Phase 23.4 — summary message is now a content array with
+    // cache_control on the text block, not a plain string.
+    const summaryContent = params.messages[0].content;
+    const summaryString =
+      typeof summaryContent === "string"
+        ? summaryContent
+        : summaryContent
+            .map((b: { text?: string }) => ("text" in b ? b.text ?? "" : ""))
+            .join("");
+    expect(summaryString).toContain("Earlier conversation summary");
+    expect(summaryString).toContain("compressed-summary-stub");
   });
 
   it("uses body.sessionDate when provided (Phase 14.1)", async () => {

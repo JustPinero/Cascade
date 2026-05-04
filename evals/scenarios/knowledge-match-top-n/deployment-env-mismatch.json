@@ -1,0 +1,45 @@
+{
+  "name": "deployment-env-mismatch",
+  "kind": "knowledge-match-top-n",
+  "input": {
+    "query": "Vercel deploy passes but production crashes with env vars undefined",
+    "lessons": [
+      {
+        "id": 20,
+        "title": "Vercel env vars are case-sensitive between build and runtime",
+        "content": "Build-time substitution differs from runtime resolution. Lowercase one place, uppercase the other crashes production.",
+        "category": "deployment",
+        "severity": "critical",
+        "tags": ["vercel", "env-vars", "production", "deploy"]
+      },
+      {
+        "id": 25,
+        "title": "Production environment variables must be set explicitly in the dashboard",
+        "content": "Local .env files do not propagate to Vercel. Set production vars in the project settings dashboard before each deploy.",
+        "category": "deployment",
+        "severity": "important",
+        "tags": ["deployment", "env-vars", "production"]
+      },
+      {
+        "id": 30,
+        "title": "Build-time vs runtime config in Next.js",
+        "content": "NEXT_PUBLIC_ vars are baked into the bundle at build; server-only vars resolve at runtime per request.",
+        "category": "deployment",
+        "severity": "important",
+        "tags": ["nextjs", "env-vars", "build"]
+      },
+      {
+        "id": 99,
+        "title": "Tailwind purge configuration",
+        "content": "Tailwind purge needs to know which files to scan or production CSS is enormous.",
+        "category": "performance",
+        "severity": "nice-to-know",
+        "tags": ["tailwind", "css"]
+      }
+    ]
+  },
+  "assert": {
+    "ids": [20, 25, 30],
+    "topN": 3
+  }
+}

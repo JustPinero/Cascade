@@ -1,0 +1,5 @@
+Working on the auth flow.
+
+[NEEDS ATTENTION] Cannot reach the OAuth callback URL.
+
+Tried adjusting the redirect_uri but the provider rejects.
