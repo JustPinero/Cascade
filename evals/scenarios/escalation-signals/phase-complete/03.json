@@ -1,0 +1,6 @@
+{
+  "name": "phase-complete-03",
+  "kind": "escalation-signals",
+  "input": { "logFile": "03.log" },
+  "assert": { "signals": ["phase-complete"] }
+}

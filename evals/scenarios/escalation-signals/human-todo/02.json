@@ -1,0 +1,6 @@
+{
+  "name": "human-todo-02",
+  "kind": "escalation-signals",
+  "input": { "logFile": "02.log" },
+  "assert": { "signals": ["human-todo"] }
+}

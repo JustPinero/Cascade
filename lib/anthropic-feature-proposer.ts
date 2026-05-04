@@ -123,9 +123,11 @@ async function defaultCallClaude(system: string, user: string): Promise<string> 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
 
+  const PROPOSER_MODEL = "claude-sonnet-4-6";
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 45_000);
   try {
+    const start = performance.now();
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -134,9 +136,20 @@ async function defaultCallClaude(system: string, user: string): Promise<string> 
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: PROPOSER_MODEL,
         max_tokens: 2048,
-        system,
+        // Phase 23.4 — proposeForAll calls in bursts when several
+        // feature gaps exist; 1h TTL covers a multi-feature audit.
+        // Fallback to no caching if the system prompt is below the
+        // 2,048-token Sonnet 4.6 minimum (telemetry will reveal this
+        // post-deploy via /observability/cache).
+        system: [
+          {
+            type: "text",
+            text: system,
+            cache_control: { type: "ephemeral", ttl: "1h" },
+          },
+        ],
         messages: [{ role: "user", content: user }],
       }),
       signal: controller.signal,
@@ -144,7 +157,20 @@ async function defaultCallClaude(system: string, user: string): Promise<string> 
     if (!response.ok) {
       throw new Error(`Claude API error: ${response.status}`);
     }
-    const data = (await response.json()) as { content?: Array<{ text?: string }> };
+    const data = (await response.json()) as {
+      content?: Array<{ text?: string }>;
+      usage?: unknown;
+    };
+    // Phase 23.3 — usage telemetry. Lazy import to avoid pulling
+    // prisma into modules that import this proposer for testing.
+    const { logUsage } = await import("./anthropic-usage-log");
+    const { prisma } = await import("./db");
+    logUsage(prisma, {
+      callSite: "feature-proposer",
+      model: PROPOSER_MODEL,
+      usage: data.usage as Parameters<typeof logUsage>[1]["usage"],
+      durationMs: Math.round(performance.now() - start),
+    });
     return data.content?.[0]?.text ?? "";
   } finally {
     clearTimeout(timeout);

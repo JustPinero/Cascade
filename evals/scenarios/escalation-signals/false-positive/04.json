@@ -1,0 +1,6 @@
+{
+  "name": "false-positive-04",
+  "kind": "escalation-signals",
+  "input": { "logFile": "04.log" },
+  "assert": { "signals": [] }
+}

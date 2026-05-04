@@ -1,0 +1,5 @@
+Multi-line content with bullets.
+- thing 1
+- thing 2
+
+[LESSON] Async operations in Server Components must be awaited or React 19 silently swallows them

@@ -1,0 +1,1 @@
+[LESSON] Always run prisma generate after schema changes or the client lags

@@ -29,8 +29,19 @@ export type ToolExecutionResult =
   | { ok: true; output: unknown }
   | { ok: false; error: string };
 
+// Phase 23.4 — prompt caching surface.
+// `cache_control` may attach to text blocks (system or message
+// content), or to tool definitions (typically the last one). The
+// Anthropic API caches the prefix up to and including the marked
+// block. See references/prompt-caching.md for placement strategy.
+export type CacheControl = { type: "ephemeral"; ttl?: "1h" };
+
 // Anthropic message content block shapes (subset we use).
-export type TextBlock = { type: "text"; text: string };
+export type TextBlock = {
+  type: "text";
+  text: string;
+  cache_control?: CacheControl;
+};
 export type ToolUseBlock = {
   type: "tool_use";
   id: string;
@@ -54,11 +65,26 @@ export interface AnthropicToolDefinition {
   name: string;
   description: string;
   input_schema: Record<string, unknown>;
+  cache_control?: CacheControl;
 }
+
+/**
+ * Phase 23.4 — system can be a plain string (legacy) or an array of
+ * cached text blocks. Use the array form when you want a cache marker
+ * on the system prompt itself; for tool-using paths, marking the last
+ * tool is usually preferred (covers system + tools as one prefix).
+ */
+export type SystemBlock =
+  | string
+  | Array<{
+      type: "text";
+      text: string;
+      cache_control?: CacheControl;
+    }>;
 
 export interface AnthropicMessageParams {
   model: string;
-  system: string;
+  system: SystemBlock;
   messages: AnthropicMessage[];
   tools: AnthropicToolDefinition[];
   max_tokens?: number;
@@ -72,7 +98,22 @@ export interface AnthropicMessageResponse {
   model: string;
   stop_reason: string | null;
   stop_sequence: string | null;
-  usage: { input_tokens: number; output_tokens: number };
+  /**
+   * Phase 23.4 — usage now exposes cache hit/write counters when
+   * cache_control markers are present in the request. All cache fields
+   * are optional because requests without markers produce responses
+   * without those fields.
+   */
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+    cache_creation?: {
+      ephemeral_5m_input_tokens?: number;
+      ephemeral_1h_input_tokens?: number;
+    };
+  };
 }
 
 export type AnthropicCaller = (
@@ -105,11 +146,20 @@ export class ToolRegistry {
   }
 
   toAnthropicTools(): AnthropicToolDefinition[] {
-    return this.list().map((t) => ({
+    const tools: AnthropicToolDefinition[] = this.list().map((t) => ({
       name: t.name,
       description: t.description,
       input_schema: t.inputSchema,
     }));
+    // Phase 23.4 — mark the last tool with cache_control so the API
+    // caches the entire system + tools prefix. Sonnet 4.6's minimum
+    // cacheable size is 2,048 tokens; the system prompt alone is
+    // below that threshold but system + 14+ tools comfortably
+    // exceeds it. See references/prompt-caching.md.
+    if (tools.length > 0) {
+      tools[tools.length - 1].cache_control = { type: "ephemeral" };
+    }
+    return tools;
   }
 
   async execute(
@@ -261,9 +311,15 @@ export async function runToolUseLoop(
  * Default caller that hits the Anthropic Messages API directly. Kept
  * outside the loop so tests can pass their own mock without touching
  * fetch. Not used by tests.
+ *
+ * Phase 23.3 — emits an `AnthropicUsageEvent` row per request via
+ * fire-and-forget logUsage. The row reports input/output/cache token
+ * counts; the cache columns default to zero pre-23.4 (no cache_control
+ * markers yet), then climb once 23.4 ships.
  */
 export function defaultAnthropicCaller(apiKey: string): AnthropicCaller {
   return async (params, options) => {
+    const start = performance.now();
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -278,6 +334,18 @@ export function defaultAnthropicCaller(apiKey: string): AnthropicCaller {
       const text = await response.text();
       throw new Error(`Anthropic API error: ${response.status} ${text}`);
     }
-    return (await response.json()) as AnthropicMessageResponse;
+    const json = (await response.json()) as AnthropicMessageResponse;
+    // Lazy import to avoid a circular dep — overseer-tools is imported
+    // by lib/db's consumers, and anthropic-usage-log imports from
+    // app/generated/prisma which is heavier.
+    const { logUsage } = await import("./anthropic-usage-log");
+    const { prisma } = await import("./db");
+    logUsage(prisma, {
+      callSite: "overseer.chat",
+      model: params.model,
+      usage: json.usage as unknown as Parameters<typeof logUsage>[1]["usage"],
+      durationMs: Math.round(performance.now() - start),
+    });
+    return json;
   };
 }
