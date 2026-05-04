@@ -279,6 +279,29 @@ model FeatureProposal {
   @@index([generatedAt])
 }
 
+// Phase 24.2 — Tool-call observability.
+// One row per `registry.execute(...)` invocation in runToolUseLoop.
+// Drives /observability/tools and the `get_tool_call_stats` tool. The
+// `resultUsed` column is reserved for a follow-up heuristic; default
+// true so absence-of-data doesn't penalize tools.
+model ToolCallEvent {
+  id            Int      @id @default(autoincrement())
+  sessionId     String
+  iteration     Int
+  toolName      String
+  input         String   // JSON, truncated to 4 KB
+  outputSize    Int
+  success       Boolean
+  errorMessage  String?
+  durationMs    Int
+  resultUsed    Boolean? @default(true)
+  createdAt     DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([toolName])
+  @@index([createdAt])
+}
+
 // Phase 23.3 — Anthropic API usage telemetry.
 // Fire-and-forget row written by every Anthropic call site. Drives
 // /observability/cache hit-rate visibility and protects 23.4's
