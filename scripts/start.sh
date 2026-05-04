@@ -25,5 +25,11 @@ pnpm exec tsx scripts/run-stale-session-cleanup.ts 2>/dev/null || true
 # Best-effort — never blocks startup.
 pnpm exec tsx scripts/run-team-stall-scan.ts 2>/dev/null || true
 
+# Phase 23 follow-up P0.1 — flip Dispatch rows past their expectedBy
+# deadline to "timeout" and release queue slots. Once-at-startup is
+# enough for local dev; long-running deployments should add a 5-min
+# cron entry calling this same script.
+pnpm exec tsx scripts/run-dispatch-watchdog.ts 2>/dev/null || true
+
 echo "Starting dev server at http://localhost:3000"
 pnpm dev
