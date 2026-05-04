@@ -54,7 +54,23 @@ export type ToolResultBlock = {
   content: string;
   is_error?: boolean;
 };
-export type ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock;
+/**
+ * Phase 25.1 — Sonnet 4.6's adaptive thinking may emit thinking
+ * blocks alongside text/tool_use in assistant turns. The model's
+ * `signature` field is opaque — pass through unchanged. When tool
+ * use chains across turns, the thinking blocks MUST round-trip
+ * verbatim or the next request 400s.
+ */
+export type ThinkingBlock = {
+  type: "thinking";
+  thinking: string;
+  signature: string;
+};
+export type ContentBlock =
+  | TextBlock
+  | ToolUseBlock
+  | ToolResultBlock
+  | ThinkingBlock;
 
 export interface AnthropicMessage {
   role: "user" | "assistant";
