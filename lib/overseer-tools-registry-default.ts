@@ -15,6 +15,7 @@ import { createReminderTool } from "@/lib/overseer-tools-create-reminder";
 import { createHumanTodoTool } from "@/lib/overseer-tools-create-human-todo";
 import { outcomeHistoryTool } from "@/lib/overseer-tools-outcome-history";
 import { toolCallStatsTool } from "@/lib/overseer-tools-stats";
+import { knowledgeCitationsTool } from "@/lib/overseer-tools-knowledge-citations";
 
 /**
  * Default tool registry for the Overseer chat path.
@@ -53,5 +54,9 @@ export function buildDefaultRegistry(): ToolRegistry {
   // answer "which tools did I call most this week?" / "is something
   // failing?" from its own ToolCallEvent rows.
   reg.register(toolCallStatsTool);
+  // 25.3 — knowledge-base lookup with citation markers. Returns top-N
+  // matching lessons with [L-<id>] markers; the chat client renders
+  // those markers as inline links when the model cites a lesson.
+  reg.register(knowledgeCitationsTool);
   return reg;
 }
