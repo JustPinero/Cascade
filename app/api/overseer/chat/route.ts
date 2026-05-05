@@ -23,9 +23,10 @@ import {
 } from "@/lib/anthropic-feature-proposer";
 import {
   runToolUseLoop,
-  defaultAnthropicCaller,
   type ToolContext,
 } from "@/lib/overseer-tools";
+import { defaultStreamingAnthropicCaller } from "@/lib/overseer-tools-streaming";
+import type { StreamEvent } from "@/lib/streaming-accumulator";
 import { buildDefaultRegistry } from "@/lib/overseer-tools-registry-default";
 import { getOrCreateSession, isValidSessionDate } from "@/lib/chat-session";
 import { extractEngineerMessages } from "@/lib/engineer-tag-parser";
@@ -305,77 +306,221 @@ export async function POST(request: NextRequest) {
     const abort = new AbortController();
     const timeoutHandle = setTimeout(() => abort.abort(), 60_000);
 
-    try {
-      // History compression safety net (Phase 12E). Once the
-      // conversation gets long, replace older turns with a cached
-      // summary. workingMemory remains the canonical store for
-      // confirmed facts; this just keeps raw message count under
-      // control on multi-hour sessions.
-      const inputMessages = validation.messages.map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: typeof m.content === "string" ? m.content : "",
-      }));
-      const messages = await compressMessagesForSession(
-        prisma,
-        session.id,
-        inputMessages,
-        {
-          threshold: 25,
-          keepRecent: 10,
-          summarizer: defaultSummarizer(apiKey),
-          signal: abort.signal,
-        }
-      );
+    // Phase 25.D1 — streaming migration.
+    //
+    // The buffered path used to call the Anthropic API to completion,
+    // assemble the final text, then replay it as fake SSE. The new
+    // path streams text deltas to the client as they arrive from the
+    // model, while the tool-use loop runs across iterations.
+    //
+    // Strategy: synthesize ONE coherent SSE envelope to the client —
+    // one message_start, one text content block, one message_stop —
+    // even though the underlying loop may run multiple Anthropic
+    // calls. Per-call message_start/stop boundaries are filtered out
+    // so the client sees a single contiguous response. tool_use
+    // events are hidden but a synthetic `tool_call_start` event is
+    // emitted for any UI progress indicator.
+    const inputMessages = validation.messages.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: typeof m.content === "string" ? m.content : "",
+    }));
 
-      const result = await runToolUseLoop({
-        caller: defaultAnthropicCaller(apiKey),
-        model: "claude-sonnet-4-6",
-        systemPrompt: TOOL_PATH_SYSTEM_PROMPT,
-        messages,
-        registry,
-        ctx,
-        maxIterations: 8,
-        signal: abort.signal,
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    const writer = writable.getWriter();
+    const enc = new TextEncoder();
+    const aggregateModel = "claude-sonnet-4-6";
+
+    function writeFrame(name: string, data: unknown): void {
+      writer
+        .write(enc.encode(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`))
+        .catch(() => {
+          // Client disconnected mid-stream; loop will continue and
+          // flush quietly. Aborts are handled separately by the
+          // 60s timeout signal.
+        });
+    }
+
+    let textBlockOpen = false;
+    let aggregatedText = "";
+
+    function ensureTextBlockOpen(): void {
+      if (!textBlockOpen) {
+        writeFrame("content_block_start", {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "text", text: "" },
+        });
+        textBlockOpen = true;
+      }
+    }
+
+    function closeTextBlock(): void {
+      if (textBlockOpen) {
+        writeFrame("content_block_stop", {
+          type: "content_block_stop",
+          index: 0,
+        });
+        textBlockOpen = false;
+      }
+    }
+
+    function appendSyntheticText(text: string): void {
+      if (!text) return;
+      ensureTextBlockOpen();
+      writeFrame("content_block_delta", {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text },
       });
+      aggregatedText += text;
+    }
 
-      const final =
-        result.finalText || formatTruncationSurface(result);
+    // Open the SSE envelope synchronously so the client gets a
+    // message_start before any awaitable work resolves.
+    writeFrame("message_start", {
+      type: "message_start",
+      message: {
+        id: `msg-${Date.now().toString(36)}`,
+        type: "message",
+        role: "assistant",
+        content: [],
+        model: aggregateModel,
+        stop_reason: null,
+        stop_sequence: null,
+        usage: { input_tokens: 0, output_tokens: 0 },
+      },
+    });
 
-      // Phase 19.2 — fire-and-forget channel writeback. If Del
-      // emitted [ENGINEER] tags in this turn's text, persist each to
-      // the engineer channel file. Failures are logged but never
-      // delay or fail the chat response.
-      const engineerMessages = extractEngineerMessages(final);
-      if (engineerMessages.length > 0) {
-        const cwd = process.cwd();
-        for (const message of engineerMessages) {
-          appendChannelMessage(cwd, "delamain", message).catch((err) => {
-            if (process.env.NODE_ENV !== "test") {
-              console.warn(
-                `[engineer-channel-writeback] failed to persist message: ${
-                  err instanceof Error ? err.message : String(err)
-                }`
-              );
-            }
+    function onUpstreamEvent(event: StreamEvent): void {
+      if (event.type === "content_block_start") {
+        const cb = event.content_block;
+        if (cb.type === "tool_use") {
+          // Hide raw tool_use deltas from the client; emit a
+          // synthetic event the UI can render as a progress chip.
+          // Closes the active text block first so the chip lands
+          // between text spans rather than inside one.
+          closeTextBlock();
+          writeFrame("tool_call_start", {
+            type: "tool_call_start",
+            name: cb.name,
           });
+        } else if (cb.type === "text") {
+          ensureTextBlockOpen();
+        }
+        // thinking blocks: not surfaced to the client; they ride
+        // through the loop's internal message log only.
+      } else if (event.type === "content_block_delta") {
+        if (event.delta.type === "text_delta") {
+          ensureTextBlockOpen();
+          writeFrame("content_block_delta", {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "text_delta", text: event.delta.text },
+          });
+          aggregatedText += event.delta.text;
+        }
+        // input_json_delta + thinking_delta + signature_delta:
+        // intentionally hidden from the client.
+      }
+      // message_start/stop/delta are NOT forwarded — they're
+      // synthesized once at the envelope level.
+    }
+
+    const responsePromise = (async () => {
+      try {
+        // History compression safety net (Phase 12E) lives inside
+        // the response promise so a compressor failure folds into
+        // the same error path that closes the stream cleanly.
+        const messages = await compressMessagesForSession(
+          prisma,
+          session.id,
+          inputMessages,
+          {
+            threshold: 25,
+            keepRecent: 10,
+            summarizer: defaultSummarizer(apiKey),
+            signal: abort.signal,
+          }
+        );
+
+        const result = await runToolUseLoop({
+          caller: defaultStreamingAnthropicCaller({
+            apiKey,
+            onEvent: onUpstreamEvent,
+          }),
+          model: aggregateModel,
+          systemPrompt: TOOL_PATH_SYSTEM_PROMPT,
+          messages,
+          registry,
+          ctx,
+          maxIterations: 8,
+          signal: abort.signal,
+        });
+
+        // If the loop bailed at maxIterations the model never wrote
+        // a terminal text block — emit a synthesized truncation
+        // surface so the client isn't left with a half-finished
+        // chip-only stream.
+        if (result.truncated) {
+          appendSyntheticText(formatTruncationSurface(result));
+        }
+
+        closeTextBlock();
+        writeFrame("message_delta", {
+          type: "message_delta",
+          delta: { stop_reason: result.truncated ? "max_tokens" : "end_turn" },
+          usage: { input_tokens: 0, output_tokens: 0 },
+        });
+        writeFrame("message_stop", { type: "message_stop" });
+
+        // Phase 19.2 — engineer-channel writeback fires off the
+        // aggregated text after the stream closes. Failures never
+        // affect the client response.
+        const finalText = aggregatedText || result.finalText;
+        const engineerMessages = extractEngineerMessages(finalText);
+        if (engineerMessages.length > 0) {
+          const cwd = process.cwd();
+          for (const message of engineerMessages) {
+            appendChannelMessage(cwd, "delamain", message).catch((err) => {
+              if (process.env.NODE_ENV !== "test") {
+                console.warn(
+                  `[engineer-channel-writeback] failed to persist message: ${
+                    err instanceof Error ? err.message : String(err)
+                  }`
+                );
+              }
+            });
+          }
+        }
+      } catch (err) {
+        // Surface mid-stream errors as a final SSE event the client
+        // can render. Don't 500 the whole response — by this point
+        // the headers are already sent.
+        const message = err instanceof Error ? err.message : String(err);
+        appendSyntheticText(`\n\n[error] ${message}`);
+        closeTextBlock();
+        writeFrame("message_stop", { type: "message_stop" });
+      } finally {
+        clearTimeout(timeoutHandle);
+        try {
+          await writer.close();
+        } catch {
+          // already closed (client disconnect / abort)
         }
       }
+    })();
 
-      return new Response(
-        sseFromText(final, { model: "claude-sonnet-4-6" }),
-        {
-          headers: {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            Connection: "keep-alive",
-          },
-        }
-      );
-    } finally {
-      // Always release the timeout — whether the request finished,
-      // failed, or aborted itself.
-      clearTimeout(timeoutHandle);
-    }
+    // Don't await responsePromise — the stream returns immediately
+    // and the loop continues to write to it asynchronously.
+    void responsePromise;
+
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown error";

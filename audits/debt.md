@@ -11,11 +11,6 @@ Phase 23.7 shipped the overseer-tool-sequence kind executor + scratch SQLite see
 Phase 23.2's lifecycle migration intentionally skipped `dispatchTeam`. The lead/teammate spawn model can't cleanly thread a single CASCADE_DISPATCH_ID through to N teammate sessions (env propagation creates webhook dedup collisions across projects). Per-project teammate Stop hooks still fire and produce DispatchOutcome rows via the legacy fallback, but team dispatches don't get watchdog protection or per-project Dispatch row tracking.
 - **Action when needed:** dedicated slice. Likely involves generating per-project idempotency keys server-side after the lead spawns and reconciling teammate Stop hooks back to the lead's batch.
 
-### [25.D1] Overseer route streaming migration
-Phase 25.2 shipped the streaming infrastructure (`lib/streaming-accumulator.ts`, `defaultStreamingAnthropicCaller`, `pipeSseEvents`) but did NOT migrate `app/api/overseer/chat/route.ts` to use it. The Overseer chat path still buffers the model response and replays it via `sseFromText`. The user-facing UX (token-by-token streaming, progressive tool-call indicators, faster TTFT on cache hits) is still pending.
-- **Action:** wire `defaultStreamingAnthropicCaller` with an `onEvent` callback into the route. Callback writes text deltas to a `TransformStream` feeding the response body; tool_use deltas hidden or synthesized as a separate `event: tool_call_start` for the UI. The loop body itself doesn't change — the streaming caller assembles the same response shape `runToolUseLoop` already consumes.
-- **Estimate:** focused half-session including a route-level integration test that pipes a fixture SSE stream through the route handler.
-
 ### [23.D4] Real-world session logs in escalation corpus
 23.7's escalation-detector corpus is 35 synthetic logs. A future slice can sanitize 5-10 real session logs from Justin's fleet to catch patterns the synthetic corpus misses (regex over-matches, novel phrasing).
 - **Action when desirable:** copy real logs from `~/projects/*/.claude/sessions/`, sanitize project names + paths, add to `evals/scenarios/escalation-signals/<subdir>/` with hand-labeled `expected.json`.
@@ -31,6 +26,9 @@ The webhook still falls back to "find latest session-launched activity event" wh
 Phase 22's plan called the Theme Pack registry "Phase 23." Phase 23 was redirected to the regression spine + caching work after the audit. Theme Pack moves to a later phase (TBD by user — likely 26 or after).
 
 ## Resolved
+
+### [25.D1] Overseer route streaming migration — RESOLVED 2026-05-04
+`app/api/overseer/chat/route.ts` now uses `defaultStreamingAnthropicCaller`. The route synthesizes a single coherent SSE envelope to the client (one `message_start`, one text content block, one `message_stop`) regardless of how many Anthropic calls the tool-use loop makes. Tool_use events are hidden but a synthetic `tool_call_start` event is emitted for any UI progress indicator. Engineer-channel writeback runs after the stream closes; failures still don't affect the client. Route tests rewired to drain the SSE body before asserting side effects, and the test mock for `defaultStreamingAnthropicCaller` synthesizes per-block events so the route's `onEvent` handler exercises the same code paths it would with a live stream.
 
 ### [23.D3] Streaming usage logging for wizard + project chat — RESOLVED 2026-05-04
 Phase 25.2 added a `pipeSseEvents` helper in `lib/overseer-tools-streaming.ts` and tee'd the Anthropic response in both `/api/wizard/chat` and `/api/projects/[slug]/chat`. The tap watches for `message_delta` events and calls `logUsage` with `callSite: "wizard"` or `"project.chat"` accordingly. Tap failures are caught and never break the client stream.
