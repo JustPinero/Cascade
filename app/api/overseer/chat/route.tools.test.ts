@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // -- Mock the Anthropic caller factory so runToolUseLoop drives a
 // canned response sequence instead of hitting the real API.
+//
+// Phase 25.D1 — the route now uses defaultStreamingAnthropicCaller
+// which calls onEvent with SSE events while the loop runs. Mock it
+// to synthesize matching events from each canned response so the
+// route's stream-synthesis path executes unchanged.
 const mockCaller = vi.fn();
 vi.mock("@/lib/overseer-tools", async () => {
   const actual =
@@ -11,6 +16,79 @@ vi.mock("@/lib/overseer-tools", async () => {
   return {
     ...actual,
     defaultAnthropicCaller: vi.fn(() => mockCaller),
+  };
+});
+
+vi.mock("@/lib/overseer-tools-streaming", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/overseer-tools-streaming")>(
+      "@/lib/overseer-tools-streaming"
+    );
+  return {
+    ...actual,
+    defaultStreamingAnthropicCaller: (opts: {
+      apiKey: string;
+      onEvent?: (event: unknown) => void;
+    }) => {
+      return async (
+        params: Parameters<typeof mockCaller>[0],
+        options?: Parameters<typeof mockCaller>[1]
+      ) => {
+        const response = await mockCaller(params, options);
+        const fire = opts.onEvent ?? (() => {});
+        // Synthesize per-block SSE events so the route's onEvent
+        // handler exercises the same code paths it would with a
+        // real stream.
+        fire({
+          type: "message_start",
+          message: { ...response, content: [] },
+        });
+        const content = (response?.content ?? []) as Array<{
+          type: string;
+          text?: string;
+          id?: string;
+          name?: string;
+          input?: Record<string, unknown>;
+        }>;
+        for (let i = 0; i < content.length; i++) {
+          const block = content[i];
+          if (block.type === "text") {
+            fire({
+              type: "content_block_start",
+              index: i,
+              content_block: { type: "text", text: "" },
+            });
+            if (block.text) {
+              fire({
+                type: "content_block_delta",
+                index: i,
+                delta: { type: "text_delta", text: block.text },
+              });
+            }
+            fire({ type: "content_block_stop", index: i });
+          } else if (block.type === "tool_use") {
+            fire({
+              type: "content_block_start",
+              index: i,
+              content_block: {
+                type: "tool_use",
+                id: block.id,
+                name: block.name,
+                input: block.input ?? {},
+              },
+            });
+            fire({ type: "content_block_stop", index: i });
+          }
+        }
+        fire({
+          type: "message_delta",
+          delta: { stop_reason: response?.stop_reason ?? "end_turn" },
+          usage: response?.usage,
+        });
+        fire({ type: "message_stop" });
+        return response;
+      };
+    },
   };
 });
 
@@ -141,6 +219,28 @@ function makeRequest(body: Record<string, unknown>): NextRequest {
   });
 }
 
+/**
+ * Phase 25.D1 — drain the streaming SSE body to completion. The
+ * route returns the Response synchronously and runs the tool loop
+ * + post-processing in a background promise that writes to the
+ * stream. Tests asserting side effects (engineer-channel writeback,
+ * compressor invocation, etc.) must drain first to let the
+ * background promise reach its finally.
+ */
+async function drainResponse(res: Response): Promise<string> {
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    text += decoder.decode(value, { stream: true });
+  }
+  return text;
+}
+
 function toolUseResponse(blocks: Array<{ id: string; name: string; input: Record<string, unknown> }>) {
   return {
     id: "msg-test",
@@ -264,6 +364,8 @@ describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () =
     }
     expect(res.status).toBe(200);
 
+    await drainResponse(res);
+
     expect(summarizerStub).toHaveBeenCalledTimes(1);
 
     // The caller should have received the compressed view: 1 summary
@@ -364,6 +466,7 @@ describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () =
       makeRequest({ messages: [{ role: "user", content: "medipal is at 40%" }] })
     );
     expect(res.status).toBe(200);
+    await drainResponse(res);
 
     // The route bound a session, the registry ran update_session_memory
     // through the helpers, and the helper called chatSession.update.
@@ -398,6 +501,7 @@ describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () =
       makeRequest({ messages: [{ role: "user", content: "post for me" }] })
     );
     expect(res.status).toBe(200);
+    await drainResponse(res);
 
     // Both [ENGINEER] tags should have been written, with from: "delamain".
     expect(appendChannelMessageMock).toHaveBeenCalledTimes(2);
@@ -435,6 +539,7 @@ describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () =
     );
     // The chat must still return 200 — writeback failure is silent.
     expect(res.status).toBe(200);
+    await drainResponse(res);
     expect(appendChannelMessageMock).toHaveBeenCalledTimes(1);
   });
 
