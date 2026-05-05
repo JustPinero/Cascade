@@ -586,6 +586,7 @@ describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () =
         "get_tool_call_stats",
         "get_yesterday_summary",
         "propose_dispatch",
+        "query_knowledge_with_citations",
         "query_outcome_history",
         "query_project",
         "query_projects",

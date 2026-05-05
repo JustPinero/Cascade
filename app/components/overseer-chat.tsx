@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
 import { sendNotification } from "@/lib/notify";
 import { playStartSound, playEndSound } from "@/lib/sounds";
 import { getOverseerSettings } from "@/lib/overseer-settings";
@@ -78,6 +78,52 @@ function stripTagsForSpeech(text: string): string {
     .join("\n")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * Phase 25.3 — render `[L-<id>]` citation markers as inline links to
+ * the lesson detail page. The Overseer emits these markers in
+ * response text whenever it cites a lesson surfaced by
+ * query_knowledge_with_citations. Splitting on the marker preserves
+ * surrounding text, so leading/trailing prose flows naturally.
+ *
+ * Pure client-side post-processing — no server-side citation events,
+ * no SSE plumbing. The trade-off is documented in
+ * lib/overseer-tools-knowledge-citations.ts.
+ */
+const CITATION_PATTERN = /\[L-(\d+)\]/g;
+function renderWithCitations(text: string): ReactNode {
+  // Fast path — no markers at all.
+  if (!CITATION_PATTERN.test(text)) {
+    CITATION_PATTERN.lastIndex = 0;
+    return text;
+  }
+  CITATION_PATTERN.lastIndex = 0;
+
+  const out: ReactNode[] = [];
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  while ((match = CITATION_PATTERN.exec(text)) !== null) {
+    if (match.index > cursor) {
+      out.push(text.slice(cursor, match.index));
+    }
+    const id = match[1];
+    out.push(
+      <a
+        key={`${match.index}-L${id}`}
+        href={`/knowledge/lesson/${id}`}
+        className="text-cyan hover:text-text-bright underline decoration-dotted underline-offset-2 align-super text-xs ml-0.5"
+        title={`Lesson L-${id}`}
+      >
+        [L-{id}]
+      </a>
+    );
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < text.length) {
+    out.push(text.slice(cursor));
+  }
+  return out;
 }
 
 interface OverseerChatProps {
@@ -882,7 +928,7 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
               {msg.role === "user" ? "you" : "delamain"}
             </span>
             <div className={`whitespace-pre-wrap ${fullPage ? "leading-7" : "leading-relaxed"}`}>
-              {msg.content}
+              {renderWithCitations(msg.content)}
             </div>
           </div>
         ))}
