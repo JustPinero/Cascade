@@ -6,8 +6,10 @@ const NOW = 1735689600000; // fixed reference; ~2025-01
 // Mock fs that maps file paths back to a per-team config table.
 // Extract the team name from the second-to-last path segment
 // (matches both /fake/<team>/config.json AND /home/.claude/teams/<team>/config.json).
+// Phase 27 — split on `/` AND `\` so paths built by `path.join` on a
+// Windows host (which uses backslashes) still resolve correctly.
 function teamFromPath(file: string): string {
-  const parts = file.split("/");
+  const parts = file.split(/[/\\]/);
   return parts[parts.length - 2] ?? "";
 }
 

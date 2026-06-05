@@ -1,4 +1,22 @@
 # Session Handoff — Kilroy
+Date: 2026-06-05 — Phase 27 complete (Windows test parity)
+
+Phase 27 fixed every test failure the Windows host had at Phase 26 close. Suite is now 966 passing / 1 skipped / 0 failing — up from 945 passing at the start of the day. Three small root causes, three small fixes:
+
+- **CRLF tripping a regex.** `lib/anthropic-features-md.ts` split `content` on `\n` and matched field lines with `(.*)$`. JS `.` doesn't consume `\r` and `$` only anchors before `\n`/EOS, so on a Windows checkout (autocrlf converted the seed `.md` to CRLF) every field line failed to match and `loadCatalogFromMd` silently returned zero features. Fix: normalize `\r\n → \n` at the top of `parseAnthropicFeaturesMd`. Recovered 6 tests (2 in features-md + 2 in feature-check + 2 in feature-check.audit).
+
+- **Forward-slash-only path split.** `lib/team-config-scanner.test.ts:teamFromPath()` did `file.split("/")` to extract the team-name segment from a path built by `path.join`. On Windows `path.join` emits backslashes, so `split("/")` returned one element and every fixture lookup returned undefined. Fix: `split(/[/\\]/)`. Recovered 5 tests.
+
+- **EBUSY on the test SQLite file.** `app/api/overseer/session-state/route.test.ts` used `fs.unlinkSync` for setup/teardown. On Windows, SQLite's native handle isn't fully released across `$disconnect()` boundaries, so a previous run's leftover db file fails to delete and the whole test file fails to load. Fix: `fs.rmSync(p, {force:true, maxRetries:10, retryDelay:100})` with a tolerant try/catch around teardown. Recovered the whole 7-test file (0 → 7).
+
+Type check clean, lint clean (4 pre-existing warnings), build green.
+
+## Known quirk logged as debt
+
+`pnpm test` exits 1 on Windows even with 0 failures — vitest's internal source-map symbolicator throws on a malformed inline sourcemap somewhere in the dependency graph. Doesn't reproduce on Linux CI (ubuntu-latest), doesn't affect any test result. Logged as `[27.D1]` in `audits/debt.md` for a future "find the bad sourcemap" slice.
+
+---
+
 Date: 2026-06-05 — Phase 26 complete (Windows dispatch)
 
 Phase 26 was a platform-coverage slice. After Justin's Mac → Windows

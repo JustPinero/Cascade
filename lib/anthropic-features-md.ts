@@ -45,8 +45,14 @@ const VALID_CATEGORIES = new Set([
  * integration recipe.
  */
 export function parseAnthropicFeaturesMd(content: string): ParsedFeature[] {
+  // Normalize CRLF → LF first. On Windows checkouts with autocrlf, the
+  // file arrives with `\r\n` line terminators, which the field-block
+  // regex (`(.*)$`) refuses to match because `.` doesn't consume `\r`
+  // and `$` only anchors before `\n`/EOS. Without this, the parser
+  // silently returns zero features on a Windows host. (Phase 27.)
+  const normalized = content.replace(/\r\n/g, "\n");
   // Split by "^## " — the first chunk is the file preamble, drop it.
-  const sections = content.split(/^## /m).slice(1);
+  const sections = normalized.split(/^## /m).slice(1);
   const features: ParsedFeature[] = [];
 
   for (const section of sections) {
