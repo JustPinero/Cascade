@@ -41,8 +41,23 @@ vi.mock("@/lib/db", () => {
 
 let prisma: PrismaClient;
 
+// Phase 27 — `fs.rmSync({force, maxRetries})` retries on EBUSY, which
+// Windows raises when SQLite still holds the file handle from a crashed
+// or fast-exiting previous run. The retry handles beforeAll cleanup
+// (stale lock from a prior run). The outer try/catch handles afterAll
+// cleanup, where better-sqlite3's native handle isn't fully released
+// even after `$disconnect()` on Windows — the leftover file is harmless;
+// the next run's beforeAll will retry the delete.
+function removeIfExists(p: string) {
+  try {
+    fs.rmSync(p, { force: true, maxRetries: 10, retryDelay: 100 });
+  } catch {
+    // best-effort cleanup
+  }
+}
+
 beforeAll(async () => {
-  if (fs.existsSync(TEST_DB_PATH)) fs.unlinkSync(TEST_DB_PATH);
+  removeIfExists(TEST_DB_PATH);
   const adapter = new PrismaBetterSqlite3({ url: TEST_DB_URL });
   prisma = new PrismaClient({ adapter });
   pushTestSchema(TEST_DB_URL);
@@ -50,7 +65,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await prisma.$disconnect();
-  if (fs.existsSync(TEST_DB_PATH)) fs.unlinkSync(TEST_DB_PATH);
+  removeIfExists(TEST_DB_PATH);
 });
 
 beforeEach(async () => {
