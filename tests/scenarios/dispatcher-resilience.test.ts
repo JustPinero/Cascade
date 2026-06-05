@@ -36,6 +36,14 @@ vi.mock("@/lib/validators", () => ({
   sanitizeForShell: vi.fn((s: string) => s),
 }));
 
+// Phase 26 — tmux-grid resilience scenarios. Pin the tested platform
+// to linux so the tmux path runs (Windows would skip respawn-pane
+// entirely and the simulated tmux failure would never fire).
+vi.mock("@/lib/platform", () => ({
+  detectPlatform: () => "linux",
+  getLaunchMethod: () => "tmux-direct",
+}));
+
 import { dispatchClaude, dispatchBatch } from "@/lib/claude-dispatcher";
 import { createDispatchRig } from "@/tests/harness/dispatch-rig";
 import type { DispatchRig } from "@/tests/harness/dispatch-rig.types";

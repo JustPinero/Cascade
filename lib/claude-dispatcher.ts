@@ -191,14 +191,31 @@ function killTmuxSession(): void {
 }
 
 /**
+ * Phase 26 — pull a sensible wt tab title out of a dispatcher cmd. The
+ * cmd always starts with `cd '<absolute path>' && …`, so the last path
+ * segment is the project directory. Falls back to "Cascade" if the cmd
+ * doesn't match (e.g. the team-dispatch cmd, which Windows refuses
+ * anyway).
+ */
+function extractWtTitle(cmd: string): string {
+  const m = cmd.match(/^cd '([^']+)'/);
+  if (!m) return "Cascade";
+  const segments = m[1].split(/[/\\]/).filter(Boolean);
+  return segments.length > 0 ? segments[segments.length - 1] : "Cascade";
+}
+
+/**
  * Launch a command in a terminal window, platform-aware.
  * macOS: opens Terminal.app via osascript
  * Linux/WSL2: runs in a new tmux session directly
+ * Windows (Phase 26): opens a new Windows Terminal tab running Git Bash
  *
  * `extraEnv` is forwarded to the spawned child process. Phase 23.2
  * uses this to pass `CASCADE_DISPATCH_ID` through to the Stop hook.
  * On macOS the env reaches Terminal.app via the AppleScript shell
  * invocation through inline `KEY=VALUE` prefixing of the cmd string.
+ * On Windows the same `KEY='val' cmd` prefix is interpreted by the
+ * bash invoked inside the wt tab.
  */
 function launchInTerminal(
   cmd: string,
@@ -235,6 +252,34 @@ function launchInTerminal(
       detached: true,
       stdio: "ignore",
     });
+    child.unref();
+  } else if (platform === "windows") {
+    // -w 0: target the current Windows Terminal window if any; create
+    // one if none open. So repeated dispatches stack as tabs in the
+    // same wt window instead of spawning N separate windows.
+    // --suppressApplicationTitle: keep our --title intact instead of
+    // letting bash overwrite it with the running command.
+    // `fullscreen` is ignored on Windows — wt has no single-flag
+    // fullscreen toggle and F11 is one keystroke if the user wants it.
+    const title = extractWtTitle(cmd);
+    const child = spawn(
+      "wt.exe",
+      [
+        "-w",
+        "0",
+        "new-tab",
+        "--title",
+        title,
+        "--suppressApplicationTitle",
+        "bash",
+        "-c",
+        cmdWithEnv,
+      ],
+      {
+        detached: true,
+        stdio: "ignore",
+      }
+    );
     child.unref();
   } else {
     // Linux/WSL2: launch directly in background
@@ -496,6 +541,52 @@ function launchInPane(
   );
 }
 
+/**
+ * Phase 26 — platform-aware shims around the tmux helpers so the
+ * multi-project dispatch paths stay one function each. On Windows the
+ * tmux operations are no-ops and per-job spawn goes through
+ * `launchInTerminal` (which opens a new wt tab). Linux/macOS keep
+ * the tmux flow unchanged.
+ */
+function maybeKillTmuxSession(): void {
+  if (detectPlatform() === "windows") return;
+  killTmuxSession();
+}
+
+function maybeCreatePaneGrid(jobNames: string[]): string[] {
+  if (detectPlatform() === "windows") return jobNames.map(() => "");
+  return createPaneGrid(jobNames);
+}
+
+function launchForJob(
+  target: string,
+  cmd: string,
+  extraEnv: Record<string, string>
+): void {
+  if (detectPlatform() === "windows") {
+    launchInTerminal(cmd, false, extraEnv);
+    return;
+  }
+  launchInPane(target, cmd, extraEnv);
+}
+
+function maybeFocusFirstPane(): void {
+  if (detectPlatform() === "windows") return;
+  try {
+    execSync(
+      `tmux select-window -t ${TMUX_SESSION}:projects-1 && tmux select-pane -t ${TMUX_SESSION}:projects-1.0`,
+      { stdio: "pipe" }
+    );
+  } catch {
+    // Non-fatal
+  }
+}
+
+function maybeAttachTmuxSession(): void {
+  if (detectPlatform() === "windows") return;
+  attachTmuxSession(TMUX_SESSION);
+}
+
 export async function dispatchAll(
   prisma: PrismaClient,
   mode: DispatchMode
@@ -508,7 +599,7 @@ export async function dispatchAll(
     return { launched: 0, results: [] };
   }
 
-  killTmuxSession();
+  maybeKillTmuxSession();
 
   const results: DispatchResult[] = [];
   interface ReadyJob {
@@ -544,7 +635,7 @@ export async function dispatchAll(
     return { launched: 0, results };
   }
 
-  const paneTargets = createPaneGrid(readyJobs.map((j) => j.project.name));
+  const paneTargets = maybeCreatePaneGrid(readyJobs.map((j) => j.project.name));
 
   for (let i = 0; i < readyJobs.length; i++) {
     const { project, cmd, prompt } = readyJobs[i];
@@ -562,7 +653,7 @@ export async function dispatchAll(
         prompt,
         healthAtDispatch: project.health,
         spawnFn: async (idempotencyKey) => {
-          launchInPane(target, cmd, { CASCADE_DISPATCH_ID: idempotencyKey });
+          launchForJob(target, cmd, { CASCADE_DISPATCH_ID: idempotencyKey });
           await prisma.activityEvent.create({
             data: {
               projectId: project.id,
@@ -603,16 +694,8 @@ export async function dispatchAll(
     }
   }
 
-  try {
-    execSync(
-      `tmux select-window -t ${TMUX_SESSION}:projects-1 && tmux select-pane -t ${TMUX_SESSION}:projects-1.0`,
-      { stdio: "pipe" }
-    );
-  } catch {
-    // Non-fatal
-  }
-
-  attachTmuxSession(TMUX_SESSION);
+  maybeFocusFirstPane();
+  maybeAttachTmuxSession();
 
   return {
     launched: results.filter((r) => r.success).length,
@@ -639,7 +722,7 @@ export async function dispatchBatch(
     return { launched: 0, results: [] };
   }
 
-  killTmuxSession();
+  maybeKillTmuxSession();
 
   const results: DispatchResult[] = [];
   interface ReadyBatchJob {
@@ -695,7 +778,7 @@ export async function dispatchBatch(
     return { launched: 0, results };
   }
 
-  const paneTargets = createPaneGrid(readyJobs.map((j) => j.project.name));
+  const paneTargets = maybeCreatePaneGrid(readyJobs.map((j) => j.project.name));
 
   for (let i = 0; i < readyJobs.length; i++) {
     const { project, cmd, prompt, mode } = readyJobs[i];
@@ -708,7 +791,7 @@ export async function dispatchBatch(
         mode,
         prompt,
         spawnFn: async (idempotencyKey) => {
-          launchInPane(target, cmd, { CASCADE_DISPATCH_ID: idempotencyKey });
+          launchForJob(target, cmd, { CASCADE_DISPATCH_ID: idempotencyKey });
           await prisma.activityEvent.create({
             data: {
               projectId: project.id,
@@ -749,16 +832,8 @@ export async function dispatchBatch(
     }
   }
 
-  try {
-    execSync(
-      `tmux select-window -t ${TMUX_SESSION}:projects-1 && tmux select-pane -t ${TMUX_SESSION}:projects-1.0`,
-      { stdio: "pipe" }
-    );
-  } catch {
-    // Non-fatal
-  }
-
-  attachTmuxSession(TMUX_SESSION);
+  maybeFocusFirstPane();
+  maybeAttachTmuxSession();
 
   return {
     launched: results.filter((r) => r.success).length,
@@ -792,6 +867,17 @@ export async function dispatchTeam(
 ): Promise<DispatchTeamResult> {
   if (items.length === 0) {
     return { success: false, error: "No projects to dispatch" };
+  }
+
+  // Phase 26 — Claude Code's --teammate-mode is tmux-only, and the
+  // wt + Git Bash environment we use on Windows has no tmux. Fail loud
+  // instead of pretending the team launched.
+  if (detectPlatform() === "windows") {
+    return {
+      success: false,
+      error:
+        "Agent teams require tmux — not supported on Windows. Use single dispatch or 'Resume All' instead.",
+    };
   }
 
   killTmuxSession();

@@ -16,7 +16,7 @@
 
 ## Key Integrations
 - **Anthropic API** — Powers the Overseer chat (streaming SSE), morning briefings, retroactive harvest, project wizard
-- **Claude Code CLI** — Dispatched to projects via tmux or Terminal for autonomous work
+- **Claude Code CLI** — Dispatched to projects via Terminal.app (macOS) / tmux (Linux) / Windows Terminal (Windows) for autonomous work
 - **GitHub CLI (gh)** — Repo creation during project setup
 - **1Password CLI (op)** — Optional secret management
 - **Vercel/Railway APIs** — Optional deployment status monitoring
@@ -25,9 +25,9 @@
 
 ```
 User → Overseer Chat → [DISPATCH] tags parsed
-  → Single project: Terminal window (macOS) or direct bash (Linux)
-  → Multiple projects: /api/dispatch/batch → tmux grid (tiled panes)
-  → Agent teams: /api/dispatch/team → lead Claude + teammates in tmux
+  → Single project: Terminal.app (macOS) | tmux (Linux) | new wt tab (Windows)
+  → Multiple projects: /api/dispatch/batch → tmux grid panes (Mac/Linux) | one wt tab per project (Windows)
+  → Agent teams: /api/dispatch/team → lead Claude + teammates in tmux (Mac/Linux only; Windows returns "not supported")
 
 Sessions run independently:
   Claude Code reads CLAUDE.md + handoff.md + requests/
@@ -55,7 +55,7 @@ Stop hook pipeline:
 4. **Incremental scanning** — importSingleProject() for webhook-triggered updates; full scan only on manual "Scan" button
 5. **Knowledge in-repo** — Knowledge base structure lives in /knowledge; actual lessons are gitignored (populated per-user)
 6. **SQLite at project root** — Database is `./dev.db`, derived from fs and can be rebuilt; gitignored
-7. **Platform-aware dispatch** — detectPlatform() selects osascript (macOS) or tmux-direct (Linux/WSL2) launch method
+7. **Platform-aware dispatch** — detectPlatform() selects osascript+Terminal.app (macOS), tmux-direct (Linux/WSL2), or wt.exe + Git Bash (Windows; Phase 26). `lib/dispatch-preflight.ts` reports per-platform tool availability. See `knowledge/cascade-windows-dispatch.md` for the Windows flow.
 8. **Overseer is customizable** — Name, portrait, personality stored in localStorage; defaults to "Overseer"
 9. **Personal data never committed** — Playbook, lessons, sessions, channel, database all gitignored
 10. **Upstream-feature awareness (phase 11.1)** — Cascade keeps a catalog of Claude / Claude Code features (`UpstreamFeature`) and a per-project ledger of which features each project uses (`ProjectFeatureUsage`). The `/anthropic-feature-update-check` slash command in the Overseer chat refreshes both. Catalog seed: `knowledge/anthropic-features.md`. Detectors: `lib/anthropic-feature-detectors.ts`. Audit + discovery: `lib/anthropic-feature-check.ts`. Stop-hook webhook re-audits the affected project after every session. The `[ANTHROPIC]` tag in handoffs is parallel to `[LESSON]` for harvesting candidates from sessions.
