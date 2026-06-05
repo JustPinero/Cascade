@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getOverseerSettings } from "@/lib/overseer-settings";
 
 interface BriefingData {
@@ -16,6 +16,7 @@ export function MorningBriefing() {
   const [loading, setLoading] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [shouldShow, setShouldShow] = useState(false);
+  const autoAttemptedRef = useRef(false);
   const settings = getOverseerSettings();
 
   // Check if we should show the briefing (first visit of the day)
@@ -42,9 +43,11 @@ export function MorningBriefing() {
     }
   }, []);
 
-  // Auto-generate on first visit of the day
+  // Auto-generate on first visit of the day — only once per mount,
+  // even if the request fails (don't hammer a rate-limited endpoint).
   useEffect(() => {
-    if (shouldShow && !briefing && !loading) {
+    if (shouldShow && !briefing && !loading && !autoAttemptedRef.current) {
+      autoAttemptedRef.current = true;
       generateBriefing();
     }
   }, [shouldShow, briefing, loading, generateBriefing]);
