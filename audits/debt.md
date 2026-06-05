@@ -25,6 +25,15 @@ The webhook still falls back to "find latest session-launched activity event" wh
 ### [Theme Pack] — relocated from Phase 23
 Phase 22's plan called the Theme Pack registry "Phase 23." Phase 23 was redirected to the regression spine + caching work after the audit. Theme Pack moves to a later phase (TBD by user — likely 26 or after).
 
+### [26.D1] Pre-existing Windows test failures — uncovered during Phase 26 validation
+`pnpm test` baseline on the Windows host has 11 failing tests across 5 files, all of which fail BEFORE Phase 26 changes. They surfaced when Justin moved Mac → Windows on 2026-04-15 and never ran the suite on Windows. Phase 26 is intentionally scoped to dispatcher; these failures are owned by their respective modules.
+- `app/api/overseer/session-state/route.test.ts` — full file fails to load (unhandled error during test run, likely a Windows path/encoding issue in a fixture import)
+- `lib/anthropic-features-md.test.ts` (2) — `loadCatalogFromMd` parses `knowledge/anthropic-features.md` and returns 0 features instead of ≥15. Almost certainly CRLF / BOM in the .md file on Windows tripping the parser
+- `lib/anthropic-feature-check.test.ts` (2) + `.audit.test.ts` (2) — downstream of the md-parser failure; once the catalog loads they should pass
+- `lib/team-config-scanner.test.ts` (5) — scanner returns empty results; reads `~/.claude/teams/*/config.json` and tests write fixtures via `os.tmpdir()` — likely a path resolution mismatch on Windows
+- **Action when desirable:** a Phase 27 "Windows test parity" slice that fixes encoding/path issues across these five files. Not blocking — none touch the dispatcher hot path or shipped code, only test fixtures
+- **Discovered:** 2026-06-05
+
 ## Resolved
 
 ### [25.D1] Overseer route streaming migration — RESOLVED 2026-05-04

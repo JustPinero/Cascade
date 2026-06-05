@@ -34,6 +34,15 @@ vi.mock("@/lib/validators", () => ({
   sanitizeForShell: vi.fn((s: string) => s),
 }));
 
+// Phase 26 — these scenarios exercise the tmux-grid path (respawn-pane
+// failure simulation). On Windows the dispatcher now takes a non-tmux
+// path via wt.exe, so the simulated tmux failures never trigger. Pin
+// the tested platform to linux to preserve the scenario as written.
+vi.mock("@/lib/platform", () => ({
+  detectPlatform: () => "linux",
+  getLaunchMethod: () => "tmux-direct",
+}));
+
 import { dispatchAll, dispatchBatch } from "@/lib/claude-dispatcher";
 import { createDispatchRig } from "@/tests/harness/dispatch-rig";
 import type { DispatchRig } from "@/tests/harness/dispatch-rig.types";

@@ -43,6 +43,14 @@ vi.mock("./validators", () => ({
   sanitizeForShell: vi.fn((s: string) => s),
 }));
 
+// Phase 26 — tmux-coupled multi-project flows. On Windows the
+// dispatcher's tmux helpers are no-ops and dispatchTeam returns an
+// error, so pin the tested platform to linux to preserve these tests.
+vi.mock("./platform", () => ({
+  detectPlatform: () => "linux",
+  getLaunchMethod: () => "tmux-direct",
+}));
+
 import {
   dispatchAll,
   dispatchBatch,
