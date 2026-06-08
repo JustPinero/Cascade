@@ -554,8 +554,61 @@ function maybeKillTmuxSession(): void {
 }
 
 function maybeCreatePaneGrid(jobNames: string[]): string[] {
-  if (detectPlatform() === "windows") return jobNames.map(() => "");
+  if (detectPlatform() === "windows") {
+    // Phase 29 — encode a batch-scoped window name + per-job index so
+    // `launchForJob` can route the first job to `wt new-tab` (creates
+    // the window) and the rest to `wt split-pane` (adds panes to that
+    // named window). `cascade-<timestamp>` is stable across the loop
+    // because this function runs once per dispatch.
+    const windowName = `cascade-${Date.now()}`;
+    return jobNames.map((_, i) => `${windowName}:${i}`);
+  }
   return createPaneGrid(jobNames);
+}
+
+/**
+ * Phase 29 — spawn `wt.exe` against a NAMED window so subsequent calls
+ * can target the same one. wt creates the window on the first call and
+ * targets it on every later one — no need to capture window IDs.
+ *
+ * The first job in a batch calls this with `action: "new-tab"` to
+ * create the batch window. Subsequent jobs call with `"split-pane"`
+ * to add panes. wt splits the active pane each time, which gives a
+ * "stairs" layout rather than an even grid; refining that is a
+ * follow-up if Justin asks for it.
+ */
+function launchInWtBatch(
+  windowName: string,
+  action: "new-tab" | "split-pane",
+  cmd: string,
+  extraEnv?: Record<string, string>
+): void {
+  const envPrefix = extraEnv
+    ? Object.entries(extraEnv)
+        .map(([k, v]) => `${k}='${String(v).replace(/'/g, "'\\''")}'`)
+        .join(" ") + " "
+    : "";
+  const cmdWithEnv = envPrefix + cmd;
+  const title = extractWtTitle(cmd);
+  const child = spawn(
+    "wt.exe",
+    [
+      "-w",
+      windowName,
+      action,
+      "--title",
+      title,
+      "--suppressApplicationTitle",
+      "bash",
+      "-c",
+      cmdWithEnv,
+    ],
+    {
+      detached: true,
+      stdio: "ignore",
+    }
+  );
+  child.unref();
 }
 
 function launchForJob(
@@ -564,7 +617,12 @@ function launchForJob(
   extraEnv: Record<string, string>
 ): void {
   if (detectPlatform() === "windows") {
-    launchInTerminal(cmd, false, extraEnv);
+    // target shape from maybeCreatePaneGrid: "<windowName>:<index>".
+    const sepIdx = target.indexOf(":");
+    const windowName = sepIdx > 0 ? target.slice(0, sepIdx) : "0";
+    const index = sepIdx > 0 ? parseInt(target.slice(sepIdx + 1), 10) : 0;
+    const action = index === 0 ? "new-tab" : "split-pane";
+    launchInWtBatch(windowName, action, cmd, extraEnv);
     return;
   }
   launchInPane(target, cmd, extraEnv);
