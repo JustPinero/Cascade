@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { requestNotificationPermission } from "@/lib/notify";
 import { ScanButton } from "./components/scan-button";
 import { MorningBriefing } from "./components/morning-briefing";
+import { PlatformBadge } from "./components/platform-badge";
 import { ProjectGrid } from "./components/project-grid";
 import {
   DashboardFilters,
@@ -254,6 +255,7 @@ function DashboardContent() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <PlatformBadge />
           <ScanButton
             onScanComplete={() => setRefreshKey((k) => k + 1)}
           />
