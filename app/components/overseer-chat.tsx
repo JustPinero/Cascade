@@ -458,10 +458,18 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
     // starts. Stops Delamain mid-sentence if the user types over them.
     cancelSpeech();
 
+    // Phase 31 — audit finding [30.D7]. The server-side route has a
+    // 60s AbortController; the client should have its own watchdog so
+    // a hung connection (server abort missed, midstream socket stall)
+    // doesn't leave `streaming=true` forever. 90s leaves margin past
+    // the server-side cap.
+    const turnController = new AbortController();
+    const turnTimeout = setTimeout(() => turnController.abort(), 90_000);
     try {
       const res = await fetch("/api/overseer/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: turnController.signal,
         // Send only the last 10 messages to avoid bloating context.
         // Del's system prompt already has full project state.
         // sessionDate (Phase 14.1/15) is the user's local YYYY-MM-DD —
@@ -618,6 +626,7 @@ export function OverseerChat({ onDispatch, fullPage = false }: OverseerChatProps
         { role: "assistant", content: `Failed to connect to ${overseerName}.` },
       ]);
     } finally {
+      clearTimeout(turnTimeout);
       setStreaming(false);
       playEndSound();
       // Phase 17 — refresh the session-memory panel after each turn

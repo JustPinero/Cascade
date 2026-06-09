@@ -49,6 +49,11 @@ model Project {
   featureUsages    ProjectFeatureUsage[]
   featureProposals FeatureProposal[]
   kickoffTemplate  KickoffTemplate?  @relation(fields: [kickoffTemplateId], references: [id])
+
+  // Phase 31 — audit finding [30.D4]. Dashboard, briefing, and
+  // overseer-tools-query-projects all `orderBy: { lastActivityAt: "desc" }`.
+  @@index([lastActivityAt])
+  @@index([status, lastActivityAt])
 }
 
 model KnowledgeLesson {
@@ -103,6 +108,11 @@ model ActivityEvent {
   createdAt DateTime @default(now())
 
   project Project? @relation(fields: [projectId], references: [id])
+
+  // Phase 31 — audit finding [30.D4]. ActivityFeed polls every 30s
+  // with `orderBy: createdAt desc`; briefing filters `where: createdAt gte`.
+  @@index([createdAt])
+  @@index([projectId, createdAt])
 }
 
 model DispatchOutcome {
@@ -186,6 +196,9 @@ model ChatMessage {
 
   @@index([sessionId])
   @@index([sessionDate])
+  // Phase 31 — audit finding [30.D4]. /api/overseer/history filters
+  // `where: { sessionDate }` and `orderBy: createdAt asc`.
+  @@index([sessionDate, createdAt])
 }
 
 model HumanTask {
@@ -201,6 +214,10 @@ model HumanTask {
   completedAt DateTime?
 
   project Project? @relation(fields: [projectId], references: [id])
+
+  // Phase 31 — audit finding [30.D4]. /api/tasks and /api/briefing
+  // both filter on status; the list endpoint orders by (priority, createdAt).
+  @@index([status, priority, createdAt])
 }
 
 model Reminder {

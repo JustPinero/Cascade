@@ -1,5 +1,9 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { checkRateLimit, clearRateLimits } from "./rate-limiter";
+import {
+  checkRateLimit,
+  clearRateLimits,
+  __rateLimiterStoreSizeForTests,
+} from "./rate-limiter";
 
 afterEach(() => {
   clearRateLimits();
@@ -46,5 +50,30 @@ describe("rate-limiter", () => {
     // Should be allowed again
     const allowed = checkRateLimit("expire-key", 3, 50);
     expect(allowed).toBeNull();
+  });
+
+  // Phase 31 — audit finding [30.D5]: the store was an unbounded Map.
+  // Under a long-running dev session with rotating unique keys (per-IP,
+  // per-route prefix), expired entries accumulated forever. A sweep
+  // should drop them as new requests arrive.
+  it("sweeps expired entries during use (bounded memory)", async () => {
+    // Insert many short-window keys.
+    for (let i = 0; i < 200; i++) {
+      checkRateLimit(`burst-${i}`, 10, 25);
+    }
+    expect(__rateLimiterStoreSizeForTests()).toBeGreaterThanOrEqual(200);
+
+    // Let them all expire.
+    await new Promise((r) => setTimeout(r, 40));
+
+    // A wave of new traffic should reclaim the expired slots, not
+    // simply add to them. Exact count depends on sweep cadence; the
+    // invariant is "doesn't grow without bound past the live set."
+    for (let i = 0; i < 200; i++) {
+      checkRateLimit(`burst2-${i}`, 10, 25);
+    }
+    // Allow the sweep at most one window worth of live entries +
+    // a small slack for entries inserted just before sweep fired.
+    expect(__rateLimiterStoreSizeForTests()).toBeLessThan(300);
   });
 });

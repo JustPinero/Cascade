@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CategoryOverview } from "../components/category-overview";
 import { GapSuggestions } from "../components/gap-suggestions";
 import { LessonCard } from "../components/lesson-card";
+import { parseLessonTags } from "@/lib/lesson-utils";
 
 interface Lesson {
   id: number;
@@ -194,7 +195,7 @@ export default function KnowledgePage() {
               sourceProject={lesson.sourceProject?.name || null}
               sourcePhase={lesson.sourcePhase}
               discoveredAt={lesson.discoveredAt}
-              tags={JSON.parse(lesson.tags)}
+              tags={parseLessonTags(lesson.tags)}
             />
           ))}
         </div>

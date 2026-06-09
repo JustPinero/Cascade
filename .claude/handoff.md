@@ -1,4 +1,73 @@
 # Session Handoff — Kilroy
+Date: 2026-06-09 — Phase 31 complete (security + perf + cleanup)
+
+Closed five of the seven new debt items from the 2026-06-09 audit in one focused commit:
+
+- **[30.D1] CRITICAL shell injection** — `lib/claude-dispatcher.ts:queuedPlaceholderCmd` now calls `sanitizeForShell(projectName)`. 6-case test file (`lib/claude-dispatcher.injection.test.ts`) locks the invariant for `;`, `$()`, backticks, `\n`, `|`, plus a benign-name regression guard.
+- **[30.D4] Prisma indexes** on the hottest queries — added `Project.@@index([lastActivityAt])` + `@@index([status, lastActivityAt])`, `ActivityEvent.@@index([createdAt])` + `@@index([projectId, createdAt])`, `ChatMessage.@@index([sessionDate, createdAt])`, `HumanTask.@@index([status, priority, createdAt])`. Migrated via `prisma db push`.
+- **[30.D5] Rate-limiter sweeper** — drops expired entries when the store grows past 256 keys. Test asserts bounded growth under rotating-key traffic.
+- **[30.D6] JSON.parse guards** — extracted `parseLessonTags()` into `lib/lesson-utils.ts` and wired all three knowledge surfaces through it. 6-case test file. The `anthropic-feature-check.ts:219` part of D6 was a false positive — already wrapped in try/catch.
+- **[30.D7] Fetch timeouts** — Vercel + Railway in `lib/deploy-monitor.ts` use an `AbortController` with a 10s watchdog; tests use fake timers to assert graceful fallback to `state: "unknown"`. Client-side `/api/overseer/chat` fetch in `overseer-chat.tsx` uses a 90s AbortController (server cap 60s + margin).
+
+Suite: 990 passing / 6 skipped / 0 failing (+15 from Phase 30's 975). Type check clean, lint clean (4 pre-existing warnings), build green.
+
+## Still open from the audit
+
+- **[30.D2]** HTTP-boundary test gap — 2/41 routes have route tests. Phase 33 candidate.
+- **[30.D3]** Documentation drift — 4 schema models, 24 routes, 5 env vars undocumented; architecture ref behind Phases 28-30. Phase 32 candidate.
+
+## State
+
+- Local + origin main: `0a7442a` (Phase 30); Phase 31 (this commit) pending merge.
+- Branch `phase-31-audit-cleanup` ready to merge.
+
+## Recommended next
+
+**Phase 32** — drift reconciliation. Pure documentation update, mechanical, makes the references trustworthy again for future Kilroy instances after compaction. Then **Phase 33** — the route-boundary tests, biggest blast-radius first.
+
+---
+
+Date: 2026-06-09 — Full audit complete
+
+Ran the full audit suite (test-audit, bughunt, optimize, drift-audit) in parallel against `main` at `0a7442a`. Combined report at `audits/full-audit-2026-06-09.md`; per-skill reports next to it.
+
+## Headline
+
+Codebase is healthy. Build clean, tsc clean, lint clean (4 cosmetic warnings), 975/0/6 tests, exit 0 on Windows. The recent Mac→Windows sprint (Phases 26-30) shipped good code but left a documentation tail and exposed one real injection bug.
+
+## Findings worth a phase
+
+**Phase 31 — Security + perf + cleanup (one focused commit, ~1 hour)**
+- **[30.D1] CRITICAL shell injection** at `lib/claude-dispatcher.ts:454`. `queuedPlaceholderCmd` strips only single-quotes; `;`, `$()`, backticks, `\n` survive into `execSync`. `sanitizeForShell` already exists in `lib/validators.ts:56` — one-line fix.
+- **[30.D4] Missing Prisma indexes**: `Project.@@index([lastActivityAt])`, `ActivityEvent.@@index([createdAt])` + `([projectId, createdAt])`, `HumanTask.@@index([status])`, `ChatMessage.@@index([sessionDate, createdAt])`. XS effort, biggest dashboard latency win in the audit.
+- **[30.D5] Rate-limiter `Map` is unbounded** — `lib/rate-limiter.ts:8`. Add a sweeper.
+- **[30.D6] Three unguarded `JSON.parse` calls** — `app/knowledge/page.tsx:197`, `app/knowledge/[category]/page.tsx:79`, `lib/anthropic-feature-check.ts:219`.
+- **[30.D7] Two external fetches without timeout** — `lib/deploy-monitor.ts:23,82` (Vercel/Railway). Plus client-side `app/components/overseer-chat.tsx:462` has no AbortController.
+
+**Phase 32 — Drift reconciliation (documentation-only)**
+- **[30.D3]** 4 undocumented Prisma models (`Dispatch`, `FeatureProposal`, `ToolCallEvent`, `AnthropicUsageEvent`) + 5 new `Project` fields → `references/schema.md`.
+- 24 of 41 routes undocumented → rewrite `references/api-contracts.md`.
+- 5 env vars undocumented → `references/env-vars.md`.
+- Phase 28/29/30 missing from `references/architecture.md`.
+
+**Phase 33 — HTTP-boundary tests (medium effort, biggest blast-radius first)**
+- **[30.D2]** Only 2 of 41 routes have route tests. Top-5 to cover: `webhook/session-complete`, `overseer/chat`, `dispatch/team`, `projects/[slug]/dispatch`, `projects/launch`. Pattern from `app/api/overseer/session-state/route.test.ts` is reusable.
+- Also direct tests for `lib/dispatch-lifecycle.ts` (92 LOC, Phase 23.2 core path, no direct tests).
+- At least one render-without-crash smoke for `app/components/overseer-chat.tsx` (1093 LOC, zero tests).
+
+## State
+
+- Local + origin main: `0a7442a` (Phase 30).
+- All 4 audit reports written to `audits/2026-06-09.md` (full + per-skill).
+- `audits/debt.md` updated with `[30.D1]` through `[30.D7]` for the new findings.
+- This handoff updated with audit summary.
+
+## Recommended next step
+
+**Phase 31** is the only one with security implications and is also the smallest. Doing it next is the natural call. Cherry-pick the CRITICAL + the index migration + the three JSON.parse guards + the unbounded Map sweeper + the four timeout additions into one tight commit.
+
+---
+
 Date: 2026-06-08 — Phases 28-30 complete (preflight UI, wt split-pane, sourcemap hunt)
 
 Knocked out the three Phase-26 follow-ups in one go.

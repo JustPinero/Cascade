@@ -11,6 +11,10 @@ const statusCache = new Map<
   { status: DeploymentStatus; cachedAt: number }
 >();
 const CACHE_TTL_MS = 60_000; // 1 minute
+// Phase 31 — audit finding [30.D7]. Without this, a hung remote
+// stalled `/api/integrations/deploy-status` until Node's default
+// socket timeout (~minutes).
+const FETCH_TIMEOUT_MS = 10_000;
 
 /**
  * Get deployment status for a Vercel project.
@@ -19,11 +23,14 @@ async function getVercelStatus(
   projectId: string,
   token: string
 ): Promise<DeploymentStatus> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(
       `https://api.vercel.com/v6/deployments?projectId=${projectId}&limit=1`,
       {
         headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
       }
     );
 
@@ -68,6 +75,8 @@ async function getVercelStatus(
       url: null,
       updatedAt: new Date().toISOString(),
     };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -78,6 +87,8 @@ async function getRailwayStatus(
   projectId: string,
   token: string
 ): Promise<DeploymentStatus> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     const res = await fetch("https://backboard.railway.app/graphql/v2", {
       method: "POST",
@@ -89,6 +100,7 @@ async function getRailwayStatus(
         query: `query ($id: String!) { project(id: $id) { deployments(first: 1) { edges { node { status } } } } }`,
         variables: { id: projectId },
       }),
+      signal: controller.signal,
     });
 
     if (!res.ok) {
@@ -134,6 +146,8 @@ async function getRailwayStatus(
       url: null,
       updatedAt: new Date().toISOString(),
     };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
