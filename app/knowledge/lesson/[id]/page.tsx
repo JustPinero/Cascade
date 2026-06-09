@@ -9,6 +9,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { parseLessonTags } from "@/lib/lesson-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -33,13 +34,7 @@ export default async function LessonDetailPage({
   });
   if (!lesson) notFound();
 
-  let tags: string[] = [];
-  try {
-    const parsed = JSON.parse(lesson.tags);
-    if (Array.isArray(parsed)) tags = parsed.map(String);
-  } catch {
-    // ignore malformed tags
-  }
+  const tags = parseLessonTags(lesson.tags);
 
   return (
     <main className="container mx-auto p-6 max-w-3xl">

@@ -25,8 +25,33 @@ The webhook still falls back to "find latest session-launched activity event" wh
 ### [Theme Pack] — relocated from Phase 23
 Phase 22's plan called the Theme Pack registry "Phase 23." Phase 23 was redirected to the regression spine + caching work after the audit. Theme Pack moves to a later phase (TBD by user — likely 26 or after).
 
+### [30.D2] HTTP-boundary test gap (Phase 33 candidate)
+2 of 41 routes have route-level tests. Highest-blast-radius routes uncovered: `webhook/session-complete`, `overseer/chat`, `dispatch/team`, `projects/[slug]/dispatch`, `projects/launch`. Pattern from `app/api/overseer/session-state/route.test.ts` is reusable. **Discovered:** 2026-06-09 (test-audit).
+
+### [30.D3] Documentation drift across 3 of 4 references (Phase 32 candidate)
+- `references/schema.md` missing 4 models entirely (`Dispatch`, `FeatureProposal`, `ToolCallEvent`, `AnthropicUsageEvent`) plus 5 new `Project` fields.
+- `references/api-contracts.md` covers <half the 41 live routes — dispatch routes, preflight, feature-proposals, most project subroutes undocumented.
+- `references/env-vars.md` missing `CASCADE_DISPATCH_ID`, `CASCADE_MAX_CONCURRENT_SUBAGENTS`, `NODE_OPTIONS`, `CASCADE_PORT`, `ANTHROPIC_FEATURE_SOURCES`.
+- `references/architecture.md` covers Phase 26 but not 28/29/30.
+**Discovered:** 2026-06-09 (drift audit).
 
 ## Resolved
+
+### [30.D1] CRITICAL shell injection via project name — RESOLVED 2026-06-09 (Phase 31)
+`lib/claude-dispatcher.ts:queuedPlaceholderCmd` now calls `sanitizeForShell(projectName)` instead of stripping single-quotes only. `;`, `$()`, backticks, `\n`, and the other shell metachars are removed before the placeholder is interpolated into the tmux `execSync` call. Tests in `lib/claude-dispatcher.injection.test.ts` (6 scenarios) lock the invariant.
+
+### [30.D4] Missing Prisma indexes on hot paths — RESOLVED 2026-06-09 (Phase 31)
+Added: `Project.@@index([lastActivityAt])` + `@@index([status, lastActivityAt])`, `ActivityEvent.@@index([createdAt])` + `@@index([projectId, createdAt])`, `ChatMessage.@@index([sessionDate, createdAt])`, `HumanTask.@@index([status, priority, createdAt])`. Migrated via `prisma db push`. Dashboard / activity-feed / briefing / overseer-history queries now hit indexes instead of full-table scans.
+
+### [30.D5] Rate-limiter Map unbounded — RESOLVED 2026-06-09 (Phase 31)
+`lib/rate-limiter.ts` now sweeps expired entries when the store grows past 256 keys. O(n) walk, amortized to near-zero per call. Test asserts the store doesn't grow without bound under rotating-key traffic.
+
+### [30.D6] Unguarded JSON.parse in knowledge pages — RESOLVED 2026-06-09 (Phase 31)
+Extracted `parseLessonTags` into `lib/lesson-utils.ts`. Returns `[]` on malformed input, null/undefined, empty string, non-array shapes; coerces array members to strings. Applied at all three lesson surfaces (`app/knowledge/page.tsx`, `app/knowledge/[category]/page.tsx`, `app/knowledge/lesson/[id]/page.tsx`). The `anthropic-feature-check.ts:219` finding was a false positive — already wrapped in try/catch.
+
+### [30.D7] Missing fetch timeouts — RESOLVED 2026-06-09 (Phase 31)
+- `lib/deploy-monitor.ts` Vercel + Railway now use `AbortController` with a 10s watchdog; tests in `lib/deploy-monitor.test.ts` simulate hung remotes with fake timers.
+- `app/components/overseer-chat.tsx` client-side `/api/overseer/chat` fetch now uses an `AbortController` with a 90s watchdog (server-side cap is 60s; 90s leaves margin for the SSE drain). Cleared in `finally`.
 
 ### [27.D1] Vitest source-map symbolicator throws on Windows — RESOLVED 2026-06-07 (Phase 30)
 The trigger was `convert-source-map` matching the literal string `sourceMappingURL=data:application/json;base64,` inside `node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/register-D46fvsV_.cjs` — tsx's own code that *generates* sourcemap comments. The regex caught it as a real inline sourcemap and JSON-parsed the following JS, throwing `Unexpected token '�'`. Triggered specifically when `lib/template-seed.test.ts` fired a child-process ENOENT (templates/ is gitignored and absent on this Windows box) and vitest tried to symbolicate the stack walking into tsx. Fix: tracked pnpm patch on `@vitest/utils@4.1.2` that wraps `extractSourcemapFromFile` in a try/catch (committed at `patches/@vitest__utils@4.1.2.patch`, wired via `pnpmPatchedDependencies`). Separately, `lib/template-seed.test.ts` now skips when `templates/web-app-v3.3.md` is absent, so the underlying ENOENT no longer fires. `pnpm test` now exits 0 on Windows with 975 passing / 6 skipped / 0 failures.

@@ -4,7 +4,7 @@ import fsSync from "fs";
 import path from "path";
 import os from "os";
 import { PrismaClient } from "@/app/generated/prisma/client";
-import { isInsideProjectsDir } from "./validators";
+import { isInsideProjectsDir, sanitizeForShell } from "./validators";
 import { readIfExists } from "./file-utils";
 import { detectPlatform } from "./platform";
 import { getDispatchQueue } from "./dispatch-queue";
@@ -450,8 +450,12 @@ function buildProjectCmd(projectPath: string, prompt: string, index: number): st
  * Shows a "queued" message and waits at an interactive bash prompt so
  * tmux can later respawn-pane into the real Claude command.
  */
-function queuedPlaceholderCmd(projectName: string): string {
-  const safe = projectName.replace(/'/g, "");
+// Exported for Phase 31 injection-guard tests. `sanitizeForShell`
+// (lib/validators.ts) strips `; $ \` " ' | & < > ( ) { } ! \n \r` so
+// nothing in the project name can break out of the single-quoted
+// placeholder string and run as a fresh shell command.
+export function queuedPlaceholderCmd(projectName: string): string {
+  const safe = sanitizeForShell(projectName);
   return `echo '[queued: ${safe}] waiting for concurrency slot'; exec bash -i`;
 }
 

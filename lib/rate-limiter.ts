@@ -7,6 +7,21 @@ interface RateLimitEntry {
 
 const store = new Map<string, RateLimitEntry>();
 
+// Phase 31 — audit finding [30.D5]. Long-running dev sessions
+// accumulated entries forever as per-IP/per-route prefixes rotated.
+// Sweep when the map grows past a soft cap; O(n) walk, amortized to
+// near-zero per call. The cap is sized to comfortably exceed the
+// number of distinct live keys we'd expect for a personal-dev box
+// (handful of routes × handful of IPs).
+const SWEEP_THRESHOLD = 256;
+
+function maybeSweepExpired(now: number): void {
+  if (store.size < SWEEP_THRESHOLD) return;
+  for (const [key, entry] of store) {
+    if (entry.resetAt <= now) store.delete(key);
+  }
+}
+
 /**
  * Simple in-memory sliding window rate limiter.
  * Returns null if allowed, or a 429 Response if blocked.
@@ -17,6 +32,7 @@ export function checkRateLimit(
   windowMs: number = 60_000
 ): NextResponse | null {
   const now = Date.now();
+  maybeSweepExpired(now);
   const entry = store.get(key);
 
   if (!entry || now > entry.resetAt) {
@@ -53,4 +69,12 @@ export function getRateLimitKey(
  */
 export function clearRateLimits(): void {
   store.clear();
+}
+
+/**
+ * Test-only — expose the current store size so tests can assert the
+ * sweeper actually drops expired entries. Not part of the public API.
+ */
+export function __rateLimiterStoreSizeForTests(): number {
+  return store.size;
 }

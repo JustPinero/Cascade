@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { LessonCard } from "../../components/lesson-card";
+import { parseLessonTags } from "@/lib/lesson-utils";
 
 interface Lesson {
   id: number;
@@ -76,7 +77,7 @@ export default function CategoryPage() {
               sourceProject={lesson.sourceProject?.name || null}
               sourcePhase={lesson.sourcePhase}
               discoveredAt={lesson.discoveredAt}
-              tags={JSON.parse(lesson.tags)}
+              tags={parseLessonTags(lesson.tags)}
             />
           ))}
         </div>
