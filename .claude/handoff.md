@@ -1,4 +1,22 @@
 # Session Handoff — Kilroy
+Date: 2026-06-08 — Phases 28-30 complete (preflight UI, wt split-pane, sourcemap hunt)
+
+Knocked out the three Phase-26 follow-ups in one go.
+
+**Phase 28 — Preflight UI badge.** `GET /api/preflight` thinly wraps `checkDispatchPreflight()`. New `<PlatformBadge />` in the dashboard header fetches it on mount and renders the detected platform with a green dot when every required tool is on PATH, amber when something's missing (hover title lists the gaps). 6 new tests. Verified live on this box: `{platform:"windows", ok:true, missing:[], tools:{claude, wt.exe, bash all resolved}}`.
+
+**Phase 29 — wt split-pane batch layout.** `dispatchAll` / `dispatchBatch` on Windows now open one named wt window with split panes instead of N independent tabs. `maybeCreatePaneGrid` returns `"<batch-name>:<index>"` targets where the batch name is `cascade-<timestamp>`; new `launchInWtBatch` spawns `wt -w <name> new-tab` (index 0, creates the window) or `wt -w <name> split-pane` (index > 0, adds a pane). Single dispatch unchanged. 4 new test scenarios. wt's default split direction gives a "stairs" layout — refining to a true grid is a future polish slice if asked.
+
+**Phase 30 — sourcemap hunt.** Found the `[27.D1]` culprit: `convert-source-map`'s regex was matching the literal string `sourceMappingURL=data:application/json;base64,` inside `tsx/dist/register-D46fvsV_.cjs` (tsx's own code that *generates* sourcemap comments). The match's base64 content was JS source, JSON.parse threw, vitest's stack-trace processor surfaced the throw as an "unhandled error" that broke the exit code. Triggered specifically when `lib/template-seed.test.ts` fired ENOENT (templates/ is gitignored and absent on this box) and vitest walked the stack into tsx. Fix: tracked pnpm patch on `@vitest/utils@4.1.2` (`patches/@vitest__utils@4.1.2.patch`, wired via `pnpmPatchedDependencies`) wraps `extractSourcemapFromFile` in a try/catch. Separately, the template-seed test now skips when the default template file is absent. `pnpm test` exits 0 on Windows: 975 passing / 6 skipped / 0 failures.
+
+## State
+
+- Local + origin main: 4bae5f3 (Phase 29 merged); Phase 28 (222b390) and Phase 30 (this commit, pending merge).
+- `pnpm test` Windows exit 0; type check clean; lint 4 pre-existing warnings; build green.
+- Branch `phase-30-sourcemap-hunt` ready to merge.
+
+---
+
 Date: 2026-06-05 — Phase 27 complete (Windows test parity)
 
 Phase 27 fixed every test failure the Windows host had at Phase 26 close. Suite is now 966 passing / 1 skipped / 0 failing — up from 945 passing at the start of the day. Three small root causes, three small fixes:
