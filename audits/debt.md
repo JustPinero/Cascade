@@ -25,13 +25,11 @@ The webhook still falls back to "find latest session-launched activity event" wh
 ### [Theme Pack] — relocated from Phase 23
 Phase 22's plan called the Theme Pack registry "Phase 23." Phase 23 was redirected to the regression spine + caching work after the audit. Theme Pack moves to a later phase (TBD by user — likely 26 or after).
 
-### [27.D1] Vitest source-map symbolicator throws on Windows
-Phase 27 resolved all 11 test failures the Windows host had at Phase 26 close. Suite is 966 passing / 1 skipped / 0 failures, but `pnpm test` exits 1 due to a single unhandled error in vitest's internal stack-trace processor (`convert-source-map`'s `Converter` rejects a base64 sourcemap that starts with the U+FFFD replacement character — likely a BOM-encoded inline source map somewhere in the dependency tree or a generated file). Doesn't reproduce in CI (ubuntu-latest). Doesn't affect any test result.
-- **Symptom:** local `pnpm test` exits 1 on Windows even with 0 failures.
-- **Action when desirable:** locate the file with the malformed inline sourcemap; either fix its encoding or work around with a vitest config that disables source-map post-processing. Lower priority — CI is green; only affects local-Windows exit code.
-- **Discovered:** 2026-06-05
 
 ## Resolved
+
+### [27.D1] Vitest source-map symbolicator throws on Windows — RESOLVED 2026-06-07 (Phase 30)
+The trigger was `convert-source-map` matching the literal string `sourceMappingURL=data:application/json;base64,` inside `node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/register-D46fvsV_.cjs` — tsx's own code that *generates* sourcemap comments. The regex caught it as a real inline sourcemap and JSON-parsed the following JS, throwing `Unexpected token '�'`. Triggered specifically when `lib/template-seed.test.ts` fired a child-process ENOENT (templates/ is gitignored and absent on this Windows box) and vitest tried to symbolicate the stack walking into tsx. Fix: tracked pnpm patch on `@vitest/utils@4.1.2` that wraps `extractSourcemapFromFile` in a try/catch (committed at `patches/@vitest__utils@4.1.2.patch`, wired via `pnpmPatchedDependencies`). Separately, `lib/template-seed.test.ts` now skips when `templates/web-app-v3.3.md` is absent, so the underlying ENOENT no longer fires. `pnpm test` now exits 0 on Windows with 975 passing / 6 skipped / 0 failures.
 
 ### [25.D1] Overseer route streaming migration — RESOLVED 2026-05-04
 `app/api/overseer/chat/route.ts` now uses `defaultStreamingAnthropicCaller`. The route synthesizes a single coherent SSE envelope to the client (one `message_start`, one text content block, one `message_stop`) regardless of how many Anthropic calls the tool-use loop makes. Tool_use events are hidden but a synthetic `tool_call_start` event is emitted for any UI progress indicator. Engineer-channel writeback runs after the stream closes; failures still don't affect the client. Route tests rewired to drain the SSE body before asserting side effects, and the test mock for `defaultStreamingAnthropicCaller` synthesizes per-block events so the route's `onEvent` handler exercises the same code paths it would with a live stream.
