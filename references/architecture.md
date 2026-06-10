@@ -26,7 +26,7 @@
 ```
 User → Overseer Chat → [DISPATCH] tags parsed
   → Single project: Terminal.app (macOS) | tmux (Linux) | new wt tab (Windows)
-  → Multiple projects: /api/dispatch/batch → tmux grid panes (Mac/Linux) | one wt tab per project (Windows)
+  → Multiple projects: /api/dispatch/batch → tmux grid panes (Mac/Linux) | one named wt window with split panes (Windows, Phase 29)
   → Agent teams: /api/dispatch/team → lead Claude + teammates in tmux (Mac/Linux only; Windows returns "not supported")
 
 Sessions run independently:
@@ -55,9 +55,15 @@ Stop hook pipeline:
 4. **Incremental scanning** — importSingleProject() for webhook-triggered updates; full scan only on manual "Scan" button
 5. **Knowledge in-repo** — Knowledge base structure lives in /knowledge; actual lessons are gitignored (populated per-user)
 6. **SQLite at project root** — Database is `./dev.db`, derived from fs and can be rebuilt; gitignored
-7. **Platform-aware dispatch** — detectPlatform() selects osascript+Terminal.app (macOS), tmux-direct (Linux/WSL2), or wt.exe + Git Bash (Windows; Phase 26). `lib/dispatch-preflight.ts` reports per-platform tool availability. See `knowledge/cascade-windows-dispatch.md` for the Windows flow.
+7. **Platform-aware dispatch** — `detectPlatform()` selects osascript+Terminal.app (macOS), tmux-direct (Linux/WSL2), or wt.exe + Git Bash (Windows; Phase 26). `lib/dispatch-preflight.ts` reports per-platform tool availability; the result is surfaced in the dashboard header via `<PlatformBadge />` (Phase 28). On Windows, batch dispatch (`dispatchAll`/`dispatchBatch`) opens **one named wt window with split panes** rather than N independent tabs — `wt -w cascade-<timestamp> new-tab` creates the window on the first job and `split-pane` adds panes for the rest (Phase 29). Single dispatch still uses `-w 0 new-tab`. See `knowledge/cascade-windows-dispatch.md` for the full flow.
 8. **Overseer is customizable** — Name, portrait, personality stored in localStorage; defaults to "Overseer"
 9. **Personal data never committed** — Playbook, lessons, sessions, channel, database all gitignored
 10. **Upstream-feature awareness (phase 11.1)** — Cascade keeps a catalog of Claude / Claude Code features (`UpstreamFeature`) and a per-project ledger of which features each project uses (`ProjectFeatureUsage`). The `/anthropic-feature-update-check` slash command in the Overseer chat refreshes both. Catalog seed: `knowledge/anthropic-features.md`. Detectors: `lib/anthropic-feature-detectors.ts`. Audit + discovery: `lib/anthropic-feature-check.ts`. Stop-hook webhook re-audits the affected project after every session. The `[ANTHROPIC]` tag in handoffs is parallel to `[LESSON]` for harvesting candidates from sessions.
 
 11. **Feature proposer (phase 11.2)** — for each project × detected gap pair, `lib/anthropic-feature-proposer.ts` calls Sonnet with the feature's integration recipe + the project's CLAUDE.md / settings.json contents and asks for a concrete file-by-file diff. Surfaced via `/anthropic-feature-propose [<slug>...]` in the Overseer chat. Diffs are rendered as Markdown in the SSE response — Cascade NEVER auto-applies; the user reviews and pastes into the target project's Claude Code session manually. Gap detection skips features without a `detector` (we can't propose what we can't verify). Cost control: `maxFeatures: 5` per project per call.
+
+12. **Feature proposal persistence (phase 11.3)** — the `FeatureProposal` table stores Claude-drafted diffs for `(project, missing-feature)` pairs. Lifecycle: `proposed → accepted | rejected | applied` via `PATCH /api/feature-proposals/[id]`. Routes: `GET/POST /api/feature-proposals`, `GET/PATCH/DELETE /api/feature-proposals/[id]`. The Overseer can list / accept / reject proposals via the tool framework without re-running the proposer.
+
+13. **Local-test exit-code parity (phase 30)** — `convert-source-map`'s regex falsely matches the literal string `sourceMappingURL=data:application/json;base64,` inside `tsx/dist/register-D46fvsV_.cjs` (tsx's own code that generates sourcemap comments). When vitest symbolicates a stack frame into that file, `JSON.parse` throws and the runner exits non-zero. Tracked pnpm patch on `@vitest/utils@4.1.2` (`patches/@vitest__utils@4.1.2.patch`, wired via `pnpmPatchedDependencies`) wraps the extractor in a try/catch. Doesn't reproduce on Linux CI; only affects local Windows exit codes. Also: `lib/template-seed.test.ts` now skips when `templates/web-app-v3.3.md` is absent (the directory is gitignored — per-user setup).
+
+14. **Hot-path query indexes (phase 31)** — `Project.lastActivityAt`, `Project.(status, lastActivityAt)`, `ActivityEvent.createdAt`, `ActivityEvent.(projectId, createdAt)`, `ChatMessage.(sessionDate, createdAt)`, `HumanTask.(status, priority, createdAt)`. Covers dashboard `ORDER BY lastActivityAt DESC`, activity-feed poll `ORDER BY createdAt DESC`, briefing `WHERE createdAt >= since`, overseer history `WHERE sessionDate ORDER BY createdAt ASC`, and `/api/tasks?status=pending` filtering. All XS-effort additions, biggest dashboard latency win in the 2026-06-09 audit.

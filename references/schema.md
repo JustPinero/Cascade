@@ -22,6 +22,11 @@ The central entity. Represents a software project being monitored.
 | progressScore | Int | 0 | 0-100 composite progress score |
 | progressDetails | String (JSON) | "{}" | Breakdown: phases, tests, readiness scores |
 | deploymentInfo | String (JSON) | "{}" | Deployment URL, provider, health endpoint |
+| businessStage | String | "building" | building, pre-sale, active-sale, revenue, growth, internal |
+| projectContext | String? | null | Persisted context.md content — project story, stakeholders, goals |
+| completionCriteria | String? | null | Persisted done.md content — what "done" means for this project |
+| badges | String (JSON) | "[]" | Array: deployed, client, testing, awaiting-review, versioned |
+| deadline | DateTime? | null | Optional project deadline |
 | lastSessionEndedAt | DateTime? | null | When last Claude session ended |
 | kickoffTemplateId | Int? | null | FK to KickoffTemplate |
 | lastActivityAt | DateTime | now() | — |
@@ -29,7 +34,8 @@ The central entity. Represents a software project being monitored.
 | createdAt | DateTime | now() | — |
 | updatedAt | DateTime | auto | — |
 
-**Relations:** lessons[], auditSnapshots[], activityEvents[], kickoffTemplate?
+**Relations:** lessons[], auditSnapshots[], activityEvents[], humanTasks[], dispatchOutcomes[], dispatches[], featureUsages[], featureProposals[], kickoffTemplate?
+**Indexes:** lastActivityAt, (status, lastActivityAt) — phase 31
 
 ## HumanTask
 Tasks that require human action — assets, credentials, manual testing, etc.
@@ -48,6 +54,7 @@ Tasks that require human action — assets, credentials, manual testing, etc.
 | completedAt | DateTime? | null | When marked done |
 
 **Relations:** project?
+**Indexes:** (status, priority, createdAt) — phase 31
 
 ## KnowledgeLesson
 Lessons harvested from project audits and corrections.
@@ -114,6 +121,7 @@ Timeline of project events.
 | createdAt | DateTime | now() | — |
 
 **Relations:** project?
+**Indexes:** createdAt, (projectId, createdAt) — phase 31
 
 ## DispatchOutcome
 Tracks what the Overseer recommended vs what actually happened.
@@ -129,8 +137,32 @@ Tracks what the Overseer recommended vs what actually happened.
 | signals | String (JSON) | "[]" | Escalation signal types detected |
 | dispatchedAt | DateTime | — | When dispatch was issued |
 | completedAt | DateTime | now() | When session ended |
+| dispatchId | String? | null | Phase 23.2 — FK to Dispatch.id (unique). Links outcome to its lifecycle row |
 
-**Relations:** project
+**Relations:** project, dispatch?
+
+## Dispatch (phase 23.2)
+First-class lifecycle row for a Claude Code dispatch. Written at enqueue, transitioned by the dispatcher (queued → started) and the webhook (started → completed/failed), timed out by the watchdog. `idempotencyKey` is the canonical correlation handle between the dispatcher, the spawned Claude Code session (passed via `CASCADE_DISPATCH_ID` env), and the Stop-hook webhook.
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| id | String | cuid() | Primary key |
+| idempotencyKey | String | cuid() | Unique. Threaded into the spawn env as `CASCADE_DISPATCH_ID` |
+| projectId | Int | — | FK to Project |
+| projectSlug | String | — | Denormalized for fast lookups |
+| mode | String | — | continue, audit, investigate, custom |
+| customPrompt | String? | null | Set when mode = custom |
+| status | String | "queued" | queued, started, completed, failed, timeout |
+| prompt | String? | null | Truncated prompt snapshot |
+| healthAtDispatch | String? | null | Project health when dispatched |
+| expectedBy | DateTime? | null | Watchdog deadline; if exceeded, status flips to timeout |
+| enqueuedAt | DateTime | now() | — |
+| startedAt | DateTime? | null | Set when the spawn returns |
+| completedAt | DateTime? | null | Set by the webhook |
+| errorMessage | String? | null | Set on failure or timeout |
+
+**Relations:** project, outcome? (1:1 → DispatchOutcome.dispatchId)
+**Indexes:** (projectId, status), expectedBy, status
 
 ## ChatSession
 Phase 12A.1. First-class container for conversation state. The
@@ -145,6 +177,7 @@ that the Overseer reads and writes via tools (replaces the prior
 | closedAt | DateTime? | null | Set when the session ends; writes to a closed session throw |
 | activeFlow | String? | null | "inventory_walk", "dispatch_planning", "incident_triage", or null |
 | workingMemory | String | "{}" | JSON document; deep-merged via `mergeWorkingMemory` |
+| compressedHistory | String? | null | Phase 12E — JSON: `{summarizedThroughMessageCount, summary}`. Cached summary of older messages |
 
 **Relations:** messages (1:N → ChatMessage)
 **Indexes:** startedAt, closedAt
@@ -163,7 +196,7 @@ Overseer conversation history, grouped by date and (going forward) by ChatSessio
 | createdAt | DateTime | now() | — |
 
 **Relations:** session (N:1 → ChatSession, optional during transition)
-**Indexes:** sessionId, sessionDate
+**Indexes:** sessionId, sessionDate, (sessionDate, createdAt) — phase 31
 
 ## Reminder
 Conditional alerts triggered by project state changes.
@@ -201,6 +234,8 @@ the harvester (low-confidence) or the slash-command web-fetch path
 | discoveredAt | DateTime | now() | — |
 | updatedAt | DateTime | updatedAt | — |
 
+**Relations:** usages[] (1:N → ProjectFeatureUsage), proposals[] (1:N → FeatureProposal)
+
 ## ProjectFeatureUsage (phase 11.1)
 Per-project ledger: which features are detected as in use. Derived
 from the audit pass on every project filesystem; never hand-maintained.
@@ -214,6 +249,62 @@ from the audit pass on every project filesystem; never hand-maintained.
 | detectedAt | DateTime | now() | — |
 
 Unique constraint: `(projectId, featureId)`. Indexed on both FKs.
+
+## FeatureProposal (phase 11.3)
+Persistence for feature proposals generated by the Anthropic Feature Proposer. Each row is a Claude-drafted diff for one `(project, missing-feature)` pair. Status flows `proposed → accepted | rejected | applied` via `PATCH /api/feature-proposals/[id]`.
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| id | Int | autoincrement | Primary key |
+| projectId | Int | — | FK to Project |
+| featureId | Int | — | FK to UpstreamFeature |
+| diff | String | — | Claude-generated Markdown diff |
+| status | String | "proposed" | proposed, accepted, rejected, applied |
+| generatedAt | DateTime | now() | — |
+| resolvedAt | DateTime? | null | Set when status leaves "proposed" |
+| resolvedBy | String? | null | "user", "claude", or "system" |
+| notes | String? | null | Free-form context |
+
+**Relations:** project, feature
+**Indexes:** projectId, featureId, status, generatedAt
+
+## ToolCallEvent (phase 24.2)
+Tool-call observability. One row per `registry.execute(...)` invocation in `runToolUseLoop`. Drives `/observability/tools` and the `get_tool_call_stats` overseer tool. The `resultUsed` column is reserved for a follow-up heuristic; defaults to true so absence-of-data doesn't penalize tools.
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| id | Int | autoincrement | Primary key |
+| sessionId | String | — | The Anthropic session id (not Cascade's ChatSession.id) |
+| iteration | Int | — | Loop iteration index |
+| toolName | String | — | Tool name from the registry |
+| input | String | — | JSON, truncated to 4 KB |
+| outputSize | Int | — | Output payload size in bytes |
+| success | Boolean | — | — |
+| errorMessage | String? | null | Set on failure |
+| durationMs | Int | — | Wall-clock duration |
+| resultUsed | Boolean? | true | Reserved; future heuristic |
+| createdAt | DateTime | now() | — |
+
+**Indexes:** (sessionId, createdAt), toolName, createdAt
+
+## AnthropicUsageEvent (phase 23.3)
+Fire-and-forget telemetry for every Anthropic API call site. Drives `/observability/cache` hit-rate visibility and guards the Phase 23.4 prompt-caching rollout against silent regressions.
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| id | Int | autoincrement | Primary key |
+| callSite | String | — | "overseer.chat", "summarizer", "feature-proposer", "wizard", "project.chat", "briefing" |
+| model | String | — | Model id used for the call |
+| inputTokens | Int | — | — |
+| cacheReadInputTokens | Int | 0 | — |
+| cacheCreationInputTokens | Int | 0 | — |
+| cacheCreation5mTokens | Int | 0 | — |
+| cacheCreation1hTokens | Int | 0 | — |
+| outputTokens | Int | — | — |
+| durationMs | Int | — | Wall-clock duration |
+| createdAt | DateTime | now() | — |
+
+**Indexes:** (callSite, createdAt), createdAt, model
 
 ## CascadeConfig (phase 11.1)
 Single-row configuration table for Cascade-wide state. Always upserted

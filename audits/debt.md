@@ -28,14 +28,14 @@ Phase 22's plan called the Theme Pack registry "Phase 23." Phase 23 was redirect
 ### [30.D2] HTTP-boundary test gap (Phase 33 candidate)
 2 of 41 routes have route-level tests. Highest-blast-radius routes uncovered: `webhook/session-complete`, `overseer/chat`, `dispatch/team`, `projects/[slug]/dispatch`, `projects/launch`. Pattern from `app/api/overseer/session-state/route.test.ts` is reusable. **Discovered:** 2026-06-09 (test-audit).
 
-### [30.D3] Documentation drift across 3 of 4 references (Phase 32 candidate)
-- `references/schema.md` missing 4 models entirely (`Dispatch`, `FeatureProposal`, `ToolCallEvent`, `AnthropicUsageEvent`) plus 5 new `Project` fields.
-- `references/api-contracts.md` covers <half the 41 live routes — dispatch routes, preflight, feature-proposals, most project subroutes undocumented.
-- `references/env-vars.md` missing `CASCADE_DISPATCH_ID`, `CASCADE_MAX_CONCURRENT_SUBAGENTS`, `NODE_OPTIONS`, `CASCADE_PORT`, `ANTHROPIC_FEATURE_SOURCES`.
-- `references/architecture.md` covers Phase 26 but not 28/29/30.
-**Discovered:** 2026-06-09 (drift audit).
 
 ## Resolved
+
+### [30.D3] Documentation drift across 3 of 4 references — RESOLVED 2026-06-09 (Phase 32)
+- `references/schema.md`: added Phase 23.2 `Dispatch`, Phase 11.3 `FeatureProposal`, Phase 24.2 `ToolCallEvent`, Phase 23.3 `AnthropicUsageEvent`. Updated `Project` with 5 new fields (`businessStage`, `projectContext`, `completionCriteria`, `badges`, `deadline`) and 5 new relations. Added Phase 31 index notes on `Project`, `ActivityEvent`, `ChatMessage`, `HumanTask`. Added `DispatchOutcome.dispatchId`, `ChatSession.compressedHistory`, `UpstreamFeature.proposals` relation.
+- `references/api-contracts.md`: rewritten end-to-end via the audit-runner agent. 58 entries across 12 groups covering every route under `app/api/**/route.ts`.
+- `references/env-vars.md`: documented `CASCADE_DISPATCH_ID`, `CASCADE_MAX_CONCURRENT_SUBAGENTS`, `NODE_OPTIONS`, `CASCADE_PORT`, `ANTHROPIC_FEATURE_SOURCES`, plus a Runtime-set section for `CASCADE_DISPATCH_ID`/`NODE_ENV`/`CI`.
+- `references/architecture.md`: dispatch diagram now reflects Phase 29 multi-pane wt layout; decision #7 covers `<PlatformBadge />` (Phase 28); new decisions #12 (feature proposal persistence, Phase 11.3), #13 (vitest source-map patch, Phase 30), #14 (hot-path indexes, Phase 31).
 
 ### [30.D1] CRITICAL shell injection via project name — RESOLVED 2026-06-09 (Phase 31)
 `lib/claude-dispatcher.ts:queuedPlaceholderCmd` now calls `sanitizeForShell(projectName)` instead of stripping single-quotes only. `;`, `$()`, backticks, `\n`, and the other shell metachars are removed before the placeholder is interpolated into the tmux `execSync` call. Tests in `lib/claude-dispatcher.injection.test.ts` (6 scenarios) lock the invariant.
