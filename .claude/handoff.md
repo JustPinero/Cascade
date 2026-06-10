@@ -1,4 +1,33 @@
 # Session Handoff — Kilroy
+Date: 2026-06-09 — Phase 34 complete (OverseerChat smoke)
+
+Closed the residual UI piece of audit finding [30.D2]. Five smoke tests at `app/components/overseer-chat.test.tsx` covering: mount + initial fetches, history rehydration, failed-fetch resilience, input interactivity, settings hook. Suite at **1031 passing / 6 skipped / 0 failing** (+5 from Phase 33).
+
+Worth noting: during this phase I discovered the original audit overstated the `app/api/overseer/chat/route.ts` gap. That route actually has 24 tests across `route.feature-check.test.ts`, `route.feature-propose.test.ts`, `route.tools.test.ts` — solid coverage of slash commands, tool-use loop, compression, session-date, [ENGINEER] tags, missing API key, etc. The "zero tests" claim was wrong. Pivoted to the component smoke instead, which was the truly-uncovered surface.
+
+## Mocking notes for future overseer-chat tests
+
+The component needs these stubs for jsdom:
+- All lib imports: sounds, notify, speak, silence-detector, dispatch-tag-parser, local-today, session-memory, overseer-settings, Portrait.
+- `window.SpeechRecognition` and `webkitSpeechRecognition` → undefined.
+- `Element.prototype.scrollTo` → vi.fn() (jsdom doesn't implement it; the auto-scroll effect throws otherwise).
+- Per-test `fetch` stub via `vi.stubGlobal` handling at least `/api/overseer/history`, `/api/overseer/session-state`, and `/api/overseer/chat`.
+
+## State
+
+- Local + origin main: `7cde363` (Phase 33); Phase 34 (this commit) pending merge.
+- Branch `phase-34-overseer-chat-smoke` ready to merge.
+
+## Remaining audit residuals (low priority)
+
+- Streaming SSE render path in OverseerChat — custom ReadableStream mock needed.
+- Conversation Mode + silence detector wiring.
+- 32 read-only / simple-CRUD routes without route-level tests.
+
+These are opportunistic targets when touching the relevant code for other reasons.
+
+---
+
 Date: 2026-06-09 — Phase 33 complete (route-boundary tests)
 
 Closed the top-5 priority cases of audit finding **[30.D2]**. Suite at **1026 passing / 6 skipped / 0 failing** on Windows (+36 from Phase 32's 990, all from this phase).
