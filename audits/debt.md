@@ -26,9 +26,9 @@ The webhook still falls back to "find latest session-launched activity event" wh
 Phase 22's plan called the Theme Pack registry "Phase 23." Phase 23 was redirected to the regression spine + caching work after the audit. Theme Pack moves to a later phase (TBD by user — likely 26 or after).
 
 ### [30.D2-residual] Remaining HTTP-boundary test gaps (defer to a future phase)
-Phase 33 closed the top-5 priority routes from the original [30.D2] finding (webhook/session-complete, projects/[slug]/dispatch, dispatch/team, projects/launch) plus added direct tests for `lib/dispatch-lifecycle.ts`. The largest remaining gaps:
-- **`app/api/overseer/chat/route.ts`** — streaming SSE + tool-use loop + slash commands. Smoke-only would be misleading. Worth a dedicated slice with the streaming-accumulator test harness.
-- **`app/components/overseer-chat.tsx`** (1093 LOC) — needs a UI-testing slice with jsdom + speech-recognition + TTS mocks. A render-without-crash smoke is the minimum entry point.
+Phase 33 closed the top-5 priority routes from the original [30.D2] finding. Phase 34 added the OverseerChat smoke. The largest remaining gaps:
+- **`app/api/overseer/chat/route.ts`** — TURNS OUT this has substantial coverage already in `route.feature-check.test.ts` / `route.feature-propose.test.ts` / `route.tools.test.ts` (24 tests across the three files). Audit overstated the gap. Deeper streaming-format tests would still be valuable but lower priority than originally rated.
+- **`app/components/overseer-chat.tsx`** — Phase 34 covered the mount + history rehydration + input + settings smokes (5 tests). Streaming render, conversation mode, voice flow, dispatch-tag actions still uncovered — each is its own slice if Justin asks.
 - 32 remaining routes are lower blast-radius (reads, simple CRUD). Tackle opportunistically when touching them for other reasons.
 
 
