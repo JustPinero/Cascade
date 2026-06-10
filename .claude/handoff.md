@@ -1,4 +1,50 @@
 # Session Handoff — Kilroy
+Date: 2026-06-09 — Phase 33 complete (route-boundary tests)
+
+Closed the top-5 priority cases of audit finding **[30.D2]**. Suite at **1026 passing / 6 skipped / 0 failing** on Windows (+36 from Phase 32's 990, all from this phase).
+
+## What landed
+
+Five parallel agents wrote one test file each; each agent verified its own tests passed before reporting:
+
+- **`lib/dispatch-lifecycle.test.ts`** (7) — direct tests for the Phase 23.2 lifecycle helper. queued/started/failed transitions, throw → status=failed + re-propagation, unique idempotencyKey across parallel calls, default + custom `expectedBy`.
+- **`app/api/projects/launch/route.test.ts`** (7) — missing-field 400s, 201 happy path with defaults asserted, caller override, 500 on `launchProject` failure or malformed JSON.
+- **`app/api/projects/[slug]/dispatch/route.test.ts`** (8) — mode validation, slug 404, happy path writes activity + `currentRequest`, dispatch-failure invariant, 429 rate-limit, custom-mode prompt threading, 500 on malformed JSON.
+- **`app/api/dispatch/team/route.test.ts`** (7) — items array validation, mode filter (invalid items dropped silently), 200 with slug/mode/prompt pass-through, 429 at 3/min, Windows tmux-error surfacing through the route, 500 fallthrough.
+- **`app/api/webhook/session-complete/route.test.ts`** (7) — projectPath 400s, project-not-found writes `orphaned-webhook` event and returns 200 by design (Stop hooks must not retry), idempotencyKey path completes Dispatch row + writes DispatchOutcome + emits `session-complete` activity event, second call with same key dedupes, legacy fallback doesn't 500.
+
+I cleaned up 3 minor TS errors and 1 assertion mismatch in the agent-written files before merge.
+
+## Still open from the original audit
+
+The residual [30.D2] gaps tracked in `audits/debt.md`:
+- `app/api/overseer/chat/route.ts` — streaming SSE + tool-use loop. Smoke-only would be misleading. Dedicated slice needed.
+- `app/components/overseer-chat.tsx` (1093 LOC) — needs jsdom + speech-recognition + TTS mocks. Dedicated UI-testing slice.
+- 32 lower-blast-radius routes — tackle opportunistically.
+
+## State
+
+- Local + origin main: `faf44c3` (Phase 32); Phase 33 (this commit) pending merge.
+- Branch `phase-33-route-tests` ready to merge.
+
+## Sprint shape after Phase 33
+
+Five phases shipped in two days. Audit findings disposition:
+
+| Finding | Status |
+|---------|--------|
+| [30.D1] CRITICAL shell injection | ✅ Phase 31 |
+| [30.D2] HTTP-boundary test gap (top-5) | ✅ Phase 33 |
+| [30.D3] Documentation drift | ✅ Phase 32 |
+| [30.D4] Missing Prisma indexes | ✅ Phase 31 |
+| [30.D5] Rate-limiter unbounded | ✅ Phase 31 |
+| [30.D6] Unguarded JSON.parse | ✅ Phase 31 |
+| [30.D7] Missing fetch timeouts | ✅ Phase 31 |
+
+Every audit finding closed except the deliberately deferred overseer/chat + overseer-chat.tsx tests.
+
+---
+
 Date: 2026-06-09 — Phase 32 complete (drift reconciliation)
 
 Closed audit finding **[30.D3]** — references are aligned with code again.
