@@ -25,11 +25,24 @@ The webhook still falls back to "find latest session-launched activity event" wh
 ### [Theme Pack] — relocated from Phase 23
 Phase 22's plan called the Theme Pack registry "Phase 23." Phase 23 was redirected to the regression spine + caching work after the audit. Theme Pack moves to a later phase (TBD by user — likely 26 or after).
 
-### [30.D2] HTTP-boundary test gap (Phase 33 candidate)
-2 of 41 routes have route-level tests. Highest-blast-radius routes uncovered: `webhook/session-complete`, `overseer/chat`, `dispatch/team`, `projects/[slug]/dispatch`, `projects/launch`. Pattern from `app/api/overseer/session-state/route.test.ts` is reusable. **Discovered:** 2026-06-09 (test-audit).
+### [30.D2-residual] Remaining HTTP-boundary test gaps (defer to a future phase)
+Phase 33 closed the top-5 priority routes from the original [30.D2] finding (webhook/session-complete, projects/[slug]/dispatch, dispatch/team, projects/launch) plus added direct tests for `lib/dispatch-lifecycle.ts`. The largest remaining gaps:
+- **`app/api/overseer/chat/route.ts`** — streaming SSE + tool-use loop + slash commands. Smoke-only would be misleading. Worth a dedicated slice with the streaming-accumulator test harness.
+- **`app/components/overseer-chat.tsx`** (1093 LOC) — needs a UI-testing slice with jsdom + speech-recognition + TTS mocks. A render-without-crash smoke is the minimum entry point.
+- 32 remaining routes are lower blast-radius (reads, simple CRUD). Tackle opportunistically when touching them for other reasons.
 
 
 ## Resolved
+
+### [30.D2] HTTP-boundary test gap (top-5 routes) — RESOLVED 2026-06-09 (Phase 33)
+Top-5 mutating routes from the original audit finding now have route-level tests, plus `lib/dispatch-lifecycle.ts` (Phase 23.2 core path) has direct tests:
+- `lib/dispatch-lifecycle.test.ts` (7 tests) — queued/started/failed transitions, idempotencyKey uniqueness, expectedBy honoring.
+- `app/api/projects/launch/route.test.ts` (7 tests) — validation 400s, happy path, defaults, error surfaces.
+- `app/api/projects/[slug]/dispatch/route.test.ts` (8 tests) — mode validation, slug 404, happy path with activity event + currentRequest write, rate-limit, custom-mode prompt threading.
+- `app/api/dispatch/team/route.test.ts` (7 tests) — items validation, mode filter, happy path, rate-limit, Windows-error surfacing, 500 fallthrough.
+- `app/api/webhook/session-complete/route.test.ts` (7 tests) — validation 400s, project-not-found writes orphan event (returns 200 by design), idempotency-key happy path + dedupe, legacy fallback.
+
+36 new tests, suite at 1026 passing / 6 skipped / 0 failing. Residual gaps (overseer/chat, overseer-chat.tsx, 32 other routes) tracked above for opportunistic follow-up.
 
 ### [30.D3] Documentation drift across 3 of 4 references — RESOLVED 2026-06-09 (Phase 32)
 - `references/schema.md`: added Phase 23.2 `Dispatch`, Phase 11.3 `FeatureProposal`, Phase 24.2 `ToolCallEvent`, Phase 23.3 `AnthropicUsageEvent`. Updated `Project` with 5 new fields (`businessStage`, `projectContext`, `completionCriteria`, `badges`, `deadline`) and 5 new relations. Added Phase 31 index notes on `Project`, `ActivityEvent`, `ChatMessage`, `HumanTask`. Added `DispatchOutcome.dispatchId`, `ChatSession.compressedHistory`, `UpstreamFeature.proposals` relation.
