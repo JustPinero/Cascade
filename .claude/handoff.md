@@ -1,4 +1,26 @@
 # Session Handoff — Kilroy
+Date: 2026-06-09 — Phase 32 complete (drift reconciliation)
+
+Closed audit finding **[30.D3]** — references are aligned with code again.
+
+- **`references/schema.md`** — added the 4 missing models (`Dispatch`, `FeatureProposal`, `ToolCallEvent`, `AnthropicUsageEvent`), the 5 new `Project` fields, the new relations, and Phase 31 index notes across the board.
+- **`references/api-contracts.md`** — full rewrite via a parallel agent. 58 entries across 12 groups; every route under `app/api/**/route.ts` covered with method + request + response shape.
+- **`references/env-vars.md`** — documented all 5 missing vars (`CASCADE_DISPATCH_ID`, `CASCADE_MAX_CONCURRENT_SUBAGENTS`, `NODE_OPTIONS`, `CASCADE_PORT`, `ANTHROPIC_FEATURE_SOURCES`) plus a Runtime-set section.
+- **`references/architecture.md`** — dispatch diagram updated for Phase 29 multi-pane wt; decision #7 now mentions `<PlatformBadge />`; added decisions #12 (FeatureProposal persistence), #13 (vitest source-map patch), #14 (hot-path indexes).
+
+Suite still 990 passing / 6 skipped / 0 failing (doc-only changes).
+
+## Still open from the audit
+
+- **[30.D2]** HTTP-boundary test gap — Phase 33 next. 2/41 routes have route-level tests. Top-5: `webhook/session-complete`, `overseer/chat`, `dispatch/team`, `projects/[slug]/dispatch`, `projects/launch`. Pattern from `app/api/overseer/session-state/route.test.ts` is reusable.
+
+## State
+
+- Local + origin main: `a616105` (Phase 31); Phase 32 (this commit) pending merge.
+- Branch `phase-32-drift-reconciliation` ready to merge.
+
+---
+
 Date: 2026-06-09 — Phase 31 complete (security + perf + cleanup)
 
 Closed five of the seven new debt items from the 2026-06-09 audit in one focused commit:
