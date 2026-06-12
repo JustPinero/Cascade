@@ -32,6 +32,15 @@ Phase 33 closed the top-5 priority routes from the original [30.D2] finding. Pha
 - 32 remaining routes are lower blast-radius (reads, simple CRUD). Tackle opportunistically when touching them for other reasons.
 
 
+### [36.A1] Queue-slot release depends entirely on the Stop-hook webhook
+Slots are held for the whole session lifetime and keyed by `project.path` (byte-match required with the hook's `projectPath`; same-project dispatches collide). A missing Stop hook pins a slot until the watchdog deadline — on concurrency-1 boxes the fleet wedges. Full analysis + recommended fix (release-on-spawn, key by `idempotencyKey`): `audits/design-review-2026-06-11.md` [36.A1]. Candidate **Phase 37 / P1**.
+
+### [36.A5] Overseer chat history persisted client-side, droppable mid-stream
+Two fire-and-forget POSTs from the component; route persists nothing; closing the tab loses the assistant turn after server-side effects already fired. See design-review [36.A5]. Fix: persist server-side in the chat route.
+
+### [36.A7] dispatchClaude lacks the readiness gate batch dispatch enforces
+Blocked on dispatch-rig support for real temp project dirs (rig uses synthetic `/p/alpha` paths that would fail an fs readiness check). See design-review [36.A7].
+
 ## Resolved
 
 ### [30.D2] HTTP-boundary test gap (top-5 routes) — RESOLVED 2026-06-09 (Phase 33)
