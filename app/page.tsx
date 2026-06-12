@@ -7,6 +7,7 @@ import { ScanButton } from "./components/scan-button";
 import { MorningBriefing } from "./components/morning-briefing";
 import { PlatformBadge } from "./components/platform-badge";
 import { FleetStatusStrip } from "./components/fleet-status-strip";
+import { CostWidget } from "./components/cost-widget";
 import { ProjectGrid } from "./components/project-grid";
 import {
   DashboardFilters,
@@ -256,6 +257,7 @@ function DashboardContent() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <CostWidget />
           <FleetStatusStrip />
           <PlatformBadge />
           <ScanButton
