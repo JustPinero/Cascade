@@ -11,7 +11,9 @@ Cascade's Overseer reasons about dispatch decisions in a single forward pass wit
 | Claude Sonnet 4.5 | ✅ Supported | ✅ Supported |
 | Claude Haiku 4.5 | ⚠️ Limited / use adaptive | ✅ Supported |
 
-Cascade is on Sonnet 4.6. **Use adaptive thinking, not manual `thinking: { type: "enabled", budget_tokens: N }`.** Adaptive thinking lets the model decide when reasoning helps and how much budget to spend, with no client-side parameter.
+Cascade is on Sonnet 4.6. **Use adaptive thinking, not manual `thinking: { type: "enabled", budget_tokens: N }`.** Adaptive thinking lets the model decide when reasoning helps and how much budget to spend.
+
+> **Correction (Phase 36, 2026-06-11):** adaptive thinking is **not** automatic on Sonnet 4.6 — the request must explicitly carry `thinking: { "type": "adaptive" }` or the model runs without thinking entirely. (Only Fable 5 has always-on thinking.) Phase 25 shipped the ThinkingBlock round-trip but never sent the param, so the Overseer never actually thought. `runToolUseLoop` now sends it on every request. Note: thinking tokens count toward `max_tokens`, which is why the loop default was raised from 2048 to 16000 at the same time.
 
 If you want a hard guarantee that the model thinks (manual budget), the option is to switch the dispatch-reasoning turn specifically to Sonnet 4.5 with `thinking: enabled`, but that introduces a model split in the codebase. For Phase 25 the simpler path is adaptive on Sonnet 4.6 — measure quality, escalate to manual+4.5 only if adaptive doesn't deliver.
 
@@ -148,8 +150,8 @@ The dispatch-decision turn is the natural place for thinking. The signal: when t
 
 Two clean implementation paths:
 
-**Path A — Adaptive thinking on Sonnet 4.6 (recommended):**
-- No client-side parameter changes. Sonnet 4.6 reasons internally before tool calls automatically.
+**Path A — Adaptive thinking on Sonnet 4.6 (recommended, shipped in Phase 36):**
+- Send `thinking: { "type": "adaptive" }` on every request (done in `runToolUseLoop`). It is NOT implicit on Sonnet 4.6.
 - Thinking blocks (or signatures) appear in `response.content`. `runToolUseLoop` widens `ContentBlock` to include them; pass-through preserves them.
 - Cost: thinking tokens are billed but not exposed.
 - The benefit shows up as better proposals; instrument outcome quality (Phase 24's `query_outcome_history` data) to validate.

@@ -144,4 +144,50 @@ describe("thinking block round-trip", () => {
     expect(result.finalText).toBe("answer");
     expect(result.finalText).not.toContain("internal");
   });
+
+  // Phase 36 — adaptive thinking must be requested explicitly. Sonnet
+  // 4.6 does NOT think when the param is omitted; Phase 25 shipped the
+  // round-trip handling but never sent the param.
+  it("sends thinking: adaptive and a 16K max_tokens on every request", async () => {
+    const reg = new ToolRegistry();
+    const captured: Array<Parameters<AnthropicCaller>[0]> = [];
+    const caller: AnthropicCaller = async (params) => {
+      captured.push(params);
+      return TEXT_FINAL;
+    };
+
+    await runToolUseLoop({
+      caller,
+      model: "claude-sonnet-4-6",
+      systemPrompt: "x",
+      messages: [{ role: "user", content: "hi" }],
+      registry: reg,
+      ctx: { prisma: {} as never },
+    });
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0].thinking).toEqual({ type: "adaptive" });
+    expect(captured[0].max_tokens).toBe(16000);
+  });
+
+  it("caller-provided maxTokens overrides the default", async () => {
+    const reg = new ToolRegistry();
+    const captured: Array<Parameters<AnthropicCaller>[0]> = [];
+    const caller: AnthropicCaller = async (params) => {
+      captured.push(params);
+      return TEXT_FINAL;
+    };
+
+    await runToolUseLoop({
+      caller,
+      model: "claude-sonnet-4-6",
+      systemPrompt: "x",
+      messages: [{ role: "user", content: "hi" }],
+      registry: reg,
+      ctx: { prisma: {} as never },
+      maxTokens: 4096,
+    });
+
+    expect(captured[0].max_tokens).toBe(4096);
+  });
 });

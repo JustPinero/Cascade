@@ -98,12 +98,22 @@ export type SystemBlock =
       cache_control?: CacheControl;
     }>;
 
+/**
+ * Phase 36 — adaptive thinking config. On Sonnet 4.6 adaptive thinking
+ * is NOT automatic: the request must carry `thinking: {type:"adaptive"}`
+ * or the model runs without thinking. (Phase 25 assumed it was implicit
+ * — it isn't; this closes that gap.) `budget_tokens` is deprecated on
+ * 4.6-family models and intentionally not modeled here.
+ */
+export type ThinkingConfig = { type: "adaptive" };
+
 export interface AnthropicMessageParams {
   model: string;
   system: SystemBlock;
   messages: AnthropicMessage[];
   tools: AnthropicToolDefinition[];
   max_tokens?: number;
+  thinking?: ThinkingConfig;
 }
 
 export interface AnthropicMessageResponse {
@@ -253,7 +263,11 @@ export async function runToolUseLoop(
     registry,
     ctx,
     maxIterations = 8,
-    maxTokens = 2048,
+    // Phase 36 — was 2048, which adaptive thinking can eat entirely
+    // (thinking tokens count toward max_tokens), truncating the visible
+    // reply. 16K is the recommended non-streaming ceiling; cost only
+    // accrues for tokens actually generated.
+    maxTokens = 16000,
     signal,
   } = params;
 
@@ -276,6 +290,10 @@ export async function runToolUseLoop(
         messages: [...messages],
         tools: registry.toAnthropicTools(),
         max_tokens: maxTokens,
+        // Phase 36 — explicitly enable adaptive thinking. Without this
+        // param Sonnet 4.6 never thinks; the ThinkingBlock round-trip
+        // below has been ready since Phase 25.1.
+        thinking: { type: "adaptive" },
       },
       { signal }
     );
