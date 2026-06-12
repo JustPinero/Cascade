@@ -25,6 +25,18 @@ import { auditProjectFeatureUsage } from "@/lib/anthropic-feature-check";
 import path from "path";
 
 /**
+ * Map escalation signal types to a DispatchOutcome.outcome value.
+ * Shared by the Dispatch-row path and the legacy fallback so the two
+ * can never drift.
+ */
+function deriveOutcome(signalTypes: string[]): string {
+  if (signalTypes.includes("needs-attention")) return "attention-needed";
+  if (signalTypes.includes("test-failure")) return "test-failure";
+  if (signalTypes.includes("human-todo")) return "blocker";
+  return "success";
+}
+
+/**
  * POST /api/webhook/session-complete
  *
  * Receives a ping from a Claude Code Stop hook when a session ends.
@@ -186,10 +198,7 @@ export async function POST(request: NextRequest) {
       let outcomeWritten = false;
       if (dispatch) {
         try {
-          let outcome = "success";
-          if (signalTypes.includes("needs-attention")) outcome = "attention-needed";
-          else if (signalTypes.includes("test-failure")) outcome = "test-failure";
-          else if (signalTypes.includes("human-todo")) outcome = "blocker";
+          const outcome = deriveOutcome(signalTypes);
 
           await prisma.dispatchOutcome.create({
             data: {
@@ -232,10 +241,7 @@ export async function POST(request: NextRequest) {
           } catch {
             // ignore parse error
           }
-          let outcome = "success";
-          if (signalTypes.includes("needs-attention")) outcome = "attention-needed";
-          else if (signalTypes.includes("test-failure")) outcome = "test-failure";
-          else if (signalTypes.includes("human-todo")) outcome = "blocker";
+          const outcome = deriveOutcome(signalTypes);
 
           try {
             await prisma.dispatchOutcome.create({

@@ -12,6 +12,16 @@ import { enqueueWithDispatchRow } from "./dispatch-lifecycle";
 
 export type DispatchMode = "continue" | "audit" | "investigate" | "custom";
 
+/**
+ * Every dispatched session runs headless with permission prompts
+ * disabled — a deliberate local-first tradeoff; `isInsideProjectsDir`
+ * is the trust boundary. Single greppable definition so the security
+ * posture is visible in one place. Note: `Project.autonomyMode`
+ * (full/semi/manual) is stored but not yet consulted on this path —
+ * see audits/design-review-2026-06-11.md.
+ */
+const SKIP_PERMISSIONS_ENV = "CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true";
+
 export interface DispatchResult {
   success: boolean;
   projectName: string;
@@ -364,7 +374,7 @@ export async function dispatchClaude(
     fsSync.writeFileSync(tmpFile, prompt, "utf-8");
 
     const escapedPath = project.path.replace(/'/g, "'\\''");
-    const cmd = `cd '${escapedPath}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
+    const cmd = `cd '${escapedPath}' && ${SKIP_PERMISSIONS_ENV} claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
 
     const result = await enqueueWithDispatchRow(prisma, {
       project,
@@ -442,7 +452,7 @@ function buildProjectCmd(projectPath: string, prompt: string, index: number): st
   );
   fsSync.writeFileSync(tmpFile, prompt, "utf-8");
   const escapedPath = projectPath.replace(/'/g, "'\\''");
-  return `cd '${escapedPath}' && CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
+  return `cd '${escapedPath}' && ${SKIP_PERMISSIONS_ENV} claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
 }
 
 /**
@@ -1037,7 +1047,7 @@ Begin by spawning the team.`;
   fsSync.writeFileSync(tmpFile, sprintPrompt, "utf-8");
 
   try {
-    const cmd = `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true claude --teammate-mode tmux "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
+    const cmd = `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 ${SKIP_PERMISSIONS_ENV} claude --teammate-mode tmux "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
 
     // P0.2 v1 — anchor the lead's Dispatch row to the first known
     // project in the batch. The lead spawn carries CASCADE_DISPATCH_ID
