@@ -133,6 +133,11 @@ describe("DispatchQueue", () => {
     expect(queue.size()).toEqual({ running: 0, pending: 0 });
   });
 
+  // Phase 38 [P2] — the status endpoint reports cap alongside size().
+  it("exposes its capacity", () => {
+    expect(new DispatchQueue(3).capacity()).toBe(3);
+  });
+
   it("running count decreases on release with nothing pending", async () => {
     const queue = new DispatchQueue(2);
     const dispatch = vi.fn().mockResolvedValue(undefined);

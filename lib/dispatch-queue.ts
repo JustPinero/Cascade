@@ -73,6 +73,11 @@ export class DispatchQueue {
     return { running: this.running.size, pending: this.pending.length };
   }
 
+  /** Phase 38 — concurrency cap, reported by /api/dispatch/status. */
+  capacity(): number {
+    return this.cap;
+  }
+
   private drain(): void {
     while (this.running.size < this.cap && this.pending.length > 0) {
       const next = this.pending.shift()!;

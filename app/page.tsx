@@ -6,6 +6,7 @@ import { requestNotificationPermission } from "@/lib/notify";
 import { ScanButton } from "./components/scan-button";
 import { MorningBriefing } from "./components/morning-briefing";
 import { PlatformBadge } from "./components/platform-badge";
+import { FleetStatusStrip } from "./components/fleet-status-strip";
 import { ProjectGrid } from "./components/project-grid";
 import {
   DashboardFilters,
@@ -255,6 +256,7 @@ function DashboardContent() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <FleetStatusStrip />
           <PlatformBadge />
           <ScanButton
             onScanComplete={() => setRefreshKey((k) => k + 1)}
