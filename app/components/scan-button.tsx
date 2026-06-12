@@ -39,6 +39,7 @@ export function ScanButton({ onScanComplete }: ScanButtonProps) {
       <button
         onClick={handleScan}
         disabled={scanning}
+        title="Re-scan your projects directory for changes"
         className={`
           px-4 py-2 text-sm font-mono uppercase tracking-wider
           border transition-all duration-150
