@@ -15,10 +15,6 @@ Phase 23.2's lifecycle migration intentionally skipped `dispatchTeam`. The lead/
 23.7's escalation-detector corpus is 35 synthetic logs. A future slice can sanitize 5-10 real session logs from Justin's fleet to catch patterns the synthetic corpus misses (regex over-matches, novel phrasing).
 - **Action when desirable:** copy real logs from `~/projects/*/.claude/sessions/`, sanitize project names + paths, add to `evals/scenarios/escalation-signals/<subdir>/` with hand-labeled `expected.json`.
 
-### [23.D5] Watchdog scheduling
-`runDispatchWatchdog(prisma, queue)` is callable but not yet wired into a Next.js cron or scheduled script. Tests invoke it directly; production needs periodic invocation (e.g. every 5 min) to actually time out hung dispatches.
-- **Action:** add to a scheduled-task runner (sibling to `scripts/run-team-stall-scan.ts`) or expose via an admin route that an external cron hits.
-
 ### [23.D6] Legacy webhook fallback removal
 The webhook still falls back to "find latest session-launched activity event" when an idempotencyKey is unknown. Once production telemetry shows zero `orphaned-webhook` activity events for a sustained window, remove the fallback path from `app/api/webhook/session-complete/route.ts`.
 
@@ -32,9 +28,6 @@ Phase 33 closed the top-5 priority routes from the original [30.D2] finding. Pha
 - 32 remaining routes are lower blast-radius (reads, simple CRUD). Tackle opportunistically when touching them for other reasons.
 
 
-### [36.A1] Queue-slot release depends entirely on the Stop-hook webhook
-Slots are held for the whole session lifetime and keyed by `project.path` (byte-match required with the hook's `projectPath`; same-project dispatches collide). A missing Stop hook pins a slot until the watchdog deadline — on concurrency-1 boxes the fleet wedges. Full analysis + recommended fix (release-on-spawn, key by `idempotencyKey`): `audits/design-review-2026-06-11.md` [36.A1]. Candidate **Phase 37 / P1**.
-
 ### [36.A5] Overseer chat history persisted client-side, droppable mid-stream
 Two fire-and-forget POSTs from the component; route persists nothing; closing the tab loses the assistant turn after server-side effects already fired. See design-review [36.A5]. Fix: persist server-side in the chat route.
 
@@ -42,6 +35,12 @@ Two fire-and-forget POSTs from the component; route persists nothing; closing th
 Blocked on dispatch-rig support for real temp project dirs (rig uses synthetic `/p/alpha` paths that would fail an fs readiness check). See design-review [36.A7].
 
 ## Resolved
+
+### [23.D5] Watchdog scheduling — RESOLVED 2026-06-11 (Phase 35)
+`instrumentation.ts` starts the watchdog on a 5-minute in-process interval at server boot (`lib/dispatch-watchdog-runtime.ts`); the `predev` npm script sweeps once before `next dev`. Singleton-guarded across HMR; NODE_ENV=test no-op.
+
+### [36.A1] Queue-slot release keyed by project.path — RESOLVED 2026-06-11 (Phase 37)
+Queue jobs are now keyed by the Dispatch `idempotencyKey`: same-project dispatches hold distinct slots, and webhook/watchdog releases can't miss on path byte-differences. Key-less (legacy) hooks release the newest in-flight row's key as a fallback. Boot reconciliation (`reconcileOrphanedDispatches`) fails rows still `queued` at process start ([36.A2]). Deliberately NOT changed: a slot is still held for the session's lifetime — release-on-spawn would redefine what concurrency means (launch-rate vs running-sessions) and is a product decision; revisit if wanted.
 
 ### [30.D2] HTTP-boundary test gap (top-5 routes) — RESOLVED 2026-06-09 (Phase 33)
 Top-5 mutating routes from the original audit finding now have route-level tests, plus `lib/dispatch-lifecycle.ts` (Phase 23.2 core path) has direct tests:

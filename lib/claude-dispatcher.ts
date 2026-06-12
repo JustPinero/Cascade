@@ -22,6 +22,28 @@ export type DispatchMode = "continue" | "audit" | "investigate" | "custom";
  */
 const SKIP_PERMISSIONS_ENV = "CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true";
 
+/**
+ * Single-quote a value for POSIX shells (Git Bash on Windows too):
+ * close the quote, emit an escaped literal quote, reopen.
+ */
+function singleQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+/**
+ * Render `KEY='val' KEY2='val2' ` for inline env injection ahead of a
+ * shell command. Empty string when no env is supplied. [36.C1] — was
+ * copy-pasted in three launch paths; quoting bugs hide in duplicates.
+ */
+function shellEnvPrefix(extraEnv?: Record<string, string>): string {
+  if (!extraEnv) return "";
+  return (
+    Object.entries(extraEnv)
+      .map(([k, v]) => `${k}=${singleQuote(String(v))}`)
+      .join(" ") + " "
+  );
+}
+
 export interface DispatchResult {
   success: boolean;
   projectName: string;
@@ -233,12 +255,7 @@ function launchInTerminal(
   extraEnv?: Record<string, string>
 ): void {
   const platform = detectPlatform();
-  const envPrefix = extraEnv
-    ? Object.entries(extraEnv)
-        .map(([k, v]) => `${k}='${String(v).replace(/'/g, "'\\''")}'`)
-        .join(" ") + " "
-    : "";
-  const cmdWithEnv = envPrefix + cmd;
+  const cmdWithEnv = shellEnvPrefix(extraEnv) + cmd;
 
   if (platform === "macos") {
     const script = fullscreen
@@ -373,8 +390,7 @@ export async function dispatchClaude(
     const tmpFile = path.join(os.tmpdir(), `cascade-prompt-${Date.now()}.txt`);
     fsSync.writeFileSync(tmpFile, prompt, "utf-8");
 
-    const escapedPath = project.path.replace(/'/g, "'\\''");
-    const cmd = `cd '${escapedPath}' && ${SKIP_PERMISSIONS_ENV} claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
+    const cmd = `cd ${singleQuote(project.path)} && ${SKIP_PERMISSIONS_ENV} claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
 
     const result = await enqueueWithDispatchRow(prisma, {
       project,
@@ -451,8 +467,7 @@ function buildProjectCmd(projectPath: string, prompt: string, index: number): st
     `cascade-prompt-${Date.now()}-${index}.txt`
   );
   fsSync.writeFileSync(tmpFile, prompt, "utf-8");
-  const escapedPath = projectPath.replace(/'/g, "'\\''");
-  return `cd '${escapedPath}' && ${SKIP_PERMISSIONS_ENV} claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
+  return `cd ${singleQuote(projectPath)} && ${SKIP_PERMISSIONS_ENV} claude "$(cat '${tmpFile}')" ; rm -f '${tmpFile}'`;
 }
 
 /**
@@ -543,12 +558,7 @@ function launchInPane(
   cmd: string,
   extraEnv?: Record<string, string>
 ): void {
-  const envPrefix = extraEnv
-    ? Object.entries(extraEnv)
-        .map(([k, v]) => `${k}='${String(v).replace(/'/g, "'\\''")}'`)
-        .join(" ") + " "
-    : "";
-  const wrapped = wrapCommand(envPrefix + cmd);
+  const wrapped = wrapCommand(shellEnvPrefix(extraEnv) + cmd);
   execSync(
     `tmux respawn-pane -k -t ${target} '${escapeForTmux(wrapped)}'`,
     { stdio: "pipe" }
@@ -597,12 +607,7 @@ function launchInWtBatch(
   cmd: string,
   extraEnv?: Record<string, string>
 ): void {
-  const envPrefix = extraEnv
-    ? Object.entries(extraEnv)
-        .map(([k, v]) => `${k}='${String(v).replace(/'/g, "'\\''")}'`)
-        .join(" ") + " "
-    : "";
-  const cmdWithEnv = envPrefix + cmd;
+  const cmdWithEnv = shellEnvPrefix(extraEnv) + cmd;
   const title = extractWtTitle(cmd);
   const child = spawn(
     "wt.exe",

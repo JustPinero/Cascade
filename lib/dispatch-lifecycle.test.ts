@@ -230,3 +230,50 @@ describe("enqueueWithDispatchRow", () => {
     expect(expectedByMs).toBeLessThan(before + 20 * 60 * 1000);
   });
 });
+
+// Phase 37 [36.A1] — queue slots are keyed by the Dispatch row's
+// idempotencyKey. Path-keying meant a release could silently miss on
+// byte differences (casing/separators between project.path and the
+// Stop hook's projectPath) and same-project dispatches collided in the
+// running Set.
+describe("enqueueWithDispatchRow — queue keying (Phase 37)", () => {
+  it("keys the queue job by the Dispatch idempotencyKey, not project.path", async () => {
+    rig = await createDispatchRig({ concurrency: 1, fakeTimers: false });
+    const project = await rig.createProject({ slug: "hotel", path: "/p/hotel" });
+    const enqueueSpy = vi.spyOn(rig.queue, "enqueue");
+
+    const result = await enqueueWithDispatchRow(rig.prisma, {
+      project,
+      mode: "continue",
+      spawnFn: async () => undefined,
+    });
+
+    expect(enqueueSpy).toHaveBeenCalledTimes(1);
+    expect(enqueueSpy.mock.calls[0][0].id).toBe(result.idempotencyKey);
+    expect(enqueueSpy.mock.calls[0][0].id).not.toBe("/p/hotel");
+  });
+
+  it("two dispatches of the same project hold two distinct slots", async () => {
+    rig = await createDispatchRig({ concurrency: 2, fakeTimers: false });
+    const project = await rig.createProject({ slug: "india", path: "/p/india" });
+
+    const r1 = await enqueueWithDispatchRow(rig.prisma, {
+      project,
+      mode: "continue",
+      spawnFn: async () => undefined,
+    });
+    const r2 = await enqueueWithDispatchRow(rig.prisma, {
+      project,
+      mode: "audit",
+      spawnFn: async () => undefined,
+    });
+
+    // Path-keyed, the Set deduped both jobs onto one slot and the cap
+    // was silently wrong. Key-keyed, each in-flight session owns one.
+    expect(rig.queue.size().running).toBe(2);
+    rig.queue.release(r1.idempotencyKey);
+    expect(rig.queue.size().running).toBe(1);
+    rig.queue.release(r2.idempotencyKey);
+    expect(rig.queue.size().running).toBe(0);
+  });
+});

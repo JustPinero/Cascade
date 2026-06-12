@@ -78,13 +78,28 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Release the queue slot keyed by projectPath. Best-effort: if no
-    // matching slot exists this is a no-op.
-    getDispatchQueue().release(projectPath);
-
     // Resolve the project slug from the path
     const projectName = path.basename(projectPath);
     const slug = toSlug(projectName);
+
+    // Phase 37 [36.A1] — queue slots are keyed by idempotencyKey.
+    // Release the matched row's key; a key-less (legacy) hook falls
+    // back to the newest in-flight row for the project, plus the
+    // pre-37 projectPath key for transition safety. Best-effort: a
+    // release with no matching slot is a no-op.
+    const queue = getDispatchQueue();
+    if (dispatch) {
+      queue.release(dispatch.idempotencyKey);
+    } else {
+      queue.release(projectPath);
+      const latestInFlight = await prisma.dispatch.findFirst({
+        where: { projectSlug: slug, status: { in: ["queued", "started"] } },
+        orderBy: { enqueuedAt: "desc" },
+      });
+      if (latestInFlight) {
+        queue.release(latestInFlight.idempotencyKey);
+      }
+    }
 
     // Run a targeted scan of just this project. Independent of the
     // Dispatch transition — even if this throws we still complete the

@@ -199,6 +199,26 @@ describe("computeProgress", () => {
       expect(result.tests.score).toBeLessThanOrEqual(25);
     });
 
+    // Phase 37 quick win [36.A3] — build artifacts often contain
+    // copied/bundled .test files; counting them inflates the score and
+    // slows the walk on every scan.
+    it("ignores test files in build-artifact dirs (dist, build, coverage, out)", async () => {
+      const dir = await createPhasedProject("artifact-dirs", {
+        "phase-1-foundation": ["1.1-scaffold.md"],
+      }, {
+        testFiles: [
+          "lib/real.test.ts",
+          "dist/bundled.test.js",
+          "build/copy.test.ts",
+          "coverage/instrumented.test.ts",
+          "out/export.test.tsx",
+        ],
+      });
+
+      const result = await computeProgress(dir, "phase-1-foundation", null);
+      expect(result.tests.fileCount).toBe(1);
+    });
+
     it("caps test score at 25", async () => {
       const testFiles = Array.from({ length: 30 }, (_, i) => `lib/test-${i}.test.ts`);
       const dir = await createPhasedProject("many-tests", {

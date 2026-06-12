@@ -21,7 +21,10 @@
  * crash the dev server because of a transient DB failure.
  */
 import { prisma } from "./db";
-import { runDispatchWatchdog } from "./dispatch-watchdog";
+import {
+  runDispatchWatchdog,
+  reconcileOrphanedDispatches,
+} from "./dispatch-watchdog";
 import { getDispatchQueue } from "./dispatch-queue";
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
@@ -51,10 +54,30 @@ export function startDispatchWatchdog(
 
   const intervalMs = opts.intervalMs ?? DEFAULT_INTERVAL_MS;
 
-  // Fire once immediately so a freshly-booted server cleans up any
-  // pre-existing expired rows. Then start the recurring tick.
-  void tick();
+  // Phase 37 [36.A2] — reconcile rows orphaned by the previous process
+  // once at boot, then fire an immediate tick so a freshly-booted
+  // server also cleans up expired rows. Then the recurring tick.
+  void (async () => {
+    await reconcileAtBoot();
+    await tick();
+  })();
   slot[GLOBAL_KEY] = setInterval(() => void tick(), intervalMs);
+}
+
+async function reconcileAtBoot(): Promise<void> {
+  try {
+    const result = await reconcileOrphanedDispatches(prisma);
+    if (result.orphaned > 0) {
+      console.log(
+        `[dispatch-watchdog] failed ${result.orphaned} dispatch(es) orphaned by restart: ${result.keys
+          .slice(0, 5)
+          .join(", ")}${result.keys.length > 5 ? ", …" : ""}`
+      );
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[dispatch-watchdog] boot reconciliation failed: ${message}`);
+  }
 }
 
 async function tick(): Promise<void> {

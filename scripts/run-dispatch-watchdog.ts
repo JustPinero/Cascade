@@ -18,10 +18,21 @@ dotenv.config(); // fallback to .env
 
 import { prisma } from "@/lib/db";
 import { getDispatchQueue } from "@/lib/dispatch-queue";
-import { runDispatchWatchdog } from "@/lib/dispatch-watchdog";
+import {
+  runDispatchWatchdog,
+  reconcileOrphanedDispatches,
+} from "@/lib/dispatch-watchdog";
 
 async function main(): Promise<void> {
   try {
+    // Phase 37 [36.A2] — this script runs before the dev server, so
+    // any queued row it sees was orphaned by a previous process.
+    const reconciled = await reconcileOrphanedDispatches(prisma);
+    if (reconciled.orphaned > 0) {
+      console.log(
+        `[dispatch-watchdog] failed ${reconciled.orphaned} dispatch(es) orphaned by restart`
+      );
+    }
     const result = await runDispatchWatchdog(prisma, getDispatchQueue());
     if (result.timedOut > 0) {
       console.log(

@@ -3,8 +3,8 @@
  *
  * dispatchClaude takes a prisma client + project context now and
  * routes through enqueueWithDispatchRow. These tests confirm the
- * basic queue contract: a row is enqueued at the projectPath id,
- * invalid paths are rejected pre-write.
+ * basic queue contract: a job is enqueued keyed by the Dispatch
+ * idempotencyKey (Phase 37), invalid paths are rejected pre-write.
  *
  * Lifecycle assertions (queued → started → failed transitions, env
  * passthrough) live in claude-dispatcher.lifecycle.test.ts.
@@ -44,7 +44,7 @@ afterEach(async () => {
 });
 
 describe("dispatchClaude — queue integration", () => {
-  it("routes through the singleton dispatch queue with projectPath as id", async () => {
+  it("routes through the singleton dispatch queue keyed by idempotencyKey", async () => {
     rig = await createDispatchRig({ concurrency: 1, fakeTimers: false });
     vi.mocked(isInsideProjectsDir).mockReturnValue(true);
     const project = await rig.createProject({
@@ -63,7 +63,8 @@ describe("dispatchClaude — queue integration", () => {
     expect(result.idempotencyKey).toBeTruthy();
     expect(result.dispatchId).toBeTruthy();
     expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy.mock.calls[0][0].id).toBe("/some/project/path");
+    // Phase 37 [36.A1] — jobs are keyed by idempotencyKey, not path.
+    expect(spy.mock.calls[0][0].id).toBe(result.idempotencyKey);
   });
 
   it("returns failure without enqueueing when path is outside projects dir", async () => {

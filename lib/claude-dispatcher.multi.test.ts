@@ -84,12 +84,17 @@ describe("multi-project dispatch — queue integration", () => {
     await dispatchAll(rig.prisma as unknown as DispatcherPrisma, "continue");
 
     expect(spy).toHaveBeenCalledTimes(3);
-    const ids = spy.mock.calls.map((c) => c[0].id);
-    expect(ids).toEqual(["/p/alpha", "/p/beta", "/p/gamma"]);
 
     // Phase 23.2 — every ready project gets its own Dispatch row.
     const dispatches = await rig.getDispatches();
     expect(dispatches).toHaveLength(3);
+
+    // Phase 37 [36.A1] — each job is keyed by its row's idempotencyKey.
+    const ids = spy.mock.calls.map((c) => c[0].id);
+    const keyBySlug = Object.fromEntries(
+      dispatches.map((d) => [d.projectSlug, d.idempotencyKey])
+    );
+    expect(ids).toEqual([keyBySlug.alpha, keyBySlug.beta, keyBySlug.gamma]);
     expect(dispatches.map((d) => d.projectSlug).sort()).toEqual([
       "alpha",
       "beta",
@@ -114,11 +119,16 @@ describe("multi-project dispatch — queue integration", () => {
     ]);
 
     expect(spy).toHaveBeenCalledTimes(2);
-    const ids = spy.mock.calls.map((c) => c[0].id);
-    expect(ids).toEqual(["/p/alpha", "/p/beta"]);
 
     const dispatches = await rig.getDispatches();
     expect(dispatches).toHaveLength(2);
+
+    // Phase 37 [36.A1] — jobs keyed by idempotencyKey.
+    const ids = spy.mock.calls.map((c) => c[0].id);
+    const keyBySlug = Object.fromEntries(
+      dispatches.map((d) => [d.projectSlug, d.idempotencyKey])
+    );
+    expect(ids).toEqual([keyBySlug.alpha, keyBySlug.beta]);
     // Per-project mode is preserved on each Dispatch row.
     const byMode = Object.fromEntries(
       dispatches.map((d) => [d.projectSlug, d.mode])

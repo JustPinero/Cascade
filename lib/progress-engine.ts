@@ -157,7 +157,17 @@ async function scoreFlatRequests(
 
 /**
  * Count test files recursively in a project directory.
+ * Skips dependency and build-artifact dirs — bundled/copied .test
+ * files in dist/ etc. would inflate the score and slow every scan.
  */
+const SKIPPED_WALK_DIRS = new Set([
+  "node_modules",
+  "dist",
+  "build",
+  "coverage",
+  "out",
+]);
+
 async function countTestFiles(projectPath: string): Promise<number> {
   let count = 0;
 
@@ -165,7 +175,7 @@ async function countTestFiles(projectPath: string): Promise<number> {
     try {
       const entries = await fs.readdir(dir, { withFileTypes: true });
       for (const entry of entries) {
-        if (entry.name === "node_modules" || entry.name.startsWith(".")) {
+        if (SKIPPED_WALK_DIRS.has(entry.name) || entry.name.startsWith(".")) {
           continue;
         }
         const fullPath = path.join(dir, entry.name);

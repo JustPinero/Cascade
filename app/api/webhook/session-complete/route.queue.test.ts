@@ -5,6 +5,12 @@ vi.mock("@/lib/db", () => ({
     project: {
       findUnique: vi.fn().mockResolvedValue(null),
     },
+    // Phase 37 — the legacy (key-less) release path looks up the
+    // newest in-flight Dispatch row for the slug.
+    dispatch: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
     activityEvent: {
       create: vi.fn().mockResolvedValue({}),
       findFirst: vi.fn().mockResolvedValue(null),

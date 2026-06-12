@@ -63,7 +63,11 @@ export async function enqueueWithDispatchRow(
 
   const queue = getDispatchQueue();
   await queue.enqueue({
-    id: spec.project.path,
+    // Phase 37 [36.A1] — keyed by idempotencyKey, not project.path.
+    // Path keys collided for same-project dispatches (the running Set
+    // deduped them) and releases missed on byte differences between
+    // project.path and the Stop hook's projectPath.
+    id: dispatch.idempotencyKey,
     dispatch: async () => {
       // started transition — separate update so observers see the
       // queued → started edge cleanly.

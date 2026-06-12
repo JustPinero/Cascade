@@ -11,6 +11,8 @@ const mockActivityEventCreate = vi.fn();
 const mockActivityEventFindFirst = vi.fn();
 const mockHumanTaskCreate = vi.fn();
 const mockDispatchOutcomeCreate = vi.fn();
+const mockDispatchFindUnique = vi.fn();
+const mockDispatchFindFirst = vi.fn();
 
 vi.mock("@/lib/anthropic-feature-check", () => ({
   auditProjectFeatureUsage: (...a: unknown[]) =>
@@ -27,6 +29,12 @@ vi.mock("@/lib/db", () => ({
     humanTask: { create: (...a: unknown[]) => mockHumanTaskCreate(...a) },
     dispatchOutcome: {
       create: (...a: unknown[]) => mockDispatchOutcomeCreate(...a),
+    },
+    // Phase 37 — key-less hooks look up the newest in-flight Dispatch
+    // row to release its queue slot.
+    dispatch: {
+      findUnique: (...a: unknown[]) => mockDispatchFindUnique(...a),
+      findFirst: (...a: unknown[]) => mockDispatchFindFirst(...a),
     },
   },
 }));
@@ -63,6 +71,8 @@ beforeEach(() => {
   mockProjectFindUnique.mockResolvedValue({ id: 42, slug: "demo", health: "healthy" });
   mockActivityEventCreate.mockResolvedValue({ id: 1 });
   mockActivityEventFindFirst.mockResolvedValue(null);
+  mockDispatchFindUnique.mockResolvedValue(null);
+  mockDispatchFindFirst.mockResolvedValue(null);
   mockGetSessionLogs.mockResolvedValue([]);
   mockDetectEscalations.mockReturnValue([]);
 });

@@ -198,6 +198,33 @@ describe("POST /api/webhook/session-complete — happy + idempotency", () => {
     });
     expect(events).toHaveLength(1);
   });
+
+  // Phase 37 [36.A1] — slots are keyed by idempotencyKey; the release
+  // must use the matched row's key, not the raw projectPath string.
+  it("releases the queue slot by the matched row's idempotencyKey", async () => {
+    rig = await createDispatchRig({ fakeTimers: false });
+    const project = await rig.createProject({
+      slug: "zeta",
+      path: "/p/zeta",
+    });
+    const dispatch = await rig.prisma.dispatch.create({
+      data: {
+        projectId: project.id,
+        projectSlug: project.slug,
+        mode: "continue",
+        status: "started",
+        startedAt: new Date(),
+      },
+    });
+    const releaseSpy = vi.spyOn(rig.queue, "release");
+
+    await rig.fireWebhook({
+      projectPath: "/p/zeta",
+      idempotencyKey: dispatch.idempotencyKey,
+    });
+
+    expect(releaseSpy).toHaveBeenCalledWith(dispatch.idempotencyKey);
+  });
 });
 
 describe("POST /api/webhook/session-complete — legacy fallback", () => {
@@ -228,5 +255,30 @@ describe("POST /api/webhook/session-complete — legacy fallback", () => {
     expect(result.status).toBe(200);
     // Body shape sanity — no idempotencyKey echo when none supplied.
     expect((result.body as { idempotencyKey?: string }).idempotencyKey).toBeUndefined();
+  });
+
+  // Phase 37 [36.A1] — a key-less hook (stale .claude/settings.json)
+  // must still free the slot its dispatch is holding, or the fleet
+  // wedges until the watchdog deadline.
+  it("releases the newest in-flight row's key when no idempotencyKey is supplied", async () => {
+    rig = await createDispatchRig({ fakeTimers: false });
+    const project = await rig.createProject({
+      slug: "eta",
+      path: "/p/eta",
+    });
+    const dispatch = await rig.prisma.dispatch.create({
+      data: {
+        projectId: project.id,
+        projectSlug: project.slug,
+        mode: "continue",
+        status: "started",
+        startedAt: new Date(),
+      },
+    });
+    const releaseSpy = vi.spyOn(rig.queue, "release");
+
+    await rig.fireWebhook({ projectPath: "/p/eta" });
+
+    expect(releaseSpy).toHaveBeenCalledWith(dispatch.idempotencyKey);
   });
 });

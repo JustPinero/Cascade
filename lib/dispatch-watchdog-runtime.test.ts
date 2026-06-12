@@ -9,6 +9,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 
 vi.mock("./dispatch-watchdog", () => ({
   runDispatchWatchdog: vi.fn(async () => ({ timedOut: 0, keys: [] })),
+  reconcileOrphanedDispatches: vi.fn(async () => ({ orphaned: 0, keys: [] })),
 }));
 
 vi.mock("./db", () => ({
@@ -24,7 +25,10 @@ import {
   __stopDispatchWatchdogForTests,
   __isDispatchWatchdogRunningForTests,
 } from "./dispatch-watchdog-runtime";
-import { runDispatchWatchdog } from "./dispatch-watchdog";
+import {
+  runDispatchWatchdog,
+  reconcileOrphanedDispatches,
+} from "./dispatch-watchdog";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -32,6 +36,11 @@ beforeEach(() => {
   vi.mocked(runDispatchWatchdog).mockReset();
   vi.mocked(runDispatchWatchdog).mockResolvedValue({
     timedOut: 0,
+    keys: [],
+  });
+  vi.mocked(reconcileOrphanedDispatches).mockReset();
+  vi.mocked(reconcileOrphanedDispatches).mockResolvedValue({
+    orphaned: 0,
     keys: [],
   });
 });
@@ -78,6 +87,21 @@ describe("startDispatchWatchdog", () => {
     expect(
       vi.mocked(runDispatchWatchdog).mock.calls.length
     ).toBeGreaterThanOrEqual(initial + 2);
+  });
+
+  // Phase 37 [36.A2] — boot reconciliation runs exactly once, before
+  // the first tick, and not again on subsequent interval fires.
+  it("reconciles orphaned dispatches once at startup, not per tick", async () => {
+    startDispatchWatchdog({ force: true, intervalMs: 1_000 });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.mocked(reconcileOrphanedDispatches)).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(vi.mocked(reconcileOrphanedDispatches)).toHaveBeenCalledTimes(1);
+    expect(
+      vi.mocked(runDispatchWatchdog).mock.calls.length
+    ).toBeGreaterThanOrEqual(3);
   });
 
   it("swallows tick errors instead of throwing from the interval", async () => {
