@@ -2,6 +2,9 @@
 
 ## Open
 
+### [40.D1] `formatCountdown` floor race makes one deadline-utils test flaky
+`lib/deadline-utils.test.ts:8` builds `new Date(Date.now() + 3*86400000)` then asserts `formatCountdown(...) === "3d left"`. `formatCountdown` reads `Date.now()` again, so `diffMs` is `3 days − ε`; `Math.floor` drops it to `2` whenever ≥1ms elapses between the two reads → intermittent "2d left" failure (observed once during Phase 40; passes on re-run). Timing race, not time-of-day. Fix options: (a) make the test pin a reference instant (`vi.useFakeTimers()` / inject `now`), or (b) have `formatCountdown` round toward the deadline. Natural to fold into P7 (deadline/staleness triage), which will touch this module anyway.
+
 ### [23.D1] Overseer eval fixtures need live-API recordings
 Phase 23.7 shipped the overseer-tool-sequence kind executor + scratch SQLite seeding, but **no Overseer fixture files** because authoring requires `pnpm eval:refresh` against the live Anthropic API to capture deterministic recordings. Knowledge-matcher (3) and escalation-detector (35) fixtures pass without API access.
 - **Unblocks:** Phase 24's outcome-conditioned-dispatch eval scenarios; full PR-time AI regression coverage.

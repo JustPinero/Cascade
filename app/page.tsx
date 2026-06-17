@@ -7,6 +7,7 @@ import { ScanButton } from "./components/scan-button";
 import { MorningBriefing } from "./components/morning-briefing";
 import { PlatformBadge } from "./components/platform-badge";
 import { FleetStatusStrip } from "./components/fleet-status-strip";
+import { DispatchRecommendations } from "./components/dispatch-recommendations";
 import { CostWidget } from "./components/cost-widget";
 import { ProjectGrid } from "./components/project-grid";
 import {
@@ -269,6 +270,8 @@ function DashboardContent() {
       </div>
 
       <MorningBriefing />
+
+      <DispatchRecommendations />
 
       <DashboardFilters
         filters={filters}
