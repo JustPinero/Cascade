@@ -1,1 +1,0 @@
-Run the pre-deploy skill. Execute the full pre-deployment checklist for Next.js + Prisma + SQLite. All checks must pass before deployment. Report any failures with remediation steps.

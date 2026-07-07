@@ -1,1 +1,0 @@
-Run the course-correction skill. Compare current work against the active request's acceptance criteria. Identify scope creep, missed criteria, and introduced debt. Generate a correction report.
