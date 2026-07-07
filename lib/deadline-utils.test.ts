@@ -1,7 +1,20 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { formatCountdown, isOverdue, getDeadlineUrgency } from "./deadline-utils";
 
 describe("deadline-utils", () => {
+  // Freeze the clock: these tests build deadlines relative to Date.now()
+  // and the implementation calls Date.now() again — with real timers the
+  // milliseconds elapsed in between trip Math.floor at exact-day
+  // boundaries (flaked under full-suite load in phase 41.3 validation).
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-07T00:00:00"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   describe("formatCountdown", () => {
     it("returns '3d left' for 3 days out", () => {
       const future = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
