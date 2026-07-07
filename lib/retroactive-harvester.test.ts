@@ -35,8 +35,8 @@ function git(commands: string, cwd: string): void {
 
 // Mocked Anthropic boundary. Default: a 401 (fake key), which is the
 // deterministic version of what these tests always exercised.
-const fetchMock = vi.fn(
-  async (): Promise<Response> =>
+const fetchMock = vi.fn<typeof fetch>(
+  async () =>
     new Response(JSON.stringify({ error: { type: "authentication_error" } }), {
       status: 401,
       headers: { "content-type": "application/json" },

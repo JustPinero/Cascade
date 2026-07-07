@@ -31,6 +31,9 @@ Phase 33 closed the top-5 priority routes from the original [30.D2] finding. Pha
 - 32 remaining routes are lower blast-radius (reads, simple CRUD). Tackle opportunistically when touching them for other reasons.
 
 
+### [41.1-residual] Some rig test file(s) leak scratch DBs even on green runs
+A fully passing `pnpm test` still leaves ~6 `test-rig-*.db` files in `prisma/` (2 worker pids, rigs #1-4 and #1-2 — some rig-using test path never reaches `dispose()`, or the worker is torn down first). The 41.1 startup sweep in `tests/harness/dispatch-rig.ts` removes them on the next run (mtime > 60s before process start), so accumulation is capped at one run's leakage. Follow-up if desired: bisect the 24 rig-using test files to find the non-disposing path, or add a globalSetup-time sweep so even back-to-back runs start clean.
+
 ### [36.A5] Overseer chat history persisted client-side, droppable mid-stream
 Two fire-and-forget POSTs from the component; route persists nothing; closing the tab loses the assistant turn after server-side effects already fired. See design-review [36.A5]. Fix: persist server-side in the chat route.
 
