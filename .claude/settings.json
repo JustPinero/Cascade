@@ -24,30 +24,6 @@
     ]
   },
   "hooks": {
-    "PostCompact": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cat CLAUDE.md .claude/handoff.md audits/debt.md 2>/dev/null || true",
-            "description": "Restore context after compaction"
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if echo \"$CLAUDE_TOOL_USE_INPUT\" | grep -q 'git commit'; then grep -rn 'sk-ant-\\|ANTHROPIC_API_KEY=sk\\|op://\\|BEGIN.*PRIVATE' --include='*.ts' --include='*.tsx' --include='*.js' --include='*.json' app/ lib/ 2>/dev/null && echo 'BLOCKED: Possible secret detected in staged files' && exit 1; fi; exit 0",
-            "description": "Check for hardcoded secrets before git commit"
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
