@@ -11,12 +11,15 @@
  * path — a dead port (spool lands) and a live listener (no spool).
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { execFileSync } from "child_process";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import fs from "fs";
 import os from "os";
 import path from "path";
 import http from "http";
 import type { AddressInfo } from "net";
+
+const execFileAsync = promisify(execFile);
 
 const SCRIPT = path.resolve(__dirname, "session-complete-hook.sh");
 
@@ -32,10 +35,15 @@ afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-function runHook(args: string[], env: Record<string, string> = {}): void {
-  execFileSync("bash", [SCRIPT, ...args], {
+// Async exec: the "server up" test runs an in-process HTTP listener on
+// the same event loop, so a synchronous exec would deadlock (the server
+// can't respond while the main thread blocks on the child).
+async function runHook(
+  args: string[],
+  env: Record<string, string> = {}
+): Promise<void> {
+  await execFileAsync("bash", [SCRIPT, ...args], {
     env: { ...process.env, CASCADE_WEBHOOK_SPOOL: spoolPath, ...env },
-    stdio: "pipe",
   });
 }
 
@@ -52,7 +60,7 @@ async function findClosedPort(): Promise<number> {
 describe("session-complete-hook.sh — spool on failure", () => {
   it("spools the payload when the server is unreachable", async () => {
     const deadPort = await findClosedPort();
-    runHook(["/p/alpha", String(deadPort)]);
+    await runHook(["/p/alpha", String(deadPort)]);
 
     expect(fs.existsSync(spoolPath)).toBe(true);
     const lines = fs
@@ -67,7 +75,9 @@ describe("session-complete-hook.sh — spool on failure", () => {
 
   it("includes idempotencyKey in the spooled payload when CASCADE_DISPATCH_ID is set", async () => {
     const deadPort = await findClosedPort();
-    runHook(["/p/beta", String(deadPort)], { CASCADE_DISPATCH_ID: "disp-123" });
+    await runHook(["/p/beta", String(deadPort)], {
+      CASCADE_DISPATCH_ID: "disp-123",
+    });
 
     const payload = JSON.parse(
       fs.readFileSync(spoolPath, "utf-8").trim()
@@ -89,11 +99,14 @@ describe("session-complete-hook.sh — posts normally when server is up", () => 
         res.end(JSON.stringify({ ok: true }));
       });
     });
-    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    // Listen on all interfaces so curl's `localhost` reaches it on
+    // either IPv4 (127.0.0.1) or IPv6 (::1) — macOS resolves localhost
+    // to ::1 first.
+    await new Promise<void>((r) => server.listen(0, r));
     const port = (server.address() as AddressInfo).port;
 
     try {
-      runHook(["/p/gamma", String(port)]);
+      await runHook(["/p/gamma", String(port)]);
       expect(received).toHaveLength(1);
       expect(received[0].projectPath).toBe("/p/gamma");
       // No spool entry — the POST succeeded.
