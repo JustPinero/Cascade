@@ -170,4 +170,34 @@ describe("computeHealth", () => {
 
     expect(result.details.gitBranch).toBeTruthy();
   });
+
+  // Phase 41.4 — fleet reconciliation rides along with computeHealth when
+  // the caller supplies the project's DB record (mirrors the 41.3
+  // publish-safety integration).
+  it("includes a reconciliation result when a DB record is provided", async () => {
+    const dir = await createProject("reconcile-project", {
+      git: true,
+      dirty: true,
+    });
+    const result = await computeHealth(dir, {
+      reconcileRecord: {
+        slug: "reconcile-project",
+        name: "Reconcile Project",
+        path: dir,
+        status: "complete",
+      },
+      reconcileOptions: { fetch: false },
+    });
+
+    expect(result.reconciliation).toBeDefined();
+    const types = result.reconciliation!.findings.map((f) => f.type);
+    expect(types).toContain("dirty-tree");
+    expect(types).toContain("status-drift");
+  });
+
+  it("omits reconciliation when no DB record is provided", async () => {
+    const dir = await createProject("no-reconcile-project", { git: true });
+    const result = await computeHealth(dir);
+    expect(result.reconciliation).toBeUndefined();
+  });
 });
