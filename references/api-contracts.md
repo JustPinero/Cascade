@@ -341,11 +341,17 @@ Live dispatch preflight (PATH checks for tmux/claude/etc).
 - **Response:** `checkDispatchPreflight` result.
 - **Notes:** `Cache-Control: no-store`.
 
+### `GET /api/recommendations`
+Phase 40 [P3] — outcome-driven dispatch recommendations for the dashboard.
+- **Response:** `{ recommendations: Recommendation[] }` (see `lib/dispatch-recommendations.ts`).
+- **Notes:** Reads `DispatchOutcome` rows from the last 14 days, groups by project, runs the pure `computeRecommendations` engine. `Cache-Control: no-store`. Phase 41.2: rows feed `goalAchieved` into the engine — the failing-mode rule scores goal-weighted successes (goal-verified 1.0 > self-reported 0.6 > evaluator-contradicted 0).
+
 ### `POST /api/webhook/session-complete`
 Receives Claude Code Stop-hook pings from managed projects.
 - **Request:** `{ projectPath: string, idempotencyKey?: string }`
 - **Response:** `{ ok, slug, name, action, idempotencyKey?, importError? }`. Deduped responses return `{ ok, deduped: true, slug }` when the dispatch is already completed.
 - **Notes:** Correlates by `idempotencyKey` (canonical) with legacy fallback via newest `session-launched` activity event. Side effects: targeted re-import of the project, dispatch-queue slot release, Dispatch row → `completed`, `session-complete` (or `orphaned-webhook`) activity event, escalation detection from latest session log → auto-creates `HumanTask` rows from `[HUMAN TODO]` signals (dedup on `projectSlug+title` when dispatch in scope), records a `DispatchOutcome` (success | attention-needed | test-failure | blocker), refreshes per-project feature-usage ledger. All best-effort: failures are logged but don't fail the webhook.
+- **Phase 41.2 (goal state):** the outcome row also records `goalCondition` (recovered from the matched Dispatch's prompt snapshot — the `/goal` line the dispatcher composed from the request's acceptance criteria; null for ad-hoc dispatches and on the legacy path), plus `goalAchieved`/`goalReason` parsed defensively from the session log via `lib/dispatch-goals.ts#parseGoalOutcome` (markers: `[GOAL ACHIEVED]` / `[GOAL NOT ACHIEVED]` or prose "goal achieved/not achieved"; last verdict wins; no marker → null, never throws).
 
 ---
 
