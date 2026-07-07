@@ -9,6 +9,7 @@ import { readIfExists } from "./file-utils";
 import { detectPlatform } from "./platform";
 import { getDispatchQueue } from "./dispatch-queue";
 import { enqueueWithDispatchRow } from "./dispatch-lifecycle";
+import { composeGoalLine } from "./dispatch-goals";
 
 export type DispatchMode = "continue" | "audit" | "investigate" | "custom";
 
@@ -155,6 +156,19 @@ export async function generatePrompt(
 
   let prompt: string;
 
+  // Phase 41.2 — request-driven dispatches get a /goal completion
+  // condition composed from the request's acceptance criteria. The
+  // line rides at the START of the composed prompt so Claude Code
+  // (v2.1.139+) hands it to the goal evaluator; on older CLIs it is
+  // just a leading instruction sentence and degrades harmlessly.
+  // Ad-hoc dispatches (custom/audit/investigate, or continue with no
+  // request file / no criteria) skip /goal cleanly — goalLine stays "".
+  let goalLine = "";
+  if (mode === "continue" && currentRequest) {
+    const composed = composeGoalLine(currentRequest);
+    if (composed) goalLine = `${composed}\n`;
+  }
+
   switch (mode) {
     case "continue":
       prompt = [
@@ -203,7 +217,7 @@ export async function generatePrompt(
       prompt = "Read CLAUDE.md and continue where you left off.";
   }
 
-  return prompt + playbookBlock;
+  return goalLine + prompt + playbookBlock;
 }
 
 const TMUX_SESSION = "delamain";

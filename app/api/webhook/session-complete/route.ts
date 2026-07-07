@@ -20,6 +20,7 @@ import { importSingleProject } from "@/lib/project-import";
 import { toSlug } from "@/lib/scanner";
 import { getSessionLogs } from "@/lib/session-reader";
 import { detectEscalations } from "@/lib/escalation-detector";
+import { extractGoalCondition, parseGoalOutcome } from "@/lib/dispatch-goals";
 import { getDispatchQueue } from "@/lib/dispatch-queue";
 import { auditProjectFeatureUsage } from "@/lib/anthropic-feature-check";
 import path from "path";
@@ -158,6 +159,16 @@ export async function POST(request: NextRequest) {
     if (project) {
       // Detect escalation signals from the latest session log
       const logs = await getSessionLogs(projectPath, 1);
+
+      // Phase 41.2 — parse the goal evaluator's verdict from the same
+      // log. Defensive by contract: parseGoalOutcome never throws, and
+      // a log without a marker (or no log at all) leaves goalAchieved
+      // null — unknown, not false.
+      const goalOutcome =
+        logs.length > 0 ? parseGoalOutcome(logs[0].content) : null;
+      const goalAchieved = goalOutcome?.achieved ?? null;
+      const goalReason = goalOutcome?.reason ?? null;
+
       const signalTypes: string[] = [];
       if (logs.length > 0) {
         const signals = detectEscalations(logs[0].content);
@@ -225,6 +236,12 @@ export async function POST(request: NextRequest) {
               signals: JSON.stringify(signalTypes),
               dispatchedAt: dispatch.startedAt ?? dispatch.enqueuedAt,
               dispatchId: dispatch.id,
+              // Phase 41.2 — goal state. The condition is recovered
+              // from the dispatch's composed prompt snapshot; ad-hoc
+              // dispatches carry no /goal line and stay null.
+              goalCondition: extractGoalCondition(dispatch.prompt),
+              goalAchieved,
+              goalReason,
             },
           });
           outcomeWritten = true;
@@ -268,6 +285,11 @@ export async function POST(request: NextRequest) {
                 outcome,
                 signals: JSON.stringify(signalTypes),
                 dispatchedAt: lastDispatch.createdAt,
+                // Phase 41.2 — no Dispatch row means no composed-prompt
+                // snapshot to recover a condition from, but the log's
+                // verdict is still worth recording.
+                goalAchieved,
+                goalReason,
               },
             });
           } catch (err) {

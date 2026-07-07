@@ -128,6 +128,14 @@ model DispatchOutcome {
   // Phase 23.2 — link outcome to its originating Dispatch row.
   // Nullable for backfill of pre-23.2 rows; new rows must populate.
   dispatchId     String?  @unique
+  // Phase 41.2 — goal-driven dispatch outcomes. goalCondition is the
+  // /goal condition composed at dispatch (null for ad-hoc dispatches);
+  // goalAchieved is the evaluator verdict parsed from the session log
+  // (null = no verdict surfaced); goalReason is the evaluator's stated
+  // reason when present.
+  goalCondition  String?
+  goalAchieved   Boolean?
+  goalReason     String?
 
   project  Project   @relation(fields: [projectId], references: [id])
   dispatch Dispatch? @relation(fields: [dispatchId], references: [id])
