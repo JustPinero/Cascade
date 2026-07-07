@@ -1,12 +1,19 @@
 import fs from "fs/promises";
 import path from "path";
 import { execSync } from "child_process";
+import {
+  auditPublishSafety,
+  summarizePublishSafety,
+  type PublishSafetySummary,
+  type VisibilityProbe,
+} from "./publish-safety";
 
 export interface HealthResult {
   health: "healthy" | "warning" | "blocked" | "idle";
   openDebtCount: number;
   gitDirty: boolean;
   lastAuditGrade: string | null;
+  publishSafety: PublishSafetySummary;
   details: {
     debtItems: string[];
     gitBranch: string | null;
@@ -14,6 +21,11 @@ export interface HealthResult {
     auditFindings: number;
     needsAttention?: string;
   };
+}
+
+export interface ComputeHealthOptions {
+  /** Injectable `gh repo view` boundary for the publish-safety audit. */
+  visibilityProbe?: VisibilityProbe;
 }
 
 /**
@@ -131,13 +143,17 @@ async function checkNeedsAttention(
  * Compute health for a project by reading its filesystem.
  */
 export async function computeHealth(
-  projectPath: string
+  projectPath: string,
+  options: ComputeHealthOptions = {}
 ): Promise<HealthResult> {
-  const [debt, git, audit, attention] = await Promise.all([
+  const [debt, git, audit, attention, publishSafetyResult] = await Promise.all([
     countOpenDebt(projectPath),
     checkGitStatus(projectPath),
     getLastAuditGrade(projectPath),
     checkNeedsAttention(projectPath),
+    auditPublishSafety(projectPath, {
+      visibilityProbe: options.visibilityProbe,
+    }),
   ]);
 
   let health: HealthResult["health"] = "idle";
@@ -180,6 +196,7 @@ export async function computeHealth(
     openDebtCount: debt.count,
     gitDirty: git.dirty,
     lastAuditGrade: audit.grade,
+    publishSafety: summarizePublishSafety(publishSafetyResult),
     details,
   };
 }
