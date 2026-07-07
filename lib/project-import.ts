@@ -54,8 +54,25 @@ export async function importProjects(
       where: { slug: scan.slug },
     });
 
-    // Compute real health from project filesystem
-    const healthResult = await computeHealth(scan.path);
+    // Compute real health from project filesystem. When the project is
+    // already in the DB, the fleet reconciler rides along (phase 41.4) to
+    // compare the DB's path/status against filesystem/git reality.
+    // Fetch is disabled here — imports are scan-triggered and must stay
+    // fast; the briefing runs the fetch-enabled pass.
+    const healthResult = await computeHealth(
+      scan.path,
+      existing
+        ? {
+            reconcileRecord: {
+              slug: existing.slug,
+              name: existing.name,
+              path: existing.path,
+              status: existing.status,
+            },
+            reconcileOptions: { fetch: false },
+          }
+        : {}
+    );
 
     // Compute progress score using current phase/request from DB (or defaults)
     const currentPhase = existing?.currentPhase || "phase-1-foundation";
@@ -81,6 +98,13 @@ export async function importProjects(
     };
     if (healthResult.details.needsAttention) {
       healthDetails.needsAttention = healthResult.details.needsAttention;
+    }
+    if (healthResult.reconciliation) {
+      healthDetails.reconciliation = {
+        findingsCount: healthResult.reconciliation.findings.length,
+        findings: healthResult.reconciliation.findings,
+        remote: healthResult.reconciliation.remote,
+      };
     }
 
     const data = {
@@ -157,7 +181,22 @@ export async function importSingleProject(
     where: { slug: scan.slug },
   });
 
-  const healthResult = await computeHealth(scan.path);
+  // Reconcile against the DB record when it exists (phase 41.4);
+  // fetch disabled for the same latency reason as importProjects.
+  const healthResult = await computeHealth(
+    scan.path,
+    existing
+      ? {
+          reconcileRecord: {
+            slug: existing.slug,
+            name: existing.name,
+            path: existing.path,
+            status: existing.status,
+          },
+          reconcileOptions: { fetch: false },
+        }
+      : {}
+  );
 
   const currentPhase = existing?.currentPhase || "phase-1-foundation";
   const currentRequest = existing?.currentRequest || null;
@@ -182,6 +221,13 @@ export async function importSingleProject(
   };
   if (healthResult.details.needsAttention) {
     healthDetails.needsAttention = healthResult.details.needsAttention;
+  }
+  if (healthResult.reconciliation) {
+    healthDetails.reconciliation = {
+      findingsCount: healthResult.reconciliation.findings.length,
+      findings: healthResult.reconciliation.findings,
+      remote: healthResult.reconciliation.remote,
+    };
   }
 
   // Read context.md and done.md if they exist
