@@ -86,3 +86,4 @@ knowledge/deployment-playbook/COLLECTION-PROMPT.md
 
 # Session handoffs are ephemeral session state — never publish
 .claude/handoff.md
+.claude/kilroy-channel.md
