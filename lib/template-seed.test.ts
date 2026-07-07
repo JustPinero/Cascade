@@ -15,12 +15,20 @@ const TEST_DB_URL = `file:${TEST_DB_PATH}`;
 // failing the suite with an ENOENT from the seed subprocess.
 const DEFAULT_TEMPLATE_PATH = path.resolve(
   __dirname,
-  "../templates/web-app-v3.3.md"
+  "../templates/universal-v4_0.md"
 );
 const templatesAvailable = fs.existsSync(DEFAULT_TEMPLATE_PATH);
 const describeIfTemplates = templatesAvailable ? describe : describe.skip;
 
 let prisma: PrismaClient;
+
+function runSeed() {
+  execSync("npx tsx prisma/seed.ts", {
+    cwd: path.resolve(__dirname, ".."),
+    stdio: "pipe",
+    env: { ...process.env, DATABASE_URL: TEST_DB_URL },
+  });
+}
 
 beforeAll(() => {
   if (!templatesAvailable) return;
@@ -36,11 +44,7 @@ beforeAll(() => {
   pushTestSchema(TEST_DB_URL);
 
   // Run seed
-  execSync("npx tsx prisma/seed.ts", {
-    cwd: path.resolve(__dirname, ".."),
-    stdio: "pipe",
-    env: { ...process.env, DATABASE_URL: TEST_DB_URL },
-  });
+  runSeed();
 });
 
 afterAll(async () => {
@@ -51,48 +55,99 @@ afterAll(async () => {
   } catch {}
 });
 
-describeIfTemplates("template seeding", () => {
-  it("creates a template record in the database", async () => {
+// The six canonical v4.0 kickoff templates and their expected
+// projectType mapping (KickoffTemplate.projectType enum-by-convention:
+// web-app | game | api | mobile | other).
+const V4_TEMPLATES: {
+  filename: string;
+  projectType: string;
+  isDefault: boolean;
+}[] = [
+  { filename: "universal-v4_0.md", projectType: "other", isDefault: true },
+  { filename: "web-app-v4_0.md", projectType: "web-app", isDefault: false },
+  { filename: "api-service-v4_0.md", projectType: "api", isDefault: false },
+  { filename: "mobile-app-v4_0.md", projectType: "mobile", isDefault: false },
+  { filename: "site-rebuild-v4_0.md", projectType: "web-app", isDefault: false },
+  { filename: "game-dev-v4_0.md", projectType: "game", isDefault: false },
+];
+
+describeIfTemplates("template seeding (v4.0)", () => {
+  it("seeds exactly the six v4.0 templates", async () => {
     const templates = await prisma.kickoffTemplate.findMany();
-    expect(templates.length).toBeGreaterThanOrEqual(1);
+    expect(templates).toHaveLength(6);
   });
 
-  it("marks the default template", async () => {
-    const defaultTemplate = await prisma.kickoffTemplate.findFirst({
+  it("all six v4.0 template files exist in templates/", () => {
+    for (const tmpl of V4_TEMPLATES) {
+      const templatePath = path.resolve(
+        __dirname,
+        "../templates",
+        tmpl.filename
+      );
+      expect(fs.existsSync(templatePath), tmpl.filename).toBe(true);
+    }
+  });
+
+  it("each row's content matches its v4.0 file on disk", async () => {
+    for (const tmpl of V4_TEMPLATES) {
+      const templatePath = path.resolve(
+        __dirname,
+        "../templates",
+        tmpl.filename
+      );
+      const fileContent = fs.readFileSync(templatePath, "utf-8");
+
+      const row = await prisma.kickoffTemplate.findFirst({
+        where: { content: fileContent },
+      });
+      expect(row, `no row seeded from ${tmpl.filename}`).not.toBeNull();
+    }
+  });
+
+  it("maps each template to the correct projectType", async () => {
+    for (const tmpl of V4_TEMPLATES) {
+      const templatePath = path.resolve(
+        __dirname,
+        "../templates",
+        tmpl.filename
+      );
+      const fileContent = fs.readFileSync(templatePath, "utf-8");
+
+      const row = await prisma.kickoffTemplate.findFirst({
+        where: { content: fileContent },
+      });
+      expect(row, `no row seeded from ${tmpl.filename}`).not.toBeNull();
+      expect(row!.projectType, tmpl.filename).toBe(tmpl.projectType);
+    }
+  });
+
+  it("the universal template is the sole default", async () => {
+    const defaults = await prisma.kickoffTemplate.findMany({
       where: { isDefault: true },
     });
-    expect(defaultTemplate).not.toBeNull();
-    expect(defaultTemplate!.name).toBe("Web App v3.3");
-    expect(defaultTemplate!.projectType).toBe("web-app");
+    expect(defaults).toHaveLength(1);
+
+    const universalContent = fs.readFileSync(
+      path.resolve(__dirname, "../templates/universal-v4_0.md"),
+      "utf-8"
+    );
+    expect(defaults[0].content).toBe(universalContent);
+    expect(defaults[0].projectType).toBe("other");
   });
 
-  it("template content matches the file on disk", async () => {
-    const templatePath = path.resolve(__dirname, "../templates/web-app-v3.3.md");
-    const fileContent = fs.readFileSync(templatePath, "utf-8");
-
-    const dbTemplate = await prisma.kickoffTemplate.findFirst({
-      where: { name: "Web App v3.3" },
-    });
-
-    expect(dbTemplate!.content).toBe(fileContent);
+  it("every seeded template has non-empty content containing VERSION: 4.0", async () => {
+    const templates = await prisma.kickoffTemplate.findMany();
+    expect(templates).toHaveLength(6);
+    for (const row of templates) {
+      expect(row.content.length, row.name).toBeGreaterThan(0);
+      expect(row.content, row.name).toContain("VERSION: 4.0");
+    }
   });
 
-  it("template file exists in templates/", () => {
-    const templatePath = path.resolve(__dirname, "../templates/web-app-v3.3.md");
-    expect(fs.existsSync(templatePath)).toBe(true);
-  });
+  it("seed is idempotent — running twice keeps exactly 6 rows", async () => {
+    runSeed();
 
-  it("seed is idempotent — running twice doesn't create duplicates", () => {
-    // Run seed again
-    execSync("npx tsx prisma/seed.ts", {
-      cwd: path.resolve(__dirname, ".."),
-      stdio: "pipe",
-      env: { ...process.env, DATABASE_URL: TEST_DB_URL },
-    });
-
-    // Same count after re-seed (upsert, not duplicate)
-    return prisma.kickoffTemplate.findMany().then((templates) => {
-      expect(templates).toHaveLength(6);
-    });
+    const templates = await prisma.kickoffTemplate.findMany();
+    expect(templates).toHaveLength(6);
   });
 });

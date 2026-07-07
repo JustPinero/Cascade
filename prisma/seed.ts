@@ -19,53 +19,54 @@ interface TemplateDef {
   isDefault: boolean;
 }
 
+// Canonical v4.0 kickoff templates (synced from the KickoffPlaybook).
 const templates: TemplateDef[] = [
   {
-    name: "Web App v3.3",
+    name: "Universal v4.0",
     description:
-      "Universal kickoff template for web applications. All sections with [ASK ME] markers for Claude interview.",
-    filename: "web-app-v3.3.md",
-    projectType: "web-app",
+      "Stack-agnostic kickoff template. All stack fields are [ASK ME] — Claude interviews you for every stack decision. The default starting point for any project.",
+    filename: "universal-v4_0.md",
+    projectType: "other",
     isDefault: true,
   },
   {
-    name: "RatRacer — Job Search Automation",
+    name: "Web App v4.0",
     description:
-      "Filled example: Next.js + Supabase job search app with Claude API, scraping, and resume tailoring.",
-    filename: "ratracer-v3.md",
+      "Web-app variant pre-filled with the Coqui Labs house stack (Next.js App Router + TypeScript + Prisma + Vercel). Set any field back to [ASK ME] to trigger the stack interview.",
+    filename: "web-app-v4_0.md",
     projectType: "web-app",
     isDefault: false,
   },
   {
-    name: "Pyrrhic Victory — 2D Game",
+    name: "API Service v4.0",
     description:
-      "Game dev template: Godot 4 + GDScript turn-based tactical arena with pixel art.",
-    filename: "game-dev-v1.md",
-    projectType: "game",
-    isDefault: false,
-  },
-  {
-    name: "InterviewIQ — API Service",
-    description:
-      "Headless API service: Python FastAPI with audio processing, ML pipelines, and async jobs.",
-    filename: "api-service-v3.md",
+      "Headless API service variant with pre-filled defaults (FastAPI / Python / PostgreSQL / Railway). Remaining [ASK ME] fields trigger the stack interview.",
+    filename: "api-service-v4_0.md",
     projectType: "api",
     isDefault: false,
   },
   {
-    name: "PointPartner — Fintech App",
+    name: "Mobile App v4.0",
     description:
-      "Web app with scraping, competitive analysis, Stripe payments, and Supabase RLS.",
-    filename: "fintech-app-v3.md",
+      "Mobile-app variant with sensible mobile defaults (Expo, TypeScript, Supabase). Override any default; [ASK ME] fields trigger the stack interview.",
+    filename: "mobile-app-v4_0.md",
+    projectType: "mobile",
+    isDefault: false,
+  },
+  {
+    name: "Site Rebuild v4.0",
+    description:
+      "Client site-rebuild variant: audit an existing site, preserve SEO/content, rebuild on a modern stack. Confirm pre-filled defaults per client.",
+    filename: "site-rebuild-v4_0.md",
     projectType: "web-app",
     isDefault: false,
   },
   {
-    name: "SiteLift — Site Rebuild",
+    name: "Game Dev v4.0",
     description:
-      "Full site rebuild template with business workflow, design system, and content migration.",
-    filename: "site-rebuild-v1.md",
-    projectType: "web-app",
+      "Game-dev variant with Godot 4 / GDScript / desktop-export defaults and game-specific guidance. Set fields back to [ASK ME] to trigger the stack interview.",
+    filename: "game-dev-v4_0.md",
+    projectType: "game",
     isDefault: false,
   },
 ];
@@ -77,7 +78,13 @@ async function main() {
 
     await prisma.kickoffTemplate.upsert({
       where: { id: templates.indexOf(tmpl) + 1 },
-      update: { content, name: tmpl.name, description: tmpl.description },
+      update: {
+        content,
+        name: tmpl.name,
+        description: tmpl.description,
+        projectType: tmpl.projectType,
+        isDefault: tmpl.isDefault,
+      },
       create: {
         name: tmpl.name,
         projectType: tmpl.projectType,
