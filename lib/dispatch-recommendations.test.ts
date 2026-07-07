@@ -8,7 +8,9 @@
 import { describe, it, expect } from "vitest";
 import {
   computeRecommendations,
+  successWeight,
   type ProjectOutcomes,
+  type OutcomeRow,
 } from "./dispatch-recommendations";
 
 /** Build N outcome rows for one mode with a fixed outcome + signals. */
@@ -125,6 +127,58 @@ describe("computeRecommendations", () => {
     const outcomes = rows("continue", "success", 4, ["lesson"]);
     const recs = computeRecommendations([{ slug: "zeta", outcomes }]);
     expect(recs.some((r) => r.kind === "recurring-blocker")).toBe(false);
+  });
+
+  // Phase 41.2 — goal-verified outcomes outrank self-reported ones.
+  it("41.2: successWeight ranks goal-verified above self-reported above contradicted", () => {
+    const base: Omit<OutcomeRow, "goalAchieved"> = {
+      mode: "continue",
+      outcome: "success",
+      signals: [],
+    };
+    const verified = successWeight({ ...base, goalAchieved: true });
+    const selfReported = successWeight({ ...base });
+    const contradicted = successWeight({ ...base, goalAchieved: false });
+    expect(verified).toBeGreaterThan(selfReported);
+    expect(selfReported).toBeGreaterThan(contradicted);
+    expect(contradicted).toBe(0);
+    expect(successWeight({ ...base, outcome: "blocker" })).toBe(0);
+  });
+
+  it("41.2: goal-verified successes keep a struggling continue off the failing list where self-reported ones do not", () => {
+    const failures = rows("continue", "blocker", 3, ["human-todo"]);
+    const verifiedSuccess: OutcomeRow[] = Array.from({ length: 2 }, () => ({
+      mode: "continue",
+      outcome: "success",
+      signals: [],
+      goalAchieved: true,
+    }));
+    const selfReportedSuccess = rows("continue", "success", 2);
+
+    const recs = computeRecommendations([
+      { slug: "verified", outcomes: [...verifiedSuccess, ...failures] },
+      { slug: "self-reported", outcomes: [...selfReportedSuccess, ...failures] },
+    ]);
+
+    const failing = recs.filter((r) => r.kind === "failing-mode");
+    // Same raw shape (2 successes / 3 blockers) — only the goal-verified
+    // project earns the benefit of the doubt.
+    expect(failing.map((r) => r.projectSlug)).toEqual(["self-reported"]);
+  });
+
+  it("41.2: successes contradicted by the goal evaluator count as failures", () => {
+    const contradicted: OutcomeRow[] = Array.from({ length: 3 }, () => ({
+      mode: "continue",
+      outcome: "success",
+      signals: [],
+      goalAchieved: false,
+    }));
+    const recs = computeRecommendations([
+      { slug: "liar", outcomes: contradicted },
+    ]);
+    const failing = recs.find((r) => r.kind === "failing-mode");
+    expect(failing).toBeDefined();
+    expect(failing!.projectSlug).toBe("liar");
   });
 
   it("AC6: produces recommendations independently per project", () => {

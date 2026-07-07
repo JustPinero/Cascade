@@ -50,7 +50,11 @@ async function seedOutcome(
   slug: string,
   mode: string,
   outcome: string,
-  opts: { signals?: string; completedAt?: Date } = {}
+  opts: {
+    signals?: string;
+    completedAt?: Date;
+    goalAchieved?: boolean | null;
+  } = {}
 ): Promise<void> {
   await rig!.prisma.dispatchOutcome.create({
     data: {
@@ -62,6 +66,7 @@ async function seedOutcome(
       signals: opts.signals ?? "[]",
       dispatchedAt: new Date(),
       completedAt: opts.completedAt ?? new Date(),
+      goalAchieved: opts.goalAchieved ?? null,
     },
   });
 }
@@ -103,6 +108,42 @@ describe("GET /api/recommendations", () => {
     expect(
       body.recommendations.some((r) => r.projectSlug === "stale")
     ).toBe(false);
+  });
+
+  // Phase 41.2 — goalAchieved must flow from the DB into the engine.
+  it("41.2: goal-verified successes are weighted above self-reported ones end-to-end", async () => {
+    rig = await createDispatchRig({ concurrency: 1, fakeTimers: false });
+    const verified = await rig.createProject({
+      slug: "verified",
+      path: "/p/verified",
+    });
+    const selfReported = await rig.createProject({
+      slug: "self-reported",
+      path: "/p/self-reported",
+    });
+
+    // Same raw shape for both: 2 successes + 3 blockers on continue.
+    for (const [project, goalAchieved] of [
+      [verified, true],
+      [selfReported, null],
+    ] as const) {
+      for (let i = 0; i < 2; i++) {
+        await seedOutcome(project.id, project.slug, "continue", "success", {
+          goalAchieved,
+        });
+      }
+      for (let i = 0; i < 3; i++) {
+        await seedOutcome(project.id, project.slug, "continue", "blocker", {
+          signals: JSON.stringify(["human-todo"]),
+        });
+      }
+    }
+
+    const body = await callRoute();
+    const failing = body.recommendations.filter(
+      (r) => r.kind === "failing-mode"
+    );
+    expect(failing.map((r) => r.projectSlug)).toEqual(["self-reported"]);
   });
 
   it("AC8: parses malformed signals JSON defensively", async () => {
