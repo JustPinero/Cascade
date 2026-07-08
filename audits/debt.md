@@ -2,6 +2,11 @@
 
 ## Open
 
+### [41.D10] Pre-existing absolute-path formatter/lint hooks in 3 projects (cross-machine bug)
+Surfaced during the 41.5 fleet webhook rollout (2026-07-07). CON-CORE, medipal, and romereno each have a PostToolUse formatter/lint hook in `.claude/settings.json` that hardcodes an absolute path, e.g. `cd /Users/justinpinero/Desktop/projects/CON-CORE && npx prettier --write …` (also medipal prettier, romereno eslint jsx-a11y). settings.json is tracked and synced, so these break on the Windows machine after a pull (path doesn't exist → formatter hook fails). NOT introduced by the webhook rollout (that hook is now portable `$HOME`-relative) — pre-existing in each project's own stack hooks.
+- **Fix:** replace the absolute `cd` with `$PWD` (or drop the `cd` — the hook already runs in the project dir), per project. Verify the formatter still resolves its config from `$PWD` first. One tiny commit each.
+- **Note:** likely more projects have similar hardcoded stack-hook paths; a sweep of all tracked settings.json for `/Users/` would find them. Low, but it's silent formatter loss on the second machine.
+
 ### [41.D1] webhook-spool rename-aside atomicity is narrower than the docstring claims
 `lib/webhook-spool.ts:14-20,91-96` — a microsecond TOCTOU race: if a Stop-hook shell has opened its `>>` fd on the spool inode but not yet written when the drain renames→reads→unlinks that inode, the hook's line lands on the unlinked inode and is lost. Never realistically hits on a single dev box, but the "never lost" docstring overstates the guarantee. Fix when it matters: O_APPEND to a path re-resolved per write, or a lockfile around drain. Low.
 
