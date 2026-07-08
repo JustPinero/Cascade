@@ -138,6 +138,70 @@ describe("POST /api/briefing — reconciliation drift", () => {
     expect(init.body).toContain("kickoffprompts");
   });
 
+  it("flags projects with v3.5 remnants in the infra payload and feeds them to the model", async () => {
+    rig = await createDispatchRig({ fakeTimers: false });
+    (globalThis as Record<string, unknown>).__rigPrisma = rig.prisma;
+    const fetchMock = stubAnthropic();
+
+    // A project that shadows a plugin-provided skill name → v3.5-remnants.
+    const remnantPath = await makeCleanRepo("remnant-project");
+    await fs.mkdir(path.join(remnantPath, ".claude", "skills", "drift-audit"), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      path.join(remnantPath, ".claude", "skills", "drift-audit", "SKILL.md"),
+      "# drift-audit\n"
+    );
+    await rig.prisma.project.create({
+      data: {
+        name: "RemnantProject",
+        slug: "remnant-project",
+        path: remnantPath,
+        status: "building",
+      },
+    });
+
+    // Injected plugin + trust fixtures — never the real ~/.claude.
+    const pluginJsonPath = path.join(TEST_DIR, "plugin.json");
+    await fs.writeFile(
+      pluginJsonPath,
+      JSON.stringify({ name: "coqui-kickoff", version: "4.0.1" })
+    );
+    process.env.CASCADE_PLUGIN_JSON_PATH = pluginJsonPath;
+    const claudeConfigPath = path.join(TEST_DIR, "claude.json");
+    await fs.writeFile(claudeConfigPath, JSON.stringify({ projects: {} }));
+    process.env.CASCADE_CLAUDE_CONFIG_PATH = claudeConfigPath;
+
+    try {
+      const res = await POST(briefingRequest());
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        infra: {
+          plugin: { version: string | null };
+          remnantProjects: { slug: string; remnants: string[] }[];
+        };
+      };
+
+      expect(body.infra).toBeDefined();
+      expect(body.infra.plugin.version).toBe("4.0.1");
+      expect(body.infra.remnantProjects.map((p) => p.slug)).toContain(
+        "remnant-project"
+      );
+      const flagged = body.infra.remnantProjects.find(
+        (p) => p.slug === "remnant-project"
+      );
+      expect(flagged?.remnants).toContain("skill:drift-audit");
+
+      // The remnant is fed to the model.
+      const call = fetchMock.mock.calls[0] as unknown[];
+      const init = call[1] as { body: string };
+      expect(init.body).toContain("remnant-project");
+    } finally {
+      delete process.env.CASCADE_PLUGIN_JSON_PATH;
+      delete process.env.CASCADE_CLAUDE_CONFIG_PATH;
+    }
+  });
+
   it("reports zero drift (null section) for a clean fleet", async () => {
     rig = await createDispatchRig({ fakeTimers: false });
     (globalThis as Record<string, unknown>).__rigPrisma = rig.prisma;
