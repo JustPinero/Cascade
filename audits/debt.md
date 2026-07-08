@@ -2,12 +2,6 @@
 
 ## Open
 
-### [41.D9] Fleet webhook-hook rollout BLOCKED on cross-machine path portability
-The 41.5 follow-up (re-run `scripts/install-hooks.ts` across the fleet so every project adopts the spool-resilient `session-complete-hook.sh`) cannot be run as-is. `install-hooks.ts:58` bakes an ABSOLUTE path (`path.resolve(__dirname, "session-complete-hook.sh")` → `/Users/justinpinero/Desktop/projects/Cascade/scripts/session-complete-hook.sh`) into each project's `.claude/settings.json`. That file is TRACKED and synced across machines (verified: romereno/teamistry/medipal/Drydock all track settings.json). The CURRENT inline hook is a portable `curl http://localhost:3000/...` with no filesystem path. Committing the Mac-absolute script path would break the Stop hook on the Windows machine after a pull — a net regression (silent ping loss on Windows), the opposite of 41.5's intent.
-- **Root cause:** the canonical-script design traded a portable inline curl for a non-portable absolute path, and settings.json is version-controlled cross-machine.
-- **Fix options (pick one before rollout):** (a) install the script to a `$HOME`-relative stable location (`~/.cascade/session-complete-hook.sh`) — via install-hooks or Cascade server startup — and reference `"$HOME/.cascade/session-complete-hook.sh"` in the hook (valid on both machines); (b) reference an env var the shell expands per-machine (`bash "${CASCADE_HOOK_SCRIPT:-…}" …`); (c) keep the inline curl but fold the spool-on-failure logic directly into it (no external script). Option (a) is cleanest.
-- **Until fixed:** existing inline curls keep working (they just don't spool on failure). No rollout run. Justin flagged.
-
 ### [41.D1] webhook-spool rename-aside atomicity is narrower than the docstring claims
 `lib/webhook-spool.ts:14-20,91-96` — a microsecond TOCTOU race: if a Stop-hook shell has opened its `>>` fd on the spool inode but not yet written when the drain renames→reads→unlinks that inode, the hook's line lands on the unlinked inode and is lost. Never realistically hits on a single dev box, but the "never lost" docstring overstates the guarantee. Fix when it matters: O_APPEND to a path re-resolved per write, or a lockfile around drain. Low.
 
@@ -71,6 +65,9 @@ Two fire-and-forget POSTs from the component; route persists nothing; closing th
 Blocked on dispatch-rig support for real temp project dirs (rig uses synthetic `/p/alpha` paths that would fail an fs readiness check). See design-review [36.A7].
 
 ## Resolved
+
+### [41.D9] Fleet webhook-hook rollout cross-machine path portability — RESOLVED 2026-07-07 (fix-41.D9)
+Option (a) landed. `buildWebhookCommand` now emits a `$HOME`-relative script reference (`bash "$HOME/.cascade/session-complete-hook.sh" "$PWD" <port> > /dev/null 2>&1 &`) — no absolute `/Users/...` path — so a committed, cross-machine-synced `settings.json` hook resolves on every machine (`$HOME` expands per-machine inside the double-quoted command). New `copyCanonicalScript({home?, sourcePath?})` (home/source injectable for tests) installs `scripts/session-complete-hook.sh` → `<home>/.cascade/session-complete-hook.sh`, overwriting so updates propagate, `chmod 0755`. `processProject` copies before writing project settings; `instrumentation.ts` copies on server boot (next to the spool-drain wiring), wrapped so a copy failure never throws into startup — a freshly-cloned machine self-heals. `isCascadeStopHook` still matches the new command (contains `session-complete`) so an old absolute/inline Cascade Stop hook is replaced in place, no duplicate entry. 6 acceptance tests in `scripts/install-hooks.test.ts`; suite 179 files / 1222 tests green; validate.sh passes. Fleet rollout (`install-hooks.ts` across all 22 projects) is now SAFE to run — NOT run in this fix.
 
 ### [23.D5] Watchdog scheduling — RESOLVED 2026-06-11 (Phase 35)
 `instrumentation.ts` starts the watchdog on a 5-minute in-process interval at server boot (`lib/dispatch-watchdog-runtime.ts`); the `predev` npm script sweeps once before `next dev`. Singleton-guarded across HMR; NODE_ENV=test no-op.
