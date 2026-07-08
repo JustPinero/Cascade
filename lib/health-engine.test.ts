@@ -170,4 +170,70 @@ describe("computeHealth", () => {
 
     expect(result.details.gitBranch).toBeTruthy();
   });
+
+  // Phase 41.4 — fleet reconciliation rides along with computeHealth when
+  // the caller supplies the project's DB record (mirrors the 41.3
+  // publish-safety integration).
+  it("includes a reconciliation result when a DB record is provided", async () => {
+    const dir = await createProject("reconcile-project", {
+      git: true,
+      dirty: true,
+    });
+    const result = await computeHealth(dir, {
+      reconcileRecord: {
+        slug: "reconcile-project",
+        name: "Reconcile Project",
+        path: dir,
+        status: "complete",
+      },
+      reconcileOptions: { fetch: false },
+    });
+
+    expect(result.reconciliation).toBeDefined();
+    const types = result.reconciliation!.findings.map((f) => f.type);
+    expect(types).toContain("dirty-tree");
+    expect(types).toContain("status-drift");
+  });
+
+  it("omits reconciliation when no DB record is provided", async () => {
+    const dir = await createProject("no-reconcile-project", { git: true });
+    const result = await computeHealth(dir);
+    expect(result.reconciliation).toBeUndefined();
+  });
+
+  // Phase 41.7 — the health payload carries an infra-version block per
+  // project (plugin version, migration state, workspace trust).
+  it("includes an infraVersion block in the health payload", async () => {
+    const dir = await createProject("infra-project", { git: true });
+    // A project-local skill that shadows a plugin-provided name.
+    await fs.mkdir(path.join(dir, ".claude", "skills", "test-audit"), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      path.join(dir, ".claude", "skills", "test-audit", "SKILL.md"),
+      "# test-audit\n"
+    );
+
+    // Plugin + trust fixtures — injected, never real ~/.claude.
+    const pluginJsonPath = path.join(dir, "plugin.json");
+    await fs.writeFile(
+      pluginJsonPath,
+      JSON.stringify({ name: "coqui-kickoff", version: "4.0.1" })
+    );
+    const claudeConfigPath = path.join(dir, "claude.json");
+    await fs.writeFile(
+      claudeConfigPath,
+      JSON.stringify({ projects: { [dir]: { hasTrustDialogAccepted: true } } })
+    );
+
+    const result = await computeHealth(dir, {
+      infraOptions: { pluginJsonPath, claudeConfigPath },
+    });
+
+    expect(result.infraVersion).toBeDefined();
+    expect(result.infraVersion.plugin.version).toBe("4.0.1");
+    expect(result.infraVersion.migrationState).toBe("v3.5-remnants");
+    expect(result.infraVersion.remnants).toContain("skill:test-audit");
+    expect(result.infraVersion.workspaceTrust).toBe("accepted");
+  });
 });

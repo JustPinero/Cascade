@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { PrismaClient } from "@/app/generated/prisma/client";
 import { categorize } from "./categorizer";
+import { syncLessonToBrain, type BrainSyncOptions } from "./brain-sync";
 
 export interface HarvestResult {
   scannedProjects: number;
@@ -167,7 +168,8 @@ async function harvestFile(filePath: string): Promise<RawLesson[]> {
  * Creates new KnowledgeLesson records and logs ActivityEvents.
  */
 export async function harvestKnowledge(
-  prisma: PrismaClient
+  prisma: PrismaClient,
+  brainSyncOptions?: BrainSyncOptions
 ): Promise<HarvestResult> {
   const projects = await prisma.project.findMany();
   const result: HarvestResult = {
@@ -251,6 +253,20 @@ export async function harvestKnowledge(
           summary: `Harvested lesson: ${raw.title}`,
         },
       });
+
+      // Mirror the lesson into the kilroy-brain repo so it crosses machines.
+      // Never fails the harvest: syncLessonToBrain swallows all errors and
+      // skips silently when the brain dir is absent. No git ops performed.
+      await syncLessonToBrain(
+        {
+          title: raw.title,
+          content: raw.content,
+          sourceProject: project.slug,
+          date: new Date().toISOString().slice(0, 10),
+          tags,
+        },
+        brainSyncOptions
+      );
 
       result.newLessons++;
       result.lessons.push({

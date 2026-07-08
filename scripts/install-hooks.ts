@@ -37,17 +37,34 @@ interface SettingsJson {
 const SESSION_LOG_COMMAND = `mkdir -p "$PWD/.claude/sessions" && if [ -f "$PWD/.claude/handoff.md" ]; then cp "$PWD/.claude/handoff.md" "$PWD/.claude/sessions/$(date +%Y-%m-%dT%H-%M-%S).md"; fi`;
 
 /**
- * Phase 23.2 — round-trip CASCADE_DISPATCH_ID through the webhook so
- * the route handler can correlate the Stop hook to its originating
- * Dispatch row. The bash `${VAR:+,...}` substitution inserts the
- * key+value only when the env is set; pre-23.2 sessions (no env)
- * post the legacy {projectPath} body and the webhook falls back.
+ * Phase 41.5 — the webhook POST moved into the canonical Stop-hook
+ * script (scripts/session-complete-hook.sh), which spools the payload
+ * to ~/.cascade/webhook-spool.jsonl when Cascade is unreachable so no
+ * Stop-hook ping is lost. install-hooks now emits an invocation of that
+ * ONE script rather than inlining the curl into every project's
+ * settings.json.
  *
- * Exported so unit tests can assert the shape without spawning a real
- * shell.
+ * Phase 23.2 semantics are preserved by the script: it reads
+ * CASCADE_DISPATCH_ID from the environment and round-trips it as
+ * `idempotencyKey` so the route can correlate the Stop hook to its
+ * Dispatch row; a key-less (pre-23.2) session posts the legacy
+ * {projectPath} body and the webhook falls back.
+ *
+ * The whole invocation is backgrounded with `&` so the Claude session
+ * never blocks — the script itself runs synchronously to decide whether
+ * to spool. Exported (with the resolved script path injectable) so unit
+ * tests can assert the shape without spawning a real shell.
  */
-export function buildWebhookCommand(port: string): string {
-  return `curl -s -X POST http://localhost:${port}/api/webhook/session-complete -H 'Content-Type: application/json' -d "{\\"projectPath\\":\\"$PWD\\"\${CASCADE_DISPATCH_ID:+,\\"idempotencyKey\\":\\"$CASCADE_DISPATCH_ID\\"}}" > /dev/null 2>&1 &`;
+const CANONICAL_HOOK_SCRIPT = path.resolve(
+  __dirname,
+  "session-complete-hook.sh"
+);
+
+export function buildWebhookCommand(
+  port: string,
+  scriptPath: string = CANONICAL_HOOK_SCRIPT
+): string {
+  return `bash "${scriptPath}" "$PWD" ${port} > /dev/null 2>&1 &`;
 }
 
 const WEBHOOK_COMMAND = buildWebhookCommand(CASCADE_PORT);

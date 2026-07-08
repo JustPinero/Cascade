@@ -31,7 +31,15 @@ export async function GET() {
 
   const rows = await prisma.dispatchOutcome.findMany({
     where: { completedAt: { gte: since } },
-    select: { projectSlug: true, mode: true, outcome: true, signals: true },
+    select: {
+      projectSlug: true,
+      mode: true,
+      outcome: true,
+      signals: true,
+      // Phase 41.2 — goal-verified successes weigh more than
+      // self-reported ones in the engine's scoring.
+      goalAchieved: true,
+    },
     orderBy: { completedAt: "desc" },
   });
 
@@ -46,6 +54,7 @@ export async function GET() {
       mode: row.mode,
       outcome: row.outcome,
       signals: parseSignals(row.signals),
+      goalAchieved: row.goalAchieved,
     });
   }
 

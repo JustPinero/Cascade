@@ -4,6 +4,7 @@ import path from "path";
 import { scanProjects, scanProject } from "./scanner";
 import { computeHealth } from "./health-engine";
 import { computeProgress } from "./progress-engine";
+import { syncPublishSafetyTasks } from "./publish-safety";
 
 /**
  * Read a project's context.md or done.md if it exists.
@@ -53,8 +54,25 @@ export async function importProjects(
       where: { slug: scan.slug },
     });
 
-    // Compute real health from project filesystem
-    const healthResult = await computeHealth(scan.path);
+    // Compute real health from project filesystem. When the project is
+    // already in the DB, the fleet reconciler rides along (phase 41.4) to
+    // compare the DB's path/status against filesystem/git reality.
+    // Fetch is disabled here — imports are scan-triggered and must stay
+    // fast; the briefing runs the fetch-enabled pass.
+    const healthResult = await computeHealth(
+      scan.path,
+      existing
+        ? {
+            reconcileRecord: {
+              slug: existing.slug,
+              name: existing.name,
+              path: existing.path,
+              status: existing.status,
+            },
+            reconcileOptions: { fetch: false },
+          }
+        : {}
+    );
 
     // Compute progress score using current phase/request from DB (or defaults)
     const currentPhase = existing?.currentPhase || "phase-1-foundation";
@@ -76,9 +94,18 @@ export async function importProjects(
       debtItems: healthResult.details.debtItems,
       lastAuditGrade: healthResult.lastAuditGrade,
       auditFindings: healthResult.details.auditFindings,
+      publishSafety: healthResult.publishSafety,
+      infraVersion: healthResult.infraVersion,
     };
     if (healthResult.details.needsAttention) {
       healthDetails.needsAttention = healthResult.details.needsAttention;
+    }
+    if (healthResult.reconciliation) {
+      healthDetails.reconciliation = {
+        findingsCount: healthResult.reconciliation.findings.length,
+        findings: healthResult.reconciliation.findings,
+        remote: healthResult.reconciliation.remote,
+      };
     }
 
     const data = {
@@ -91,6 +118,7 @@ export async function importProjects(
       progressDetails: JSON.stringify(progressResult),
     };
 
+    let projectId: number;
     if (existing) {
       await prisma.project.update({
         where: { slug: scan.slug },
@@ -99,6 +127,7 @@ export async function importProjects(
           lastScannedAt: new Date(),
         },
       });
+      projectId = existing.id;
       result.updated++;
       result.projects.push({
         name: scan.name,
@@ -106,13 +135,14 @@ export async function importProjects(
         action: "updated",
       });
     } else {
-      await prisma.project.create({
+      const created = await prisma.project.create({
         data: {
           ...data,
           lastScannedAt: new Date(),
           lastActivityAt: scan.lastModified,
         },
       });
+      projectId = created.id;
       result.created++;
       result.projects.push({
         name: scan.name,
@@ -120,6 +150,13 @@ export async function importProjects(
         action: "created",
       });
     }
+
+    // Escalate publish-safety findings to HumanTasks (idempotent).
+    await syncPublishSafetyTasks(
+      prisma,
+      { slug: scan.slug, id: projectId },
+      healthResult.publishSafety.findings
+    );
   }
 
   return result;
@@ -145,7 +182,22 @@ export async function importSingleProject(
     where: { slug: scan.slug },
   });
 
-  const healthResult = await computeHealth(scan.path);
+  // Reconcile against the DB record when it exists (phase 41.4);
+  // fetch disabled for the same latency reason as importProjects.
+  const healthResult = await computeHealth(
+    scan.path,
+    existing
+      ? {
+          reconcileRecord: {
+            slug: existing.slug,
+            name: existing.name,
+            path: existing.path,
+            status: existing.status,
+          },
+          reconcileOptions: { fetch: false },
+        }
+      : {}
+  );
 
   const currentPhase = existing?.currentPhase || "phase-1-foundation";
   const currentRequest = existing?.currentRequest || null;
@@ -166,9 +218,18 @@ export async function importSingleProject(
     debtItems: healthResult.details.debtItems,
     lastAuditGrade: healthResult.lastAuditGrade,
     auditFindings: healthResult.details.auditFindings,
+    publishSafety: healthResult.publishSafety,
+    infraVersion: healthResult.infraVersion,
   };
   if (healthResult.details.needsAttention) {
     healthDetails.needsAttention = healthResult.details.needsAttention;
+  }
+  if (healthResult.reconciliation) {
+    healthDetails.reconciliation = {
+      findingsCount: healthResult.reconciliation.findings.length,
+      findings: healthResult.reconciliation.findings,
+      remote: healthResult.reconciliation.remote,
+    };
   }
 
   // Read context.md and done.md if they exist
@@ -191,19 +252,32 @@ export async function importSingleProject(
     ...(completionCriteria !== null ? { completionCriteria } : {}),
   };
 
+  let result: SingleImportResult;
+  let projectId: number;
   if (existing) {
     await prisma.project.update({
       where: { slug: scan.slug },
       data,
     });
-    return { slug: scan.slug, name: scan.name, action: "updated" };
+    projectId = existing.id;
+    result = { slug: scan.slug, name: scan.name, action: "updated" };
   } else {
-    await prisma.project.create({
+    const created = await prisma.project.create({
       data: {
         ...data,
         lastActivityAt: scan.lastModified,
       },
     });
-    return { slug: scan.slug, name: scan.name, action: "created" };
+    projectId = created.id;
+    result = { slug: scan.slug, name: scan.name, action: "created" };
   }
+
+  // Escalate publish-safety findings to HumanTasks (idempotent).
+  await syncPublishSafetyTasks(
+    prisma,
+    { slug: scan.slug, id: projectId },
+    healthResult.publishSafety.findings
+  );
+
+  return result;
 }

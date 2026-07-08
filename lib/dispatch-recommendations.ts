@@ -37,6 +37,13 @@ export interface OutcomeRow {
   outcome: string;
   /** Escalation signal types detected during the session. */
   signals: string[];
+  /**
+   * Phase 41.2 — goal evaluator verdict. true = a separate model
+   * confirmed the /goal condition against the transcript; false = the
+   * evaluator contradicted the session; null/undefined = no verdict
+   * (ad-hoc dispatch, older CLI, or no marker in the log).
+   */
+  goalAchieved?: boolean | null;
 }
 
 export interface ProjectOutcomes {
@@ -59,9 +66,30 @@ const BLOCKER_SIGNALS = new Set([
   "test-failure",
 ]);
 
+// Phase 41.2 — goal-verified successes outrank self-reported ones.
+// A success the goal evaluator confirmed counts fully; a bare
+// self-report counts at a discount; a self-report the evaluator
+// CONTRADICTED (goalAchieved === false) counts as a failure.
+const GOAL_VERIFIED_SUCCESS_WEIGHT = 1;
+const SELF_REPORTED_SUCCESS_WEIGHT = 0.6;
+
+/**
+ * How much a single outcome row contributes to a mode's success score.
+ * Exported so dashboards/tests can assert the ordering:
+ * goal-verified > self-reported > contradicted (0) = non-success (0).
+ */
+export function successWeight(row: OutcomeRow): number {
+  if (row.outcome !== "success") return 0;
+  if (row.goalAchieved === true) return GOAL_VERIFIED_SUCCESS_WEIGHT;
+  if (row.goalAchieved === false) return 0;
+  return SELF_REPORTED_SUCCESS_WEIGHT;
+}
+
 interface ModeStats {
   count: number;
   successes: number;
+  /** Phase 41.2 — successes weighted by goal verification. */
+  weightedSuccesses: number;
   signalSets: string[][];
 }
 
@@ -70,11 +98,12 @@ function statsByMode(outcomes: OutcomeRow[]): Map<string, ModeStats> {
   for (const o of outcomes) {
     let stats = byMode.get(o.mode);
     if (!stats) {
-      stats = { count: 0, successes: 0, signalSets: [] };
+      stats = { count: 0, successes: 0, weightedSuccesses: 0, signalSets: [] };
       byMode.set(o.mode, stats);
     }
     stats.count += 1;
     if (o.outcome === "success") stats.successes += 1;
+    stats.weightedSuccesses += successWeight(o);
     stats.signalSets.push(o.signals);
   }
   return byMode;
@@ -122,18 +151,21 @@ function recommendationsForProject(project: ProjectOutcomes): Recommendation[] {
     }
 
     // Rule: failing forward mode — continue keeps hitting walls.
+    // Phase 41.2 — scored on goal-weighted successes, so a mode kept
+    // afloat only by unverified self-reports trips the rule earlier
+    // than one whose successes the goal evaluator confirmed.
     if (
       mode === "continue" &&
       stats.count >= CONTINUE_FAILURE_MIN_COUNT &&
-      stats.successes / stats.count <= CONTINUE_FAILURE_RATE
+      stats.weightedSuccesses / stats.count <= CONTINUE_FAILURE_RATE
     ) {
-      const pct = Math.round((stats.successes / stats.count) * 100);
+      const pct = Math.round((stats.weightedSuccesses / stats.count) * 100);
       recs.push({
         projectSlug: project.slug,
         kind: "failing-mode",
         mode,
         suggestedMode: "investigate",
-        message: `continue on ${project.slug} is failing — ${pct}% success over ${stats.count} — try investigate?`,
+        message: `continue on ${project.slug} is failing — ${pct}% goal-weighted success over ${stats.count} — try investigate?`,
         count: stats.count,
         severity: "warn",
       });

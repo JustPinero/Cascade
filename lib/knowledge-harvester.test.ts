@@ -9,6 +9,8 @@ import path from "path";
 const TEST_DB_PATH = path.resolve(__dirname, "../prisma/test-harvest.db");
 const TEST_DB_URL = `file:${TEST_DB_PATH}`;
 const TEST_DIR = path.resolve(__dirname, "../.test-harvest");
+// Scratch brain dir so the mirror (41.6) never touches the real ~/kilroy-brain.
+const BRAIN_DIR = path.join(TEST_DIR, "scratch-brain");
 
 let prisma: PrismaClient;
 
@@ -24,6 +26,9 @@ beforeAll(async () => {
   prisma = new PrismaClient({ adapter });
 
   pushTestSchema(TEST_DB_URL);
+
+  // Scratch brain dir must exist so the mirror writes here (not real brain).
+  await fs.mkdir(BRAIN_DIR, { recursive: true });
 
   // Create test project directory with lessons
   const projDir = path.join(TEST_DIR, "test-project");
@@ -88,11 +93,26 @@ afterAll(async () => {
 
 describe("harvestKnowledge", () => {
   it("extracts lessons from [LESSON] tags", async () => {
-    const result = await harvestKnowledge(prisma);
+    const result = await harvestKnowledge(prisma, { brainPath: BRAIN_DIR });
     expect(result.newLessons).toBeGreaterThanOrEqual(3);
     expect(
       result.lessons.some((l) => l.title.includes("WAL mode"))
     ).toBe(true);
+  });
+
+  it("mirrors harvested lessons into the brain lessons dir", async () => {
+    const lessonsDir = path.join(BRAIN_DIR, "playbook", "lessons");
+    const files = await fs.readdir(lessonsDir);
+    // The WAL-mode lesson should have been mirrored as a markdown file.
+    const walFile = files.find((f) => f.includes("wal-mode"));
+    expect(walFile).toBeDefined();
+    const content = await fs.readFile(
+      path.join(lessonsDir, walFile!),
+      "utf-8"
+    );
+    expect(content).toMatch(/^---\n/);
+    expect(content).toContain("source: test-project");
+    expect(content).toContain("WAL mode");
   });
 
   it("extracts lessons from correction reports", async () => {
@@ -134,7 +154,7 @@ describe("harvestKnowledge", () => {
   });
 
   it("deduplicates on second run", async () => {
-    const result = await harvestKnowledge(prisma);
+    const result = await harvestKnowledge(prisma, { brainPath: BRAIN_DIR });
     expect(result.newLessons).toBe(0);
     expect(result.duplicatesSkipped).toBeGreaterThan(0);
   });
@@ -157,7 +177,7 @@ describe("harvestKnowledge", () => {
       },
     });
 
-    const result = await harvestKnowledge(prisma);
+    const result = await harvestKnowledge(prisma, { brainPath: BRAIN_DIR });
     // Should not crash, just find no new lessons
     expect(result.scannedProjects).toBe(2);
   });

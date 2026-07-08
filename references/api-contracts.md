@@ -221,8 +221,15 @@ Pattern-mine recent session logs across `building`/`complete` projects for playb
 ### `POST /api/briefing`
 Generate a morning briefing via Claude Haiku.
 - **Request:** none
-- **Response:** `{ briefing, generatedAt, projectCount, blockedCount, recentEventCount }`.
+- **Response:** `{ briefing, generatedAt, projectCount, blockedCount, recentEventCount, drift, infra }`.
+  - `drift` (phase 41.4): `{ findingsCount, section, projects[] }` — fleet-reconciliation drift from a fetch-enabled reconcile pass (5s per-repo box); `section` is the text fed into the model prompt.
+  - `infra` (phase 41.7): `{ plugin, remnantProjects }` — coqui-kickoff plugin version + the projects still carrying v3.5 machinery remnants.
 - **Notes:** rate-limited 5/min. Requires `ANTHROPIC_API_KEY`. 30s abort. Logs usage telemetry.
+
+### `GET /api/reconciliation`
+Fleet-reconciliation drift for the dashboard `FleetDriftPanel` (phase 41.4). Local-only — runs with `fetch:false` (no `git fetch`), so it reports against last-known refs.
+- **Request:** none
+- **Response:** `{ generatedAt, findingsCount, projects[] }` — per-project reconciliation findings (path-missing, path-casing, dirty-tree, ahead-behind, unpushed-branch, status-drift); renders nothing client-side when the fleet is consistent.
 
 ---
 
@@ -341,11 +348,18 @@ Live dispatch preflight (PATH checks for tmux/claude/etc).
 - **Response:** `checkDispatchPreflight` result.
 - **Notes:** `Cache-Control: no-store`.
 
+### `GET /api/recommendations`
+Phase 40 [P3] — outcome-driven dispatch recommendations for the dashboard.
+- **Response:** `{ recommendations: Recommendation[] }` (see `lib/dispatch-recommendations.ts`).
+- **Notes:** Reads `DispatchOutcome` rows from the last 14 days, groups by project, runs the pure `computeRecommendations` engine. `Cache-Control: no-store`. Phase 41.2: rows feed `goalAchieved` into the engine — the failing-mode rule scores goal-weighted successes (goal-verified 1.0 > self-reported 0.6 > evaluator-contradicted 0).
+
 ### `POST /api/webhook/session-complete`
 Receives Claude Code Stop-hook pings from managed projects.
 - **Request:** `{ projectPath: string, idempotencyKey?: string }`
 - **Response:** `{ ok, slug, name, action, idempotencyKey?, importError? }`. Deduped responses return `{ ok, deduped: true, slug }` when the dispatch is already completed.
 - **Notes:** Correlates by `idempotencyKey` (canonical) with legacy fallback via newest `session-launched` activity event. Side effects: targeted re-import of the project, dispatch-queue slot release, Dispatch row → `completed`, `session-complete` (or `orphaned-webhook`) activity event, escalation detection from latest session log → auto-creates `HumanTask` rows from `[HUMAN TODO]` signals (dedup on `projectSlug+title` when dispatch in scope), records a `DispatchOutcome` (success | attention-needed | test-failure | blocker), refreshes per-project feature-usage ledger. All best-effort: failures are logged but don't fail the webhook.
+- **Phase 41.2 (goal state):** the outcome row also records `goalCondition` (recovered from the matched Dispatch's prompt snapshot — the `/goal` line the dispatcher composed from the request's acceptance criteria; null for ad-hoc dispatches and on the legacy path), plus `goalAchieved`/`goalReason` parsed defensively from the session log via `lib/dispatch-goals.ts#parseGoalOutcome` (markers: `[GOAL ACHIEVED]` / `[GOAL NOT ACHIEVED]` or prose "goal achieved/not achieved"; last verdict wins; no marker → null, never throws).
+- **Phase 41.5 (resilience — shared ingestion + spool/drain):** the ingestion body is extracted into `lib/webhook-ingest.ts#ingestSessionComplete(prisma, { projectPath, idempotencyKey })` — the route is now a thin HTTP wrapper (validate → delegate → respond). Stop hooks no longer inline the curl: the canonical script `scripts/session-complete-hook.sh` (emitted into projects' `settings.json` by `scripts/install-hooks.ts#buildWebhookCommand`) POSTs here and, on connection failure (server down / `op` signed out), appends the JSON payload to a spool file — `CASCADE_WEBHOOK_SPOOL`, default `~/.cascade/webhook-spool.jsonl` (outside any repo). The server drains the spool on boot and every 60s (`lib/webhook-spool.ts#drainWebhookSpool`, wired via `lib/webhook-spool-runtime.ts` in `instrumentation.ts`), replaying each entry through the SAME `ingestSessionComplete` path as a live POST. Drain is atomic vs concurrent writes: the spool is renamed aside before reading, so a Stop-hook append landing mid-drain lands in a fresh spool (never lost, never double-ingested). Malformed lines are quarantined to `<spool>.quarantine` + logged, never fatal; ingest-failed entries are re-spooled for retry. Idempotent via the dispatcher's `idempotencyKey` dedup — replaying the same payload yields one outcome. **Fleet rollout of the new script-based hook command is a follow-up** (existing `settings.json` entries that inline the old curl keep working unchanged).
 
 ---
 

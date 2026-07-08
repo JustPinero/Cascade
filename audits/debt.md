@@ -2,6 +2,30 @@
 
 ## Open
 
+### [41.D1] webhook-spool rename-aside atomicity is narrower than the docstring claims
+`lib/webhook-spool.ts:14-20,91-96` — a microsecond TOCTOU race: if a Stop-hook shell has opened its `>>` fd on the spool inode but not yet written when the drain renames→reads→unlinks that inode, the hook's line lands on the unlinked inode and is lost. Never realistically hits on a single dev box, but the "never lost" docstring overstates the guarantee. Fix when it matters: O_APPEND to a path re-resolved per write, or a lockfile around drain. Low.
+
+### [41.D2] session-complete-hook.sh builds JSON by raw shell interpolation
+`scripts/session-complete-hook.sh:37-39` — `payload="{\"projectPath\":\"${project_path}\",…}"`. A path containing `"` or `\` yields malformed JSON → webhook 400 → spooled → quarantined → ping silently dropped. Not reachable on Justin's forward-slash macOS/Linux/WSL paths, but unescaped. Fix: build the payload with `jq -n --arg`. Low.
+
+### [41.D3] briefing re-parses ~/.claude.json once per project (perf)
+`app/api/briefing/route.ts` calls `computeInfraVersion(p.path)` per project, and `readWorkspaceTrust` (lib/infra-version.ts) reads + `JSON.parse`s the entire (potentially large) `~/.claude.json` each time. N projects = N full parses of the same file on the briefing happy path. Fix: read/parse once and pass the trust map in. Low/perf.
+
+### [41.D4] webhook-ingest signal-loop creates are unguarded
+`lib/webhook-ingest.ts:186-221` — the HumanTask/ActivityEvent `prisma.*.create` calls in the signal loop aren't wrapped, unlike the DispatchOutcome/feature-audit writes. A transient DB error there throws AFTER the dispatch row is flipped to `completed`, so the retried spool entry dedups and that DispatchOutcome is permanently skipped. Loses an analytics row, not lifecycle state. Fix: wrap the signal-loop writes so they can't abort post-completion. Low.
+
+### [41.D5] brain-sync slug collisions silently overwrite
+`lib/brain-sync.ts:119` — two distinct lesson titles that slugify identically ("Fix: the bug!" vs "Fix the bug") write the same `<slug>.md`; the second overwrites the first in the brain mirror (canonical KnowledgeLesson DB row unaffected). Fix: disambiguate with a short content hash suffix on collision. Low.
+
+### [41.D6] publish-safety reports one match per pattern per file
+`lib/publish-safety.ts:126-128` — `pattern.regex.exec(text)` returns only the first hit, so a file with two different secrets matching the same pattern reports one. Detection completeness gap, not a leak. Fix: global-flag exec loop, dedup by redacted value. Low.
+
+### [41.D7] webhook-ingest has no isolated unit test
+The shared `ingestSessionComplete` module (the heart of 41.5) is exercised only indirectly — via the HTTP route test and the drain-path test. Every branch is reached, but there's no dedicated `lib/webhook-ingest.test.ts`. Add one so future refactors of the shared ingestion path have a direct contract. Low (coverage).
+
+### [41.D8] webhook-spool missing/empty-spool branch untested
+`lib/webhook-spool.ts:85` — the `if (!fs.existsSync(spoolPath)) return {...}` no-op path has no test, the one "nothing to drain" resilience edge left unexercised in a resilience module. Add the empty/missing-spool case. Low (coverage).
+
 ### [40.D1] `formatCountdown` floor race makes one deadline-utils test flaky
 `lib/deadline-utils.test.ts:8` builds `new Date(Date.now() + 3*86400000)` then asserts `formatCountdown(...) === "3d left"`. `formatCountdown` reads `Date.now()` again, so `diffMs` is `3 days − ε`; `Math.floor` drops it to `2` whenever ≥1ms elapses between the two reads → intermittent "2d left" failure (observed once during Phase 40; passes on re-run). Timing race, not time-of-day. Fix options: (a) make the test pin a reference instant (`vi.useFakeTimers()` / inject `now`), or (b) have `formatCountdown` round toward the deadline. Natural to fold into P7 (deadline/staleness triage), which will touch this module anyway.
 
@@ -30,6 +54,9 @@ Phase 33 closed the top-5 priority routes from the original [30.D2] finding. Pha
 - **`app/components/overseer-chat.tsx`** — Phase 34 covered the mount + history rehydration + input + settings smokes (5 tests). Streaming render, conversation mode, voice flow, dispatch-tag actions still uncovered — each is its own slice if Justin asks.
 - 32 remaining routes are lower blast-radius (reads, simple CRUD). Tackle opportunistically when touching them for other reasons.
 
+
+### [41.1-residual] Some rig test file(s) leak scratch DBs even on green runs
+A fully passing `pnpm test` still leaves ~6 `test-rig-*.db` files in `prisma/` (2 worker pids, rigs #1-4 and #1-2 — some rig-using test path never reaches `dispose()`, or the worker is torn down first). The 41.1 startup sweep in `tests/harness/dispatch-rig.ts` removes them on the next run (mtime > 60s before process start), so accumulation is capped at one run's leakage. Follow-up if desired: bisect the 24 rig-using test files to find the non-disposing path, or add a globalSetup-time sweep so even back-to-back runs start clean.
 
 ### [36.A5] Overseer chat history persisted client-side, droppable mid-stream
 Two fire-and-forget POSTs from the component; route persists nothing; closing the tab loses the assistant turn after server-side effects already fired. See design-review [36.A5]. Fix: persist server-side in the chat route.

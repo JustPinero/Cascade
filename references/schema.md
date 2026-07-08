@@ -138,6 +138,9 @@ Tracks what the Overseer recommended vs what actually happened.
 | dispatchedAt | DateTime | — | When dispatch was issued |
 | completedAt | DateTime | now() | When session ended |
 | dispatchId | String? | null | Phase 23.2 — FK to Dispatch.id (unique). Links outcome to its lifecycle row |
+| goalCondition | String? | null | Phase 41.2 — /goal condition composed at dispatch from the request's acceptance criteria (null for ad-hoc dispatches) |
+| goalAchieved | Boolean? | null | Phase 41.2 — goal-evaluator verdict parsed from the session log; null = no verdict surfaced |
+| goalReason | String? | null | Phase 41.2 — evaluator's stated reason, when the log marker carried one |
 
 **Relations:** project, dispatch?
 
