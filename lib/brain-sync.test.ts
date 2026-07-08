@@ -5,6 +5,21 @@ import os from "os";
 import * as childProcess from "child_process";
 import { syncLessonToBrain, slugify, type BrainLesson } from "./brain-sync";
 
+// ESM module namespaces are not directly spy-able (vi.spyOn throws
+// "Module namespace is not configurable"). Mock child_process so its
+// exports are vi.fn spies we can assert were never called — the point
+// of the boundary test: brain sync shells out to nothing.
+vi.mock("child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof childProcess>();
+  return {
+    ...actual,
+    execSync: vi.fn(actual.execSync),
+    exec: vi.fn(actual.exec),
+    execFile: vi.fn(actual.execFile),
+    spawn: vi.fn(actual.spawn),
+  };
+});
+
 let scratchRoot: string;
 
 function makeLesson(overrides: Partial<BrainLesson> = {}): BrainLesson {
@@ -127,16 +142,11 @@ describe("syncLessonToBrain", () => {
   });
 
   it("performs no git / shell operations (spy on the exec boundary)", async () => {
-    const execSyncSpy = vi.spyOn(childProcess, "execSync");
-    const execSpy = vi.spyOn(childProcess, "exec");
-    const execFileSpy = vi.spyOn(childProcess, "execFile");
-    const spawnSpy = vi.spyOn(childProcess, "spawn");
-
     await syncLessonToBrain(makeLesson(), { brainPath: scratchRoot });
 
-    expect(execSyncSpy).not.toHaveBeenCalled();
-    expect(execSpy).not.toHaveBeenCalled();
-    expect(execFileSpy).not.toHaveBeenCalled();
-    expect(spawnSpy).not.toHaveBeenCalled();
+    expect(vi.mocked(childProcess.execSync)).not.toHaveBeenCalled();
+    expect(vi.mocked(childProcess.exec)).not.toHaveBeenCalled();
+    expect(vi.mocked(childProcess.execFile)).not.toHaveBeenCalled();
+    expect(vi.mocked(childProcess.spawn)).not.toHaveBeenCalled();
   });
 });
