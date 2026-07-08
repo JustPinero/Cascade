@@ -14,6 +14,12 @@
  * replaying Stop-hook pings that were spooled while the server (or `op`)
  * was down. Boot is exactly when the server is back UP, so draining
  * there recovers the pings that would otherwise vanish.
+ *
+ * Fix 41.D9 — self-heal the canonical Stop-hook script at boot: copy
+ * scripts/session-complete-hook.sh to the $HOME-stable location the
+ * committed hooks reference (~/.cascade/session-complete-hook.sh). A
+ * freshly-cloned machine gets a working hook even before install-hooks
+ * is re-run. Wrapped so a copy failure never crashes server startup.
  */
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
@@ -23,4 +29,14 @@ export async function register(): Promise<void> {
   startDispatchWatchdog();
   const { startSpoolDrain } = await import("@/lib/webhook-spool-runtime");
   startSpoolDrain();
+  try {
+    const { copyCanonicalScript } = await import("@/scripts/install-hooks");
+    copyCanonicalScript();
+  } catch (err) {
+    console.error(
+      `[install-hooks] canonical hook self-heal failed: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
+  }
 }

@@ -12,6 +12,7 @@
  */
 
 import fs from "fs";
+import os from "os";
 import path from "path";
 
 const PROJECTS_DIR =
@@ -54,17 +55,70 @@ const SESSION_LOG_COMMAND = `mkdir -p "$PWD/.claude/sessions" && if [ -f "$PWD/.
  * never blocks — the script itself runs synchronously to decide whether
  * to spool. Exported (with the resolved script path injectable) so unit
  * tests can assert the shape without spawning a real shell.
+ *
+ * Fix 41.D9 — the hook references a $HOME-RELATIVE path, not an absolute
+ * one. settings.json is TRACKED and synced across machines; an absolute
+ * Mac path (e.g. /Users/justinpinero/…) is invalid on the Windows
+ * machine and would silently kill the hook after a pull. `$HOME` expands
+ * per machine inside the double-quoted command, so the same committed
+ * string resolves correctly everywhere. The script is placed at that
+ * $HOME-stable location by copyCanonicalScript() below.
  */
-const CANONICAL_HOOK_SCRIPT = path.resolve(
-  __dirname,
-  "session-complete-hook.sh"
-);
+const CASCADE_HOME_DIRNAME = ".cascade";
+const CANONICAL_HOOK_SCRIPT_BASENAME = "session-complete-hook.sh";
+
+/** $HOME-relative path baked into settings.json (portable across machines). */
+const HOME_RELATIVE_HOOK_SCRIPT = `$HOME/${CASCADE_HOME_DIRNAME}/${CANONICAL_HOOK_SCRIPT_BASENAME}`;
 
 export function buildWebhookCommand(
   port: string,
-  scriptPath: string = CANONICAL_HOOK_SCRIPT
+  scriptPath: string = HOME_RELATIVE_HOOK_SCRIPT
 ): string {
   return `bash "${scriptPath}" "$PWD" ${port} > /dev/null 2>&1 &`;
+}
+
+/**
+ * Resolve the SOURCE of the canonical hook script (the copy we ship in
+ * the repo). Prefer the project-root `scripts/` path — reliable when the
+ * Cascade Next server runs from the repo root and calls this on startup
+ * (instrumentation self-heal) — and fall back to the __dirname-relative
+ * path used when this file runs as the install-hooks CLI.
+ */
+function resolveSourceScript(): string {
+  const cwdPath = path.resolve(
+    process.cwd(),
+    "scripts",
+    CANONICAL_HOOK_SCRIPT_BASENAME
+  );
+  if (fs.existsSync(cwdPath)) return cwdPath;
+  return path.resolve(__dirname, CANONICAL_HOOK_SCRIPT_BASENAME);
+}
+
+export interface CopyCanonicalScriptOptions {
+  /** Home directory to install under (defaults to os.homedir()). Injectable for tests. */
+  home?: string;
+  /** Source script path (defaults to the repo copy). Injectable for tests. */
+  sourcePath?: string;
+}
+
+/**
+ * Fix 41.D9 — copy the canonical Stop-hook script to the $HOME-stable
+ * location the hook references (`<home>/.cascade/session-complete-hook.sh`).
+ * Idempotent and overwriting so script updates propagate; chmod +x so it
+ * stays executable. Consistent with the spool default under ~/.cascade.
+ * Returns the absolute target path.
+ */
+export function copyCanonicalScript(
+  opts: CopyCanonicalScriptOptions = {}
+): string {
+  const home = opts.home ?? os.homedir();
+  const source = opts.sourcePath ?? resolveSourceScript();
+  const targetDir = path.join(home, CASCADE_HOME_DIRNAME);
+  const target = path.join(targetDir, CANONICAL_HOOK_SCRIPT_BASENAME);
+  fs.mkdirSync(targetDir, { recursive: true });
+  fs.copyFileSync(source, target);
+  fs.chmodSync(target, 0o755);
+  return target;
 }
 
 const WEBHOOK_COMMAND = buildWebhookCommand(CASCADE_PORT);
@@ -132,7 +186,10 @@ function isCascadeStopHook(entry: HookEntry): boolean {
   );
 }
 
-function processProject(projectDir: string): {
+export function processProject(
+  projectDir: string,
+  copyOpts: CopyCanonicalScriptOptions = {}
+): {
   name: string;
   action: string;
   error?: string;
@@ -187,6 +244,11 @@ function processProject(projectDir: string): {
   if (DRY_RUN) {
     return { name, action: "WOULD INSTALL" };
   }
+
+  // Fix 41.D9 — place the canonical script at the $HOME-stable location
+  // BEFORE writing settings, so the portable `$HOME/.cascade/...` path we
+  // are about to commit actually resolves on this machine. Idempotent.
+  copyCanonicalScript(copyOpts);
 
   // Ensure .claude directory exists
   if (!fs.existsSync(settingsDir)) {
