@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getSessionLogs } from "@/lib/session-reader";
 import { checkRateLimit, getRateLimitKey } from "@/lib/rate-limiter";
 import { reconcileFleet, formatDriftSection } from "@/lib/fleet-reconciler";
+import { computeInfraVersion } from "@/lib/infra-version";
 
 /**
  * Timebox for per-repo `git fetch` during the briefing's reconciliation
@@ -54,6 +55,36 @@ export async function POST(request: NextRequest) {
       { fetchTimeoutMs: RECONCILE_FETCH_TIMEOUT_MS }
     );
     const driftSection = formatDriftSection(fleetReconciliation);
+
+    // Phase 41.7 — infrastructure-version dimension. Surface the machine's
+    // coqui-kickoff plugin version once, and flag any project still carrying
+    // v3.5 machinery remnants (project-local skills/agents/commands that
+    // shadow plugin-provided names, or a session-context/secret-scan hook
+    // still wired into project settings.json — these silently misbehave).
+    const infraByProject = await Promise.all(
+      projects.map(async (p) => ({
+        slug: p.slug,
+        name: p.name,
+        infra: await computeInfraVersion(p.path),
+      }))
+    );
+    const pluginInfo = infraByProject[0]?.infra.plugin ?? {
+      installed: false,
+      version: null,
+    };
+    const remnantProjects = infraByProject
+      .filter((p) => p.infra.migrationState === "v3.5-remnants")
+      .map((p) => ({
+        slug: p.slug,
+        name: p.name,
+        remnants: p.infra.remnants,
+      }));
+    const infraSection =
+      remnantProjects.length > 0
+        ? remnantProjects
+            .map((p) => `- ${p.slug}: ${p.remnants.join(", ")}`)
+            .join("\n")
+        : null;
 
     // Gather recent activity (last 24h)
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -153,7 +184,11 @@ ${sessionList}
 ${taskList}
 
 ## Fleet Reconciliation Drift (DB picture vs disk/origin reality)
-${driftSection ?? "No drift detected — DB matches reality."}`;
+${driftSection ?? "No drift detected — DB matches reality."}
+
+## Infrastructure Version (coqui-kickoff plugin ${pluginInfo.version ?? "not-installed"})
+### Projects with v3.5 machinery remnants (shadow the plugin — migrate)
+${infraSection ?? "None — all projects clean of v3.5 remnants."}`;
 
     const BRIEFING_MODEL = "claude-haiku-4-5-20251001";
     const controller = new AbortController();
@@ -219,6 +254,10 @@ ${driftSection ?? "No drift detected — DB matches reality."}`;
             message: f.message,
           })),
         })),
+      },
+      infra: {
+        plugin: pluginInfo,
+        remnantProjects,
       },
     });
   } catch (error) {

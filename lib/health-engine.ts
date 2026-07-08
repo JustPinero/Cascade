@@ -13,6 +13,11 @@ import {
   type ProjectReconciliation,
   type ReconcileOptions,
 } from "./fleet-reconciler";
+import {
+  computeInfraVersion,
+  type InfraVersionInfo,
+  type InfraVersionOptions,
+} from "./infra-version";
 
 export interface HealthResult {
   health: "healthy" | "warning" | "blocked" | "idle";
@@ -20,6 +25,11 @@ export interface HealthResult {
   gitDirty: boolean;
   lastAuditGrade: string | null;
   publishSafety: PublishSafetySummary;
+  /**
+   * Phase 41.7 — infrastructure-version dimension (plugin version,
+   * migration state / v3.5 remnants, workspace trust). Always present.
+   */
+  infraVersion: InfraVersionInfo;
   /** Phase 41.4 — present only when opts.reconcileRecord was provided. */
   reconciliation?: ProjectReconciliation;
   details: {
@@ -41,6 +51,12 @@ export interface ComputeHealthOptions {
    */
   reconcileRecord?: FleetProjectRecord;
   reconcileOptions?: ReconcileOptions;
+  /**
+   * Phase 41.7 — injectable ~/.claude paths for the infra-version
+   * dimension (tests point these at fixtures; prod falls back to env vars
+   * then the real ~/.claude).
+   */
+  infraOptions?: InfraVersionOptions;
 }
 
 /**
@@ -161,19 +177,27 @@ export async function computeHealth(
   projectPath: string,
   options: ComputeHealthOptions = {}
 ): Promise<HealthResult> {
-  const [debt, git, audit, attention, publishSafetyResult, reconciliation] =
-    await Promise.all([
-      countOpenDebt(projectPath),
-      checkGitStatus(projectPath),
-      getLastAuditGrade(projectPath),
-      checkNeedsAttention(projectPath),
-      auditPublishSafety(projectPath, {
-        visibilityProbe: options.visibilityProbe,
-      }),
-      options.reconcileRecord
-        ? reconcileProject(options.reconcileRecord, options.reconcileOptions)
-        : Promise.resolve(undefined),
-    ]);
+  const [
+    debt,
+    git,
+    audit,
+    attention,
+    publishSafetyResult,
+    reconciliation,
+    infraVersion,
+  ] = await Promise.all([
+    countOpenDebt(projectPath),
+    checkGitStatus(projectPath),
+    getLastAuditGrade(projectPath),
+    checkNeedsAttention(projectPath),
+    auditPublishSafety(projectPath, {
+      visibilityProbe: options.visibilityProbe,
+    }),
+    options.reconcileRecord
+      ? reconcileProject(options.reconcileRecord, options.reconcileOptions)
+      : Promise.resolve(undefined),
+    computeInfraVersion(projectPath, options.infraOptions ?? {}),
+  ]);
 
   let health: HealthResult["health"] = "idle";
 
@@ -216,6 +240,7 @@ export async function computeHealth(
     gitDirty: git.dirty,
     lastAuditGrade: audit.grade,
     publishSafety: summarizePublishSafety(publishSafetyResult),
+    infraVersion,
     details,
   };
 

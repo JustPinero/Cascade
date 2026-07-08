@@ -95,6 +95,7 @@ export async function importProjects(
       lastAuditGrade: healthResult.lastAuditGrade,
       auditFindings: healthResult.details.auditFindings,
       publishSafety: healthResult.publishSafety,
+      infraVersion: healthResult.infraVersion,
     };
     if (healthResult.details.needsAttention) {
       healthDetails.needsAttention = healthResult.details.needsAttention;
@@ -218,6 +219,7 @@ export async function importSingleProject(
     lastAuditGrade: healthResult.lastAuditGrade,
     auditFindings: healthResult.details.auditFindings,
     publishSafety: healthResult.publishSafety,
+    infraVersion: healthResult.infraVersion,
   };
   if (healthResult.details.needsAttention) {
     healthDetails.needsAttention = healthResult.details.needsAttention;
