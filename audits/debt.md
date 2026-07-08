@@ -2,6 +2,12 @@
 
 ## Open
 
+### [41.D9] Fleet webhook-hook rollout BLOCKED on cross-machine path portability
+The 41.5 follow-up (re-run `scripts/install-hooks.ts` across the fleet so every project adopts the spool-resilient `session-complete-hook.sh`) cannot be run as-is. `install-hooks.ts:58` bakes an ABSOLUTE path (`path.resolve(__dirname, "session-complete-hook.sh")` → `/Users/justinpinero/Desktop/projects/Cascade/scripts/session-complete-hook.sh`) into each project's `.claude/settings.json`. That file is TRACKED and synced across machines (verified: romereno/teamistry/medipal/Drydock all track settings.json). The CURRENT inline hook is a portable `curl http://localhost:3000/...` with no filesystem path. Committing the Mac-absolute script path would break the Stop hook on the Windows machine after a pull — a net regression (silent ping loss on Windows), the opposite of 41.5's intent.
+- **Root cause:** the canonical-script design traded a portable inline curl for a non-portable absolute path, and settings.json is version-controlled cross-machine.
+- **Fix options (pick one before rollout):** (a) install the script to a `$HOME`-relative stable location (`~/.cascade/session-complete-hook.sh`) — via install-hooks or Cascade server startup — and reference `"$HOME/.cascade/session-complete-hook.sh"` in the hook (valid on both machines); (b) reference an env var the shell expands per-machine (`bash "${CASCADE_HOOK_SCRIPT:-…}" …`); (c) keep the inline curl but fold the spool-on-failure logic directly into it (no external script). Option (a) is cleanest.
+- **Until fixed:** existing inline curls keep working (they just don't spool on failure). No rollout run. Justin flagged.
+
 ### [41.D1] webhook-spool rename-aside atomicity is narrower than the docstring claims
 `lib/webhook-spool.ts:14-20,91-96` — a microsecond TOCTOU race: if a Stop-hook shell has opened its `>>` fd on the spool inode but not yet written when the drain renames→reads→unlinks that inode, the hook's line lands on the unlinked inode and is lost. Never realistically hits on a single dev box, but the "never lost" docstring overstates the guarantee. Fix when it matters: O_APPEND to a path re-resolved per write, or a lockfile around drain. Low.
 
