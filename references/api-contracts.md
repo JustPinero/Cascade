@@ -221,8 +221,15 @@ Pattern-mine recent session logs across `building`/`complete` projects for playb
 ### `POST /api/briefing`
 Generate a morning briefing via Claude Haiku.
 - **Request:** none
-- **Response:** `{ briefing, generatedAt, projectCount, blockedCount, recentEventCount }`.
+- **Response:** `{ briefing, generatedAt, projectCount, blockedCount, recentEventCount, drift, infra }`.
+  - `drift` (phase 41.4): `{ findingsCount, section, projects[] }` — fleet-reconciliation drift from a fetch-enabled reconcile pass (5s per-repo box); `section` is the text fed into the model prompt.
+  - `infra` (phase 41.7): `{ plugin, remnantProjects }` — coqui-kickoff plugin version + the projects still carrying v3.5 machinery remnants.
 - **Notes:** rate-limited 5/min. Requires `ANTHROPIC_API_KEY`. 30s abort. Logs usage telemetry.
+
+### `GET /api/reconciliation`
+Fleet-reconciliation drift for the dashboard `FleetDriftPanel` (phase 41.4). Local-only — runs with `fetch:false` (no `git fetch`), so it reports against last-known refs.
+- **Request:** none
+- **Response:** `{ generatedAt, findingsCount, projects[] }` — per-project reconciliation findings (path-missing, path-casing, dirty-tree, ahead-behind, unpushed-branch, status-drift); renders nothing client-side when the fleet is consistent.
 
 ---
 
