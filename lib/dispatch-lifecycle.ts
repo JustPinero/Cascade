@@ -69,12 +69,31 @@ export async function enqueueWithDispatchRow(
     // project.path and the Stop hook's projectPath.
     id: dispatch.idempotencyKey,
     dispatch: async () => {
-      // started transition — separate update so observers see the
-      // queued → started edge cleanly.
-      await prisma.dispatch.update({
-        where: { id: dispatch.id },
-        data: { status: "started", startedAt: new Date() },
+      // Phase 42 (P0.2a) — guarded transition: only a row still
+      // `queued` may start. The watchdog can flip a long-pending row
+      // to `timeout` while it waits for a slot (or a standalone sweep
+      // to `failed`); spawning it anyway resurrected dispatches
+      // Cascade had already declared dead. A 0-row update means the
+      // row left `queued` — skip the spawn and free the slot so drain
+      // moves on.
+      const startedAt = new Date();
+      const claimed = await prisma.dispatch.updateMany({
+        where: { id: dispatch.id, status: "queued" },
+        data: {
+          status: "started",
+          startedAt,
+          // Re-anchor the watchdog deadline at ACTUAL start. Anchoring
+          // at enqueue let queue wait time eat the run window, so slow
+          // queues produced instant "timeouts" on healthy sessions.
+          expectedBy: new Date(
+            startedAt.getTime() + (spec.expectedByMs ?? DEFAULT_EXPECTED_BY_MS)
+          ),
+        },
       });
+      if (claimed.count === 0) {
+        getDispatchQueue().release(dispatch.idempotencyKey);
+        return;
+      }
       try {
         await spec.spawnFn(dispatch.idempotencyKey);
       } catch (err) {
