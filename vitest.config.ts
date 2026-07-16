@@ -14,6 +14,13 @@ export default defineConfig({
     // serializes the Prisma client regen and prevents flaky races
     // across parallel test workers.
     globalSetup: ["./tests/harness/global-setup.ts"],
+    // Phase 42 (P0.1) — the webhook-ingest containment guard refuses
+    // projectPaths outside PROJECTS_DIR. Tests use "/p/..." fake paths
+    // by convention, so the suite runs with /p as the managed root.
+    // Files needing a different root set process.env themselves.
+    env: {
+      PROJECTS_DIR: "/p",
+    },
   },
   resolve: {
     alias: {

@@ -5,8 +5,8 @@
   "license": "MIT",
   "scripts": {
     "predev": "tsx scripts/run-dispatch-watchdog.ts || exit 0",
-    "dev": "op run --env-file=.env -- next dev --turbopack",
-    "dev:ci": "next dev --turbopack",
+    "dev": "op run --env-file=.env -- next dev --turbopack -H 127.0.0.1",
+    "dev:ci": "next dev --turbopack -H 127.0.0.1",
     "build": "next build",
     "start": "op run --env-file=.env -- next start",
     "lint": "eslint",
