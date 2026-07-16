@@ -80,7 +80,7 @@ beforeEach(() => {
 function makeRequest(): NextRequest {
   return new NextRequest("http://localhost:3000/api/webhook/session-complete", {
     method: "POST",
-    body: JSON.stringify({ projectPath: "/tmp/demo" }),
+    body: JSON.stringify({ projectPath: "/p/demo" }),
     headers: { "Content-Type": "application/json" },
   });
 }
@@ -89,7 +89,7 @@ describe("POST /api/webhook/session-complete — feature audit hook (phase 11.1)
   it("calls auditProjectFeatureUsage for the project after escalation processing", async () => {
     mockAuditProjectFeatureUsage.mockResolvedValue({
       projectId: 42,
-      projectPath: "/tmp/demo",
+      projectPath: "/p/demo",
       detected: [],
       removed: 0,
       skippedFeatures: [],

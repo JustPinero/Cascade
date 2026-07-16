@@ -24,6 +24,7 @@ import { detectEscalations } from "@/lib/escalation-detector";
 import { extractGoalCondition, parseGoalOutcome } from "@/lib/dispatch-goals";
 import { getDispatchQueue } from "@/lib/dispatch-queue";
 import { auditProjectFeatureUsage } from "@/lib/anthropic-feature-check";
+import { isInsideProjectsDir } from "@/lib/validators";
 import path from "path";
 
 export interface IngestInput {
@@ -34,6 +35,8 @@ export interface IngestInput {
 export interface IngestResult {
   ok: boolean;
   deduped?: boolean;
+  /** Phase 42 (P0.1) — payload refused by the containment guard. */
+  rejected?: boolean;
   slug: string;
   name?: string | null;
   action?: string | null;
@@ -67,6 +70,20 @@ export async function ingestSessionComplete(
   input: IngestInput
 ): Promise<IngestResult> {
   const { projectPath, idempotencyKey } = input;
+
+  // Phase 42 (P0.1) — containment guard. The webhook is externally
+  // reachable and this path flows into git/fs work (`git status` in a
+  // hostile dir is a code-exec vector via .git/config). Refuse anything
+  // outside PROJECTS_DIR BEFORE touching the DB, queue, or filesystem.
+  // Runs here (not just the route) so spool replays get the same guard.
+  // Returning (not throwing) means a spooled hostile entry is consumed
+  // and dropped rather than retried forever.
+  if (!isInsideProjectsDir(projectPath)) {
+    console.error(
+      `[webhook-ingest] rejected projectPath outside PROJECTS_DIR: ${projectPath}`
+    );
+    return { ok: false, rejected: true, slug: "" };
+  }
 
   // Find the originating Dispatch row, if any. Idempotency-key path
   // is the canonical correlation mechanism; legacy lookup runs as

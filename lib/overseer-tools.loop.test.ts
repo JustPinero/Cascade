@@ -186,13 +186,13 @@ describe("runToolUseLoop", () => {
     });
 
     expect(seen.length).toBe(1);
-    // Phase 23.4 — last tool carries cache_control for prompt caching.
+    // Phase 42 (P0.3) — tools carry no marker; the cache breakpoint
+    // lives on the system block (see overseer-tools.caching.test.ts).
     expect(seen[0].tools).toEqual([
       {
         name: "alpha",
         description: "a",
         input_schema: { type: "object" },
-        cache_control: { type: "ephemeral" },
       },
     ]);
   });

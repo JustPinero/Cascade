@@ -12,7 +12,7 @@ The Anthropic API caches request prefixes you mark with `cache_control`. Hits co
 | Claude Haiku 4.5 | **4,096** |
 | Claude Haiku 3.5 | 2,048 |
 
-**This matters for Cascade.** The Overseer system prompt alone (`TOOL_PATH_SYSTEM_PROMPT` in `app/api/overseer/chat/route.ts`) is ~1,700 tokens — **below** the Sonnet 4.6 threshold. Caching the system prompt by itself silently does nothing. The fix is to put the cache breakpoint after the **tools** block instead, so the cached prefix is system + 14 tools (≥ 7K tokens combined), well past the threshold.
+**This matters for Cascade.** The Overseer system prompt alone (`TOOL_PATH_SYSTEM_PROMPT` in `app/api/overseer/chat/route.ts`) is ~1,700 tokens — **below** the Sonnet 4.6 threshold. Caching the system prompt as a standalone prefix would silently do nothing. But the API renders requests **tools → system → messages**, so a breakpoint on the *system block* caches tools + system together (≥ 7K tokens combined), well past the threshold. **Phase 42 correction:** this document previously recommended marking the last *tool*, claiming it covered system too — that had the render order backwards. A last-tool marker caches *tools only*; the system prompt and all messages were re-billed every call.
 
 The Haiku summarizer in `lib/chat-history-compressor.ts:defaultSummarizer` has a ~100-token system prompt and a transcript message. It will not benefit from caching at any reasonable shape — leave it alone.
 
@@ -107,7 +107,7 @@ export interface AnthropicMessageResponse {
 
 ### Pattern 1 — Overseer chat (the must-do)
 
-Mark `cache_control` on the **last tool** returned by `registry.toAnthropicTools()`. This caches the entire prefix from the start of `tools` through the end of `system` as a single block. `system` does not need to be wrapped in an array — leaving it as a string is fine because the breakpoint is downstream.
+Mark `cache_control` on the **system block** (the `SystemBlock` array form): render order is tools → system → messages, so a system breakpoint caches the entire tools + system prefix as one unit. Do NOT mark the last tool — a tool-level breakpoint sits *upstream* of system and caches tools only (the pre-Phase-42 mistake). `runToolUseLoop` additionally rolls a single `cache_control` marker onto the last content block of the last message each iteration (stripping stale markers), so iteration N+1 cache-reads iteration N's full prefix instead of re-paying the conversation history. Budget: system + rolling message marker = 2 of the 4 allowed breakpoints.
 
 ```ts
 // In ToolRegistry.toAnthropicTools(), after gathering all tools:

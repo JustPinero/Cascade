@@ -62,11 +62,11 @@ describe("session-complete webhook — dispatch queue release", () => {
     const queue = getDispatchQueue();
     const spy = vi.spyOn(queue, "release");
 
-    const response = await POST(makeRequest({ projectPath: "/some/project" }));
+    const response = await POST(makeRequest({ projectPath: "/p/some-project" }));
     const body = await response.json();
 
     expect(body.ok).toBe(true);
-    expect(spy).toHaveBeenCalledWith("/some/project");
+    expect(spy).toHaveBeenCalledWith("/p/some-project");
   });
 
   it("does not release when projectPath is missing", async () => {

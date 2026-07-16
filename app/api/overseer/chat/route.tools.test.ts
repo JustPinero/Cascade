@@ -311,7 +311,11 @@ describe("POST /api/overseer/chat — tool-use path (default after 12B.3)", () =
 
     expect(mockCaller).toHaveBeenCalledTimes(1);
     const params = mockCaller.mock.calls[0][0];
-    expect(params.system.toLowerCase()).toContain("tool");
+    // Phase 42 (P0.3) — system is a cached block array; unwrap to text.
+    const systemText = Array.isArray(params.system)
+      ? params.system.map((b: { text: string }) => b.text).join("")
+      : params.system;
+    expect(systemText.toLowerCase()).toContain("tool");
 
     // After 12B the registry advertises 8 read tools. Assert the key
     // ones are present so the model has the full read surface.

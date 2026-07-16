@@ -47,12 +47,14 @@ export type ToolUseBlock = {
   id: string;
   name: string;
   input: Record<string, unknown>;
+  cache_control?: CacheControl;
 };
 export type ToolResultBlock = {
   type: "tool_result";
   tool_use_id: string;
   content: string;
   is_error?: boolean;
+  cache_control?: CacheControl;
 };
 /**
  * Phase 25.1 — Sonnet 4.6's adaptive thinking may emit thinking
@@ -172,20 +174,17 @@ export class ToolRegistry {
   }
 
   toAnthropicTools(): AnthropicToolDefinition[] {
-    const tools: AnthropicToolDefinition[] = this.list().map((t) => ({
+    // Phase 42 (P0.3) — NO cache marker here. The API renders
+    // tools → system → messages, so the old last-tool marker cached
+    // tools ONLY (Phase 23.4 had the render order backwards). The
+    // breakpoint now lives on the system block in runToolUseLoop,
+    // which caches the tools+system prefix together and frees a
+    // breakpoint slot. See references/prompt-caching.md.
+    return this.list().map((t) => ({
       name: t.name,
       description: t.description,
       input_schema: t.inputSchema,
     }));
-    // Phase 23.4 — mark the last tool with cache_control so the API
-    // caches the entire system + tools prefix. Sonnet 4.6's minimum
-    // cacheable size is 2,048 tokens; the system prompt alone is
-    // below that threshold but system + 14+ tools comfortably
-    // exceeds it. See references/prompt-caching.md.
-    if (tools.length > 0) {
-      tools[tools.length - 1].cache_control = { type: "ephemeral" };
-    }
-    return tools;
   }
 
   async execute(
@@ -252,6 +251,79 @@ function stringifyToolOutput(output: unknown): string {
   }
 }
 
+/**
+ * Phase 42 (P0.3) — rolling message breakpoint.
+ *
+ * Returns a snapshot of `messages` with exactly one cache marker: on
+ * the last content block of the last message. All other markers (the
+ * compressor's summary marker, or markers added for a previous
+ * iteration) are stripped so repeated calls never accumulate toward
+ * the API's 4-breakpoint limit.
+ *
+ * Why this works: the cache entry written at call N covers the whole
+ * prefix through N's last block. Call N+1 re-sends that prefix
+ * unchanged (plus the new assistant/tool_result turns), so it READS
+ * N's entry and writes a new one at its own tail — each iteration
+ * re-pays only the new suffix instead of the entire history.
+ *
+ * Pure: input messages and their blocks are never mutated. A last
+ * message with string content is converted (in the snapshot only) to
+ * an equivalent single text block so it can carry the marker; empty
+ * strings are left alone (the API rejects empty text blocks).
+ */
+export function withRollingCacheMarker(
+  messages: AnthropicMessage[]
+): AnthropicMessage[] {
+  const stripped: AnthropicMessage[] = messages.map((msg) => {
+    if (!Array.isArray(msg.content)) return msg;
+    let touched = false;
+    const content = msg.content.map((block) => {
+      if ("cache_control" in block && block.cache_control) {
+        touched = true;
+        const { cache_control: _drop, ...rest } = block as ContentBlock & {
+          cache_control?: CacheControl;
+        };
+        void _drop;
+        return rest as ContentBlock;
+      }
+      return block;
+    });
+    return touched ? { ...msg, content } : msg;
+  });
+
+  if (stripped.length === 0) return stripped;
+  const last = stripped[stripped.length - 1];
+
+  if (typeof last.content === "string") {
+    if (last.content === "") return stripped;
+    stripped[stripped.length - 1] = {
+      ...last,
+      content: [
+        {
+          type: "text",
+          text: last.content,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+    };
+    return stripped;
+  }
+
+  if (last.content.length === 0) return stripped;
+  const blocks = [...last.content];
+  const tail = blocks[blocks.length - 1];
+  // The API rejects cache_control on thinking blocks. In practice the
+  // last message before a call is always user-role (initial turn or
+  // tool_results), so this guard is defensive.
+  if (tail.type === "thinking") return stripped;
+  blocks[blocks.length - 1] = {
+    ...tail,
+    cache_control: { type: "ephemeral" },
+  };
+  stripped[stripped.length - 1] = { ...last, content: blocks };
+  return stripped;
+}
+
 export async function runToolUseLoop(
   params: ToolUseLoopParams
 ): Promise<ToolUseLoopResult> {
@@ -274,6 +346,18 @@ export async function runToolUseLoop(
   const messages: AnthropicMessage[] = [...initialMessages];
   let toolCallsExecuted = 0;
 
+  // Phase 42 (P0.3) — the system breakpoint caches the tools+system
+  // prefix (render order is tools → system → messages; the old
+  // last-tool marker cached tools only). Built once: the prompt is
+  // byte-stable across iterations.
+  const system: SystemBlock = [
+    {
+      type: "text",
+      text: systemPrompt,
+      cache_control: { type: "ephemeral" },
+    },
+  ];
+
   for (let iteration = 0; iteration < maxIterations; iteration++) {
     // Honor abort between iterations. Mid-iteration abort happens
     // inside the caller via the signal we pass down.
@@ -283,11 +367,12 @@ export async function runToolUseLoop(
     const response = await caller(
       {
         model,
-        system: systemPrompt,
-        // Pass a fresh array slice so callers (especially test mocks
-        // that capture params) see a snapshot at call-time rather than
-        // a live reference we keep mutating.
-        messages: [...messages],
+        system,
+        // Phase 42 (P0.3) — rolling breakpoint on the last block of the
+        // last message: iteration N+1 cache-READS iteration N's prefix
+        // instead of re-paying the whole history. Also a fresh snapshot
+        // so caller-side captures aren't a live reference we mutate.
+        messages: withRollingCacheMarker(messages),
         tools: registry.toAnthropicTools(),
         max_tokens: maxTokens,
         // Phase 36 — explicitly enable adaptive thinking. Without this

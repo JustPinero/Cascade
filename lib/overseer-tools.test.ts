@@ -58,7 +58,9 @@ describe("ToolRegistry", () => {
       })
     );
     const result = reg.toAnthropicTools();
-    // Phase 23.4 — last tool gets cache_control for prompt caching.
+    // Phase 42 (P0.3) — tools carry NO cache marker; the breakpoint
+    // moved to the system block (render order is tools→system→messages,
+    // so a system marker covers the whole prefix).
     expect(result).toEqual([
       {
         name: "query_project",
@@ -68,20 +70,19 @@ describe("ToolRegistry", () => {
           properties: { slug: { type: "string" } },
           required: ["slug"],
         },
-        cache_control: { type: "ephemeral" },
       },
     ]);
   });
 
-  it("only the last tool carries cache_control when multiple tools are registered", () => {
+  it("no tool carries cache_control (P0.3 — breakpoint lives on the system block)", () => {
     const reg = new ToolRegistry();
     reg.register(makeTool({ name: "first", description: "first" }));
     reg.register(makeTool({ name: "second", description: "second" }));
     reg.register(makeTool({ name: "third", description: "third" }));
     const result = reg.toAnthropicTools();
-    expect(result[0].cache_control).toBeUndefined();
-    expect(result[1].cache_control).toBeUndefined();
-    expect(result[2].cache_control).toEqual({ type: "ephemeral" });
+    for (const tool of result) {
+      expect(tool.cache_control).toBeUndefined();
+    }
   });
 
   it("empty registry returns an empty array without throwing", () => {

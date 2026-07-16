@@ -37,6 +37,7 @@ beforeEach(() => {
   vi.mocked(runDispatchWatchdog).mockResolvedValue({
     timedOut: 0,
     keys: [],
+    extended: 0,
   });
   vi.mocked(reconcileOrphanedDispatches).mockReset();
   vi.mocked(reconcileOrphanedDispatches).mockResolvedValue({

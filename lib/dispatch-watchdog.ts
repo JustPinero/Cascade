@@ -11,19 +11,46 @@
  */
 import type { PrismaClient } from "@/app/generated/prisma/client";
 import type { DispatchQueue } from "./dispatch-queue";
+import { defaultLivenessProbe, type LivenessProbe } from "./dispatch-liveness";
 
 export interface WatchdogResult {
   /** Number of Dispatch rows flipped from queued/started to timeout. */
   timedOut: number;
   /** Idempotency keys of the rows the watchdog acted on. */
   keys: string[];
+  /**
+   * Phase 42 (P0.2b) — started rows past deadline whose transcript
+   * showed recent activity; expectedBy extended instead of timed out.
+   */
+  extended: number;
 }
+
+export interface WatchdogOptions {
+  /**
+   * Returns the project's last transcript activity, or null when there
+   * is no signal. Injectable for tests; defaults to the real
+   * ~/.claude/projects mtime probe.
+   */
+  livenessProbe?: LivenessProbe;
+  /** Activity within this window counts as alive. Default 10 min. */
+  livenessGraceMs?: number;
+  /** How far to push expectedBy for a live session. Default 10 min. */
+  extensionMs?: number;
+}
+
+const DEFAULT_LIVENESS_GRACE_MS = 10 * 60 * 1000;
+const DEFAULT_EXTENSION_MS = 10 * 60 * 1000;
 
 export async function runDispatchWatchdog(
   prisma: PrismaClient,
   queue: DispatchQueue,
-  now: Date = new Date()
+  now: Date = new Date(),
+  opts: WatchdogOptions = {}
 ): Promise<WatchdogResult> {
+  const probe = opts.livenessProbe ?? defaultLivenessProbe;
+  const graceMs = opts.livenessGraceMs ?? DEFAULT_LIVENESS_GRACE_MS;
+  const extensionMs = opts.extensionMs ?? DEFAULT_EXTENSION_MS;
+
   const stale = await prisma.dispatch.findMany({
     where: {
       status: { in: ["queued", "started"] },
@@ -33,15 +60,40 @@ export async function runDispatchWatchdog(
       id: true,
       idempotencyKey: true,
       projectId: true,
+      status: true,
+      project: { select: { path: true } },
     },
   });
 
   if (stale.length === 0) {
-    return { timedOut: 0, keys: [] };
+    return { timedOut: 0, keys: [], extended: 0 };
   }
 
   const keys: string[] = [];
+  let extended = 0;
   for (const row of stale) {
+    // Phase 42 (P0.2b) — "hung" vs "long-running". The dispatcher never
+    // observes exit, so before releasing a started row's slot, check
+    // whether its transcript is still moving. Recent activity ⇒ this is
+    // a legitimate long session: extend the deadline and keep the slot
+    // (releasing it would stack a second CLI process against the RAM
+    // cap). A dead session stops appending, so it times out on a later
+    // tick — the probe can delay a timeout, never prevent it.
+    // `queued` rows have no session to probe and time out as before.
+    if (row.status === "started") {
+      const lastActivity = probe(row.project.path);
+      if (
+        lastActivity &&
+        now.getTime() - lastActivity.getTime() <= graceMs
+      ) {
+        await prisma.dispatch.update({
+          where: { id: row.id },
+          data: { expectedBy: new Date(now.getTime() + extensionMs) },
+        });
+        extended++;
+        continue;
+      }
+    }
     await prisma.dispatch.update({
       where: { id: row.id },
       data: { status: "timeout", completedAt: now },
@@ -63,7 +115,7 @@ export async function runDispatchWatchdog(
     });
     keys.push(row.idempotencyKey);
   }
-  return { timedOut: stale.length, keys };
+  return { timedOut: keys.length, keys, extended };
 }
 
 export interface ReconcileResult {

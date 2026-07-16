@@ -35,10 +35,16 @@ import { ingestSessionComplete } from "@/lib/webhook-ingest";
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body: unknown = await request.json();
+    if (typeof body !== "object" || body === null) {
+      return NextResponse.json(
+        { error: "body must be a JSON object" },
+        { status: 400 }
+      );
+    }
     const { projectPath, idempotencyKey } = body as {
-      projectPath?: string;
-      idempotencyKey?: string;
+      projectPath?: unknown;
+      idempotencyKey?: unknown;
     };
 
     if (!projectPath || typeof projectPath !== "string") {
@@ -47,11 +53,27 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    // Phase 42 (P0.1) — a non-string key previously flowed into
+    // prisma.findUnique and produced a 500; malformed input is a 400.
+    if (idempotencyKey !== undefined && typeof idempotencyKey !== "string") {
+      return NextResponse.json(
+        { error: "idempotencyKey must be a string" },
+        { status: 400 }
+      );
+    }
 
     const result = await ingestSessionComplete(prisma, {
       projectPath,
       idempotencyKey,
     });
+
+    // Containment-guard refusal is a client error, not a 200.
+    if (result.rejected) {
+      return NextResponse.json(
+        { error: "projectPath is outside the managed projects root" },
+        { status: 400 }
+      );
+    }
 
     return NextResponse.json(result);
   } catch (error) {
