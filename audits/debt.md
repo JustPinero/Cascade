@@ -2,6 +2,9 @@
 
 ## Open
 
+### [42.D1] Webhook has no shared-secret auth (loopback bind + containment are the current mitigations)
+Phase 42 (P0.1) closed the remote vector (`-H 127.0.0.1` on dev/dev:ci) and the hostile-path vector (containment guard in `ingestSessionComplete`), but any LOCAL process can still POST a valid in-tree projectPath to /api/webhook/session-complete and cause a targeted re-import / legacy slot release. Full fix is a shared-secret header: generate per-machine secret at install-hooks time, hook script sends it, route requires it. Needs a fleet hook re-roll (22 projects), so deferred to its own request. Also consider re-adding the rate limiter to this route.
+
 ### [41.D10] Pre-existing absolute-path formatter/lint hooks in 3 projects (cross-machine bug)
 Surfaced during the 41.5 fleet webhook rollout (2026-07-07). CON-CORE, medipal, and romereno each have a PostToolUse formatter/lint hook in `.claude/settings.json` that hardcodes an absolute path, e.g. `cd /Users/justinpinero/Desktop/projects/CON-CORE && npx prettier --write …` (also medipal prettier, romereno eslint jsx-a11y). settings.json is tracked and synced, so these break on the Windows machine after a pull (path doesn't exist → formatter hook fails). NOT introduced by the webhook rollout (that hook is now portable `$HOME`-relative) — pre-existing in each project's own stack hooks.
 - **Fix:** replace the absolute `cd` with `$PWD` (or drop the `cd` — the hook already runs in the project dir), per project. Verify the formatter still resolves its config from `$PWD` first. One tiny commit each.
@@ -13,7 +16,9 @@ Surfaced during the 41.5 fleet webhook rollout (2026-07-07). CON-CORE, medipal, 
 ### [41.D2] session-complete-hook.sh builds JSON by raw shell interpolation
 `scripts/session-complete-hook.sh:37-39` — `payload="{\"projectPath\":\"${project_path}\",…}"`. A path containing `"` or `\` yields malformed JSON → webhook 400 → spooled → quarantined → ping silently dropped. Not reachable on Justin's forward-slash macOS/Linux/WSL paths, but unescaped. Fix: build the payload with `jq -n --arg`. Low.
 
-### [41.D3] briefing re-parses ~/.claude.json once per project (perf)
+### [41.D3] briefing re-parses ~/.claude.json once per project (perf) — SCOPE AMENDED (Phase 42 review)
+Amendment: the per-project re-parse is not briefing-only — `computeHealth` calls `computeInfraVersion` unconditionally (lib/health-engine.ts), so the same full `~/.claude.json` parse also runs per project on the **scan path** and per session-complete on the **webhook path**. Fix should cache the parsed trust map for all three callers, not just the briefing route.
+Original entry:
 `app/api/briefing/route.ts` calls `computeInfraVersion(p.path)` per project, and `readWorkspaceTrust` (lib/infra-version.ts) reads + `JSON.parse`s the entire (potentially large) `~/.claude.json` each time. N projects = N full parses of the same file on the briefing happy path. Fix: read/parse once and pass the trust map in. Low/perf.
 
 ### [41.D4] webhook-ingest signal-loop creates are unguarded
