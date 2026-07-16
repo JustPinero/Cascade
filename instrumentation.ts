@@ -23,6 +23,11 @@
  */
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  // Phase 42 (P0.5) — put dev.db in WAL mode before anything else touches
+  // it. Persistent once applied; synchronous=NORMAL re-applies per boot.
+  const { applySqlitePragmas } = await import("@/lib/db-pragmas");
+  const { prisma } = await import("@/lib/db");
+  await applySqlitePragmas(prisma);
   const { startDispatchWatchdog } = await import(
     "@/lib/dispatch-watchdog-runtime"
   );
