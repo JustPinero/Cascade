@@ -22,15 +22,15 @@ describe("Overseer system + tools snapshot", () => {
     expect(TOOL_PATH_SYSTEM_PROMPT).toMatchSnapshot();
   });
 
-  it("Overseer tool definitions are stable (and last tool carries cache_control)", () => {
+  it("Overseer tool definitions are stable (no tool carries cache_control)", () => {
     const tools = buildDefaultRegistry().toAnthropicTools();
     expect(tools).toMatchSnapshot();
-    // Smoke: prefix-marker invariant. If this fires, the cache prefix
-    // hash has changed and every existing cache entry will miss until
-    // a fresh write lands. Intentional only.
-    expect(tools[tools.length - 1].cache_control).toEqual({ type: "ephemeral" });
-    for (let i = 0; i < tools.length - 1; i++) {
-      expect(tools[i].cache_control).toBeUndefined();
+    // Phase 42 (P0.3) — the breakpoint moved to the system block
+    // (render order is tools → system → messages; a last-tool marker
+    // cached tools only). No tool may carry a marker: a stray one
+    // burns a breakpoint slot and shifts the cache prefix hash.
+    for (const tool of tools) {
+      expect(tool.cache_control).toBeUndefined();
     }
   });
 

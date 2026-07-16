@@ -59,7 +59,7 @@ This is a UI bridge — the canonical record is the propose_dispatch call. Don't
 - Stalled (low progress + many sessions) → flag it, ask if priorities should shift"
 `;
 
-exports[`Overseer system + tools snapshot > Overseer tool definitions are stable (and last tool carries cache_control) 1`] = `
+exports[`Overseer system + tools snapshot > Overseer tool definitions are stable (no tool carries cache_control) 1`] = `
 [
   {
     "description": "Returns the current state for a project by slug — name, status, health, phase, progress, and contextual fields. Use this whenever the developer asks about a specific project; do not invent project information from memory.",
@@ -418,9 +418,6 @@ exports[`Overseer system + tools snapshot > Overseer tool definitions are stable
     "name": "get_tool_call_stats",
   },
   {
-    "cache_control": {
-      "type": "ephemeral",
-    },
     "description": "Search the knowledge base for lessons relevant to a query. Returns top-N matched lessons with citation markers ([L-<id>]). When you use a lesson's content in your answer, cite it by writing the exact marker — e.g. "...switch to WAL journaling [L-42]." The chat UI renders these markers as clickable links to the lesson detail page. Use this when the developer asks a how-to / what-to-do question that the knowledge base might already answer.",
     "input_schema": {
       "properties": {
