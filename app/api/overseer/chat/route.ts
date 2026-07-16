@@ -29,6 +29,7 @@ import { defaultStreamingAnthropicCaller } from "@/lib/overseer-tools-streaming"
 import type { StreamEvent } from "@/lib/streaming-accumulator";
 import { buildDefaultRegistry } from "@/lib/overseer-tools-registry-default";
 import { getOrCreateSession, isValidSessionDate } from "@/lib/chat-session";
+import { linkAbort } from "@/lib/request-abort";
 import { extractEngineerMessages } from "@/lib/engineer-tag-parser";
 import { appendChannelMessage } from "@/lib/engineer-channel";
 import {
@@ -306,8 +307,12 @@ export async function POST(request: NextRequest) {
     // request. Signal threads through compressor → summarizer and
     // through runToolUseLoop → caller, so a hung Anthropic call
     // can't pin the request indefinitely.
+    // Phase 42 (P0.4) — the client's own disconnect also aborts: a
+    // closed tab must not keep burning tool-loop iterations against
+    // the wall timer with the output discarded.
     const abort = new AbortController();
     const timeoutHandle = setTimeout(() => abort.abort(), 60_000);
+    linkAbort(request.signal, abort);
 
     // Phase 25.D1 — streaming migration.
     //
