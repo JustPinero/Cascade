@@ -30,7 +30,7 @@ If you want to understand exactly what it does, or install manually, read on.
 - **Structured Working Memory** — every chat is bound to a `ChatSession` with a JSON `workingMemory` document. The Overseer writes confirmed values via `update_session_memory` so they survive across turns instead of getting lost in conversation prose
 - **Inventory-Walk Pattern** — explicit conversation flows (`inventory_walk`, `dispatch_planning`, `incident_triage`) keep the Overseer grounded across long fleet reviews without repeating questions or losing answers
 - **History Compression** — once a conversation exceeds 25 turns, older messages get summarized via Haiku and cached on the session. Falls back to raw truncation if Haiku is unhealthy
-- **Closed Feedback Loop** — sessions report back automatically via Stop hooks. Cascade knows when sessions end, what happened, what went wrong
+- **Closed Feedback Loop** — sessions report back automatically via Stop hooks. TenSixtyThree knows when sessions end, what happened, what went wrong
 - **Memory-Safe Concurrency** — subagent spawns go through a queue sized to your host RAM (1 slot on <16GB, 2 on 16–32GB, 4 on ≥48GB). No more terminal deaths on laptops
 - **1Password-Backed Secrets** — your Anthropic API key lives in 1Password. `.env` holds `op://` references; plaintext never touches disk
 - **Knowledge Base** — lessons harvested from project history. The Overseer uses these to advise other projects
@@ -40,7 +40,7 @@ If you want to understand exactly what it does, or install manually, read on.
 - **Voice Output (TTS)** — the Overseer can speak responses aloud via the browser's Web Speech API. Voice, rate, and pitch all configurable; toggle on/off from the chat header
 - **Voice Input + Conversation Mode** — speak to the Overseer (single-shot toggle, hold-to-talk push-to-talk, or hands-free Conversation Mode that auto-submits on silence and reopens the mic after the response). Configurable silence threshold; Esc bails out instantly
 - **Desktop Notifications** — get notified when sessions end or blockers are detected
-- **Retroactive Harvest** — extract lessons from project git history, even projects started before Cascade existed
+- **Retroactive Harvest** — extract lessons from project git history, even projects started before TenSixtyThree existed
 - **Engineering Methodology** — projects bootstrapped via a kickoff template that generates CLAUDE.md, TDD-enforced request files, audit skills, and deployment references
 
 ---
@@ -94,20 +94,20 @@ npm install -g @anthropic-ai/claude-code
 
 ## 1Password is Required — Why
 
-Cascade uses 1Password as a runtime secret source. `.env` contains `op://` references (no plaintext secrets on disk) and `pnpm dev` wraps with `op run --env-file=.env --` so the Next.js process receives resolved values at startup.
+TenSixtyThree uses 1Password as a runtime secret source. `.env` contains `op://` references (no plaintext secrets on disk) and `pnpm dev` wraps with `op run --env-file=.env --` so the Next.js process receives resolved values at startup.
 
 Trade-offs of this choice:
 - ✅ No secret in git, no secret in plaintext files, one-click revoke in 1P UI
 - ✅ Same key works on every machine via 1P sync — no cross-machine drift
 - ⚠️ You need a 1P account (any plan). No plaintext fallback
-- ⚠️ If `op signin` expires mid-run, Cascade keeps working (env already resolved into process memory); only a restart requires fresh auth
+- ⚠️ If `op signin` expires mid-run, TenSixtyThree keeps working (env already resolved into process memory); only a restart requires fresh auth
 
 ---
 
 ## Manual Install (if you'd rather not use `create-cascade`)
 
 ```bash
-gh repo clone JustPinero/Cascade ~/Code/cascade
+gh repo clone JustPinero/TenSixtyThree ~/Code/cascade
 cd ~/Code/cascade
 pnpm install
 
@@ -144,7 +144,7 @@ Open **http://localhost:3000**.
 1. Click **Scan Projects** to import projects from your `PROJECTS_DIR`
 2. Click **The Overseer** in the sidebar to talk to the AI dispatcher
 3. Tell him what you want done — he creates a dispatch plan
-4. Approve and dispatch — Cascade opens a tmux grid with one Claude session per project (gated by the memory-safe queue)
+4. Approve and dispatch — TenSixtyThree opens a tmux grid with one Claude session per project (gated by the memory-safe queue)
 
 Projects need `CLAUDE.md` + `.git` + `package.json` (or `Cargo.toml` / `pyproject.toml`) to be dispatch-ready. The Overseer will tell you what's missing.
 
@@ -168,7 +168,7 @@ Projects need `CLAUDE.md` + `.git` + `package.json` (or `Cargo.toml` / `pyprojec
 
 ## Key Concepts
 
-**The Overseer** — Claude Sonnet instance running inside Cascade as a tool-using agent. Customizable name, portrait (idle + optional talking face), and voice. Plans sprints, recommends dispatches, tracks outcomes. Tools rather than prompt-injected snapshots — fresh project state on every read, structured working memory on every write.
+**The Overseer** — Claude Sonnet instance running inside TenSixtyThree as a tool-using agent. Customizable name, portrait (idle + optional talking face), and voice. Plans sprints, recommends dispatches, tracks outcomes. Tools rather than prompt-injected snapshots — fresh project state on every read, structured working memory on every write.
 
 **Tool Framework** (`lib/overseer-tools.ts`) — `Tool` type + `ToolRegistry` + `runToolUseLoop`. Decoupled from Anthropic's SDK by an injectable `AnthropicCaller`, so tests drive canned responses and a future cloud-TTS or alternate model swaps in cleanly. 14 built-in tools cover read (`query_project`, `query_projects`, `get_recent_activity`, `get_session_logs`, `get_dispatch_outcomes`, `get_yesterday_summary`, `get_engineer_messages`, `get_playbook`, `get_session_state`) and write (`update_session_memory`, `set_active_flow`, `propose_dispatch`, `create_reminder`, `create_human_todo`).
 
