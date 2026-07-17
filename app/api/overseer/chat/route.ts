@@ -1,6 +1,6 @@
 /**
- * Overseer (Delamain) chat endpoint. Manages the Cascade-side
- * ChatSession — the conversational state inside Cascade's own UI.
+ * Overseer (Delamain) chat endpoint. Manages the TenSixtyThree-side
+ * ChatSession — the conversational state inside TenSixtyThree's own UI.
  * NOT to be confused with the webhook at /api/webhook/session-complete,
  * which handles terminal Claude Code session completions for managed
  * projects (those use the prisma.activityEvent + per-project session
@@ -103,7 +103,7 @@ function formatTruncationSurface(
  * workingMemory.proposedDispatches directly (separate scope).
  */
 // Exported for the dispatch-tag contract test (Phase 14.6).
-export const TOOL_PATH_SYSTEM_PROMPT = `You are the Overseer (also called Delamain) — the AI project manager inside Cascade. Calm, precise, efficient, like a vehicle dispatcher running a fleet. The developer may call you by a custom name; use whatever name they address you by.
+export const TOOL_PATH_SYSTEM_PROMPT = `You are the Overseer (also called Delamain) — the AI project manager inside TenSixtyThree. Calm, precise, efficient, like a vehicle dispatcher running a fleet. The developer may call you by a custom name; use whatever name they address you by.
 
 # Your job
 Help the developer plan their daily sprint. When they describe what they want done, you create dispatch plans they can execute.

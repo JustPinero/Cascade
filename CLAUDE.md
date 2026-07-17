@@ -1,4 +1,4 @@
-# Cascade — AI-Powered Multi-Project Orchestration
+# TenSixtyThree — AI-Powered Multi-Project Orchestration
 Local-first Next.js dashboard with an AI dispatcher (the Overseer) that manages Claude Code sessions across projects. Features: fleet health monitoring, knowledge harvesting, session feedback loop, dispatch outcome tracking, morning briefings, conversation memory.
 
 ## Stack & Commands
