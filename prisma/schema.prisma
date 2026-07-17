@@ -356,3 +356,64 @@ model CascadeConfig {
   lastSeenClaudeCodeVersion  String?
   updatedAt                  DateTime  @updatedAt
 }
+
+// ── Phase 43 — Teams foundation ─────────────────────────────────────
+// Multi-user identity primitives. Additive + backward-compatible:
+// existing single-user data has no Team and is unaffected. Auth (how a
+// User authenticates) is a later, gated phase — a User here is identity
+// only. See docs/cascade-2.0-team-direction.md.
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String
+  createdAt DateTime @default(now())
+
+  memberships    Membership[]
+  createdTeams   Team[]       @relation("TeamCreatedBy")
+  sentInvites    Invite[]     @relation("InviteInvitedBy")
+}
+
+model Team {
+  id          Int      @id @default(autoincrement())
+  name        String
+  slug        String   @unique
+  createdById Int
+  createdAt   DateTime @default(now())
+
+  createdBy   User         @relation("TeamCreatedBy", fields: [createdById], references: [id])
+  memberships Membership[]
+  invites     Invite[]
+}
+
+model Membership {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  teamId    Int
+  role      String   @default("member") // owner | admin | member | viewer
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  team Team @relation(fields: [teamId], references: [id])
+
+  @@unique([userId, teamId])
+  @@index([teamId])
+}
+
+model Invite {
+  id          Int       @id @default(autoincrement())
+  teamId      Int
+  email       String
+  role        String    @default("member") // owner | admin | member | viewer
+  token       String    @unique
+  invitedById Int
+  status      String    @default("pending") // pending | accepted | revoked | expired
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+
+  team      Team @relation(fields: [teamId], references: [id])
+  invitedBy User @relation("InviteInvitedBy", fields: [invitedById], references: [id])
+
+  @@unique([teamId, email])
+  @@index([token])
+}
