@@ -28,13 +28,13 @@ vi.mock("next/link", () => ({
 }));
 
 describe("Sidebar", () => {
-  it("renders the Cascade brand", async () => {
+  it("renders the TenSixtyThree brand", async () => {
     let container: HTMLElement;
     await act(async () => {
       const result = render(<Sidebar />);
       container = result.container;
     });
-    expect(container!.textContent).toContain("Cascade");
+    expect(container!.textContent).toContain("TenSixtyThree");
   });
 
   it("renders all navigation items", async () => {

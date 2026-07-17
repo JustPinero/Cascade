@@ -15,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Cascade — Delamain",
+  title: "TenSixtyThree — Delamain",
   description:
     "A nerve center for orchestrating multi-project Claude Code workflows.",
   icons: {

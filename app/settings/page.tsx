@@ -32,7 +32,7 @@ const themes = [
   {
     id: "dark" as const,
     name: "Dark",
-    description: "Cyberpunk dark — the original Cascade aesthetic",
+    description: "Cyberpunk dark — the original TenSixtyThree aesthetic",
     preview: ["#060910", "#111620", "#41a6b5", "#e0af68"],
   },
   {
@@ -677,7 +677,7 @@ export default function SettingsPage() {
         Settings
       </h1>
       <p className="text-sm text-text font-mono mb-8">
-        Customize Cascade
+        Customize TenSixtyThree
       </p>
 
       <OverseerPanel />

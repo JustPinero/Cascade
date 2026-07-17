@@ -172,7 +172,7 @@ export function Sidebar() {
               style={{ boxShadow: "0 0 8px rgba(65, 166, 181, 0.4)" }}
             />
             <h1 className="text-lg font-bold font-mono tracking-[0.2em] text-text-bright uppercase">
-              Cascade
+              TenSixtyThree
             </h1>
             <AttentionBadge />
           </div>
